@@ -1,0 +1,6 @@
+# Simulador de Estación de Servicio — Investigación Operativa
+simpy>=4.1
+streamlit>=1.40
+plotly>=6.0
+pandas>=2.0
+numpy>=1.26

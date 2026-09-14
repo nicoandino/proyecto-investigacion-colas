@@ -1,0 +1,10 @@
+[server]
+headless = true
+port = 8501
+# El watcher por eventos no detecta los cambios en los módulos de sim/ y ui/ en esta
+# carpeta (ruta con espacios y acentos), así que se usa sondeo: con "poll" Streamlit
+# recarga la app al guardar cualquier archivo del proyecto.
+fileWatcherType = "poll"
+
+[browser]
+gatherUsageStats = false

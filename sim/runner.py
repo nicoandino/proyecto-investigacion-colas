@@ -1,0 +1,340 @@
+"""Orquestación de corridas: una réplica, N réplicas, los escenarios y el barrido de políticas.
+
+Por qué hacen falta RÉPLICAS y no una sola corrida:
+la simulación es un experimento estadístico. Una sola corrida es UNA muestra de un
+proceso aleatorio; si se repite con otra semilla da otro número. Por eso cada escenario
+se corre N veces con semillas distintas e independientes, y se informa el promedio con
+su INTERVALO DE CONFIANZA del 95%. Si los intervalos de dos escenarios se superponen,
+no se puede afirmar que uno sea mejor que el otro.
+
+Una réplica = un mes completo de operación (30 días por defecto).
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass, fields, replace
+
+from sim.config import (
+    Escenario,
+    ParametrosSimulacion,
+    ParametrosTanque,
+    escenarios_desde,
+)
+from sim.modelo import simular
+from sim.traza import Traza
+
+# t de Student para un intervalo de confianza bilateral del 95%, según los grados de
+# libertad (n - 1). Se usa tabla en lugar de scipy para no agregar una dependencia.
+_T_95 = {
+    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
+    8: 2.306, 9: 2.262, 10: 2.228, 11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145,
+    15: 2.131, 16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086, 21: 2.080,
+    22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060, 26: 2.056, 27: 2.052, 28: 2.048,
+    29: 2.045, 30: 2.042,
+}
+
+
+def t_critico(grados_libertad: int) -> float:
+    """Valor t de Student al 95% bilateral. Para más de 30 g.l. se usa 1.96 (normal)."""
+    if grados_libertad < 1:
+        return float("nan")
+    return _T_95.get(grados_libertad, 1.96)
+
+
+@dataclass(frozen=True)
+class ResultadoReplica:
+    """Indicadores de UNA réplica: un mes de operación con una semilla.
+
+    Las cantidades de flujo (autos, litros, pedidos) están expresadas POR DÍA, para que
+    no dependan de cuántos días se hayan simulado.
+    """
+
+    semilla: int
+
+    # --- Colas: los indicadores clásicos del modelo de colas -----------------
+    espera_surtidor: float        # minutos promedio en la cola del surtidor
+    espera_caja: float
+    espera_pico: float            # espera promedio en la peor hora del día
+    cola_surtidor: float          # longitud promedio de cola (promedio temporal)
+    cola_caja: float
+    util_surtidores: float        # 0 a 1
+    util_cajas: float
+    tiempo_sistema: float
+    max_cola_surtidor: float
+    max_espera_surtidor: float
+
+    # --- Clientes por día ----------------------------------------------------
+    llegadas_dia: float
+    atendidos_dia: float
+    perdidos_cola_dia: float          # abandono por cola larga
+    perdidos_sin_combustible_dia: float
+    perdidos_caja_dia: float
+    compras_dia: float
+    tasa_abandono: float              # % de los que llegan y se van sin cargar
+
+    # --- Inventario ----------------------------------------------------------
+    litros_vendidos_dia: float
+    litros_no_vendidos_dia: float
+    nivel_servicio: float             # 0 a 1: fracción de la demanda de litros satisfecha
+    nivel_tanque_promedio: float      # litros
+    nivel_tanque_minimo: float
+    pedidos_dia: float
+    plazo_entrega: float              # horas
+    porcentaje_dias_quiebre: float    # % de días con al menos un quiebre
+    porcentaje_tiempo_sin_combustible: float
+
+    # --- Por hora (para el gráfico del perfil) -------------------------------
+    hora_pico: int
+
+
+#: Métricas que se promedian entre réplicas (todas menos la semilla).
+METRICAS: tuple[str, ...] = tuple(
+    f.name for f in fields(ResultadoReplica) if f.name != "semilla"
+)
+
+
+@dataclass(frozen=True)
+class Resumen:
+    """Resultado de una métrica a lo largo de las réplicas."""
+
+    promedio: float
+    desvio: float
+    semiamplitud: float   # mitad del ancho del IC 95%
+    minimo: float
+    maximo: float
+    n: int
+
+    @property
+    def ic_inferior(self) -> float:
+        return self.promedio - self.semiamplitud
+
+    @property
+    def ic_superior(self) -> float:
+        return self.promedio + self.semiamplitud
+
+
+@dataclass(frozen=True)
+class ResultadoEscenario:
+    """Todo lo que produjo un escenario de capacidad."""
+
+    escenario: Escenario
+    parametros: ParametrosSimulacion
+    replicas: list[ResultadoReplica]
+    resumen: dict[str, Resumen]
+
+    def prom(self, metrica: str) -> float:
+        return self.resumen[metrica].promedio
+
+
+@dataclass(frozen=True)
+class ResultadoPolitica:
+    """Todo lo que produjo una política de reposición (punto de pedido, cantidad)."""
+
+    punto_pedido: float
+    cantidad_pedido: float
+    replicas: list[ResultadoReplica]
+    resumen: dict[str, Resumen]
+
+    @property
+    def etiqueta(self) -> str:
+        return f"s={self.punto_pedido:,.0f} / Q={self.cantidad_pedido:,.0f}"
+
+    def prom(self, metrica: str) -> float:
+        return self.resumen[metrica].promedio
+
+
+# --- Una réplica --------------------------------------------------------------
+def correr_replica(
+    p: ParametrosSimulacion,
+    semilla: int,
+    con_traza: bool = False,
+) -> tuple[ResultadoReplica, Traza | None]:
+    """Corre una réplica (un mes) y arma su `ResultadoReplica`."""
+    ind, traza = simular(p, semilla=semilla, con_traza=con_traza)
+    c = ind.c
+    dias = max(p.dias_medidos, 1)
+
+    esperas_por_hora = [ind.por_hora.espera_promedio(h) for h in range(24)]
+    espera_pico = max(esperas_por_hora)
+    hora_pico = esperas_por_hora.index(espera_pico)
+
+    resultado = ResultadoReplica(
+        semilla=semilla,
+        espera_surtidor=ind.espera_surtidor.promedio,
+        espera_caja=ind.espera_caja.promedio,
+        espera_pico=espera_pico,
+        cola_surtidor=ind.cola_surtidor.promedio,
+        cola_caja=ind.cola_caja.promedio,
+        util_surtidores=ind.utilizacion_surtidores,
+        util_cajas=ind.utilizacion_cajas,
+        tiempo_sistema=ind.tiempo_sistema.promedio,
+        max_cola_surtidor=ind.cola_surtidor.maximo,
+        max_espera_surtidor=ind.espera_surtidor.maximo,
+        llegadas_dia=c.llegadas / dias,
+        atendidos_dia=c.atendidos_surtidor / dias,
+        perdidos_cola_dia=c.perdidos_surtidor / dias,
+        perdidos_sin_combustible_dia=c.perdidos_sin_combustible / dias,
+        perdidos_caja_dia=c.perdidos_caja / dias,
+        compras_dia=c.compras_atendidas / dias,
+        tasa_abandono=(
+            100.0 * (c.perdidos_surtidor + c.perdidos_sin_combustible) / c.llegadas
+            if c.llegadas
+            else 0.0
+        ),
+        litros_vendidos_dia=c.litros_vendidos / dias,
+        litros_no_vendidos_dia=c.litros_no_vendidos / dias,
+        nivel_servicio=ind.nivel_servicio,
+        nivel_tanque_promedio=ind.nivel_tanque_promedio,
+        nivel_tanque_minimo=ind.nivel_tanque.minimo,
+        pedidos_dia=c.pedidos_emitidos / dias,
+        plazo_entrega=ind.plazo_entrega.promedio,
+        porcentaje_dias_quiebre=100.0 * c.dias_con_quiebre / dias,
+        porcentaje_tiempo_sin_combustible=100.0 * ind.fraccion_sin_combustible,
+        hora_pico=hora_pico,
+    )
+    return resultado, traza
+
+
+# --- N réplicas ---------------------------------------------------------------
+def resumir(replicas: list[ResultadoReplica]) -> dict[str, Resumen]:
+    """Promedio, desvío e intervalo de confianza 95% de cada métrica."""
+    n = len(replicas)
+    resumen: dict[str, Resumen] = {}
+
+    for metrica in METRICAS:
+        valores = [float(getattr(r, metrica)) for r in replicas]
+        promedio = sum(valores) / n
+        if n > 1:
+            varianza = sum((v - promedio) ** 2 for v in valores) / (n - 1)
+            desvio = math.sqrt(varianza)
+            semiamplitud = t_critico(n - 1) * desvio / math.sqrt(n)
+        else:
+            desvio = 0.0
+            semiamplitud = 0.0
+        resumen[metrica] = Resumen(
+            promedio=promedio,
+            desvio=desvio,
+            semiamplitud=semiamplitud,
+            minimo=min(valores),
+            maximo=max(valores),
+            n=n,
+        )
+    return resumen
+
+
+def correr_replicas(
+    p: ParametrosSimulacion,
+    replicas: int = 5,
+    semilla_base: int = 1,
+) -> list[ResultadoReplica]:
+    """Corre `replicas` réplicas independientes, con semillas semilla_base + i."""
+    return [correr_replica(p, semilla=semilla_base + i)[0] for i in range(replicas)]
+
+
+# --- Escenarios de capacidad --------------------------------------------------
+def correr_escenarios(
+    p: ParametrosSimulacion | None = None,
+    replicas: int = 5,
+    semilla_base: int = 1,
+) -> list[ResultadoEscenario]:
+    """Corre Base / A / B / C con NÚMEROS ALEATORIOS COMUNES.
+
+    La réplica i de todos los escenarios usa la misma semilla, así que los autos llegan
+    en los mismos instantes, cargan los mismos litros y el camión tarda lo mismo en los
+    cuatro escenarios. La comparación aísla el efecto de agregar surtidores o cajas.
+    """
+    p = p or ParametrosSimulacion()
+    salida: list[ResultadoEscenario] = []
+
+    for escenario in escenarios_desde(p):
+        p_esc = escenario.aplicar(p)
+        reps = correr_replicas(p_esc, replicas=replicas, semilla_base=semilla_base)
+        salida.append(
+            ResultadoEscenario(
+                escenario=escenario,
+                parametros=p_esc,
+                replicas=reps,
+                resumen=resumir(reps),
+            )
+        )
+    return salida
+
+
+def buscar(resultados: list[ResultadoEscenario], nombre: str) -> ResultadoEscenario:
+    """Devuelve el escenario con ese nombre (por ejemplo 'Base')."""
+    for r in resultados:
+        if r.escenario.nombre == nombre:
+            return r
+    raise KeyError(f"No existe el escenario {nombre}")
+
+
+# --- Barrido de políticas de inventario ---------------------------------------
+def con_politica(
+    p: ParametrosSimulacion,
+    punto_pedido: float,
+    cantidad_pedido: float,
+) -> ParametrosSimulacion:
+    """Los mismos parámetros pero con otra política de reposición."""
+    tanque = replace(
+        p.tanque, punto_pedido=punto_pedido, cantidad_pedido=cantidad_pedido
+    )
+    return replace(p, tanque=tanque)
+
+
+def barrer_politicas(
+    p: ParametrosSimulacion,
+    puntos_pedido: list[float],
+    cantidades: list[float],
+    replicas: int = 3,
+    semilla_base: int = 1,
+) -> list[ResultadoPolitica]:
+    """Prueba todas las combinaciones de punto de pedido y cantidad a pedir.
+
+    Es el "problema de diseño" del apunte aplicado al inventario: en vez de comparar
+    cuatro escenarios armados a mano, se barre una grilla y se elige la política de
+    menor costo total. Todas las combinaciones usan las mismas semillas (números
+    aleatorios comunes) para que la comparación sea justa.
+    """
+    salida: list[ResultadoPolitica] = []
+    for punto in puntos_pedido:
+        for cantidad in cantidades:
+            if punto + cantidad > p.tanque.capacidad:
+                # No tiene sentido pedir más de lo que entra en el tanque.
+                continue
+            p_pol = con_politica(p, punto, cantidad)
+            reps = correr_replicas(p_pol, replicas=replicas, semilla_base=semilla_base)
+            salida.append(
+                ResultadoPolitica(
+                    punto_pedido=punto,
+                    cantidad_pedido=cantidad,
+                    replicas=reps,
+                    resumen=resumir(reps),
+                )
+            )
+    return salida
+
+
+def grilla_sugerida(p: ParametrosSimulacion) -> tuple[list[float], list[float]]:
+    """Grilla razonable de políticas alrededor del consumo real de la estación.
+
+    El punto de pedido se mueve entre medio día y día y medio de venta; la cantidad a
+    pedir, entre uno y dos días y medio. La grilla se adapta sola si cambia la demanda, y
+    siempre incluye la política que está configurada, para poder compararla contra el resto.
+    """
+    consumo_diario = p.litros_por_dia
+    capacidad = p.tanque.capacidad
+
+    def redondear(valor: float) -> float:
+        return round(valor / 1000) * 1000
+
+    puntos = [redondear(consumo_diario * f) for f in (0.5, 0.8, 1.1, 1.5)]
+    cantidades = [redondear(consumo_diario * f) for f in (1.0, 1.6, 2.2)]
+
+    # La política actual tiene que estar en la grilla para poder compararla.
+    puntos.append(p.tanque.punto_pedido)
+    cantidades.append(p.tanque.cantidad_pedido)
+
+    puntos = sorted({x for x in puntos if 0 < x < capacidad})
+    cantidades = sorted({x for x in cantidades if 0 < x <= capacidad})
+    return puntos, cantidades

@@ -1,0 +1,263 @@
+"""Verificación del motor de simulación.
+
+Antes de sacar conclusiones hay que demostrar que el simulador está bien hecho. Este
+script corre controles que no dependen de la interfaz y avisa si alguno falla.
+
+    .venv/Scripts/python verificar.py
+
+Los controles cubren las dos partes del modelo:
+
+  COLAS
+    1. Reproducibilidad: misma semilla, mismo resultado.
+    2. Conservación de clientes: todo el que llega, o carga, o se va, o está adentro.
+    3. Ley de Little (L = λ·W): relación que cumple cualquier sistema de colas, sin
+       importar las distribuciones. Valida entre sí a los dos colectores estadísticos.
+    4. Utilización coherente con el servicio efectivamente entregado.
+    5. Monotonía: más autos empeoran la espera, más surtidores la mejoran.
+
+  MONTE CARLO Y DEMANDA
+    6. La demanda simulada reproduce la tabla de frecuencias empírica.
+    7. Las llegadas siguen el perfil horario cargado.
+
+  INVENTARIO
+    8. Conservación de litros: lo que entró menos lo que salió es lo que queda.
+    9. El tanque nunca queda negativo ni pasa de su capacidad.
+   10. Subir el punto de pedido reduce los quiebres de stock.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+
+from sim.config import MINUTOS_POR_DIA, ParametrosSimulacion
+from sim.modelo import simular
+from sim.runner import con_politica, correr_escenarios, correr_replica
+
+VERDE = "OK  "
+ROJO = "FALLA"
+
+_fallas = 0
+
+
+def controlar(condicion: bool, titulo: str, detalle: str = "") -> None:
+    global _fallas
+    if not condicion:
+        _fallas += 1
+    print(f"  [{VERDE if condicion else ROJO}] {titulo}")
+    if detalle:
+        print(f"           {detalle}")
+
+
+def separador(titulo: str) -> None:
+    print(f"\n{titulo}")
+    print("-" * len(titulo))
+
+
+def main() -> int:
+    p = ParametrosSimulacion()
+
+    # ------------------------------------------------------------------ 1
+    separador("1. Reproducibilidad")
+    r1, _ = correr_replica(p, semilla=7)
+    r2, _ = correr_replica(p, semilla=7)
+    r3, _ = correr_replica(p, semilla=8)
+    controlar(r1 == r2, "La misma semilla da exactamente el mismo resultado")
+    controlar(
+        r1 != r3,
+        "Semillas distintas dan resultados distintos",
+        f"semilla 7: espera {r1.espera_surtidor:.3f} min | "
+        f"semilla 8: espera {r3.espera_surtidor:.3f} min",
+    )
+
+    # ------------------------------------------------------------------ 2
+    separador("2. Conservación de clientes")
+    ind, _ = simular(p, semilla=11)
+    t = ind.c_total
+    salidas = t.atendidos_surtidor + t.perdidos_surtidor + t.perdidos_sin_combustible
+    en_sistema = t.llegadas - salidas
+    controlar(
+        0 <= en_sistema <= p.surtidores + 30,
+        "Llegadas = atendidos + abandonos + sin combustible + los que quedaron adentro",
+        f"{t.llegadas} = {t.atendidos_surtidor} + {t.perdidos_surtidor} + "
+        f"{t.perdidos_sin_combustible} + {en_sistema}",
+    )
+    controlar(
+        t.compras_atendidas + t.perdidos_caja <= t.entraron_minimarket,
+        "Al minimarket no entra nadie que no haya cargado",
+        f"entraron {t.entraron_minimarket}, cobrados {t.compras_atendidas}, "
+        f"abandonos {t.perdidos_caja}",
+    )
+
+    # ------------------------------------------------------------------ 3
+    separador("3. Ley de Little (L = lambda * W) en la cola del surtidor")
+    p_largo = replace(p, dias=60, dias_calentamiento=2)
+    ind, _ = simular(p_largo, semilla=13)
+    periodo = (p_largo.dias - p_largo.dias_calentamiento) * MINUTOS_POR_DIA
+
+    # Tiempo total de espera acumulado por todos los que hicieron cola: los atendidos
+    # esperaron lo que registró el colector y los que abandonaron esperaron exactamente
+    # su paciencia. Los que se fueron por falta de combustible nunca hicieron cola.
+    espera_total = (
+        ind.espera_surtidor.suma + ind.c.perdidos_surtidor * p_largo.paciencia_surtidor
+    )
+    lq_por_little = espera_total / periodo
+    lq_medido = ind.cola_surtidor.promedio
+    error = abs(lq_medido - lq_por_little) / max(lq_por_little, 1e-9)
+    controlar(
+        error < 0.05,
+        "La cola promedio medida por área coincide con la que predice Little",
+        f"medida {lq_medido:.4f} autos | Little {lq_por_little:.4f} autos | "
+        f"diferencia {error * 100:.2f} %",
+    )
+
+    # ------------------------------------------------------------------ 4
+    separador("4. Utilización")
+    controlar(
+        0.0 <= ind.utilizacion_surtidores <= 1.0,
+        "La utilización de los surtidores está entre 0 % y 100 %",
+        f"{ind.utilizacion_surtidores * 100:.2f} %",
+    )
+    trabajo_esperado = ind.c.atendidos_surtidor * p_largo.carga.media
+    trabajo_medido = ind.ocupados_surtidores.promedio * periodo
+    error_trabajo = abs(trabajo_medido - trabajo_esperado) / trabajo_esperado
+    controlar(
+        error_trabajo < 0.05,
+        "El tiempo de surtidor ocupado coincide con atendidos x tiempo medio de carga",
+        f"medido {trabajo_medido:,.0f} min | esperado {trabajo_esperado:,.0f} min | "
+        f"diferencia {error_trabajo * 100:.2f} %",
+    )
+
+    # ------------------------------------------------------------------ 5
+    separador("5. Monotonía (el modelo reacciona como corresponde)")
+    escenarios = correr_escenarios(p, replicas=3, semilla_base=1)
+    base, con_surtidor, con_cajero = escenarios[0], escenarios[1], escenarios[2]
+    controlar(
+        con_surtidor.prom("espera_pico") < base.prom("espera_pico"),
+        "Agregar un surtidor reduce la espera de la hora pico",
+        f"Base {base.prom('espera_pico'):.2f} min | A {con_surtidor.prom('espera_pico'):.2f} min",
+    )
+    controlar(
+        con_surtidor.prom("util_surtidores") < base.prom("util_surtidores"),
+        "Agregar un surtidor baja la utilización de cada uno",
+        f"Base {base.prom('util_surtidores') * 100:.1f} % | "
+        f"A {con_surtidor.prom('util_surtidores') * 100:.1f} %",
+    )
+    controlar(
+        abs(con_cajero.prom("espera_surtidor") - base.prom("espera_surtidor")) < 1e-9,
+        "Agregar un cajero NO cambia nada en los surtidores (números aleatorios comunes)",
+        "el minimarket no bloquea al surtidor, así que tiene que dar idéntico",
+    )
+    controlar(
+        con_cajero.prom("espera_caja") < base.prom("espera_caja"),
+        "Agregar un cajero sí reduce la espera en la caja",
+        f"Base {base.prom('espera_caja'):.2f} min | B {con_cajero.prom('espera_caja'):.2f} min",
+    )
+
+    # ------------------------------------------------------------------ 6
+    separador("6. Monte Carlo: la demanda sorteada respeta la tabla empírica")
+    p_muchos, _ = replace(p, dias=400, dias_calentamiento=1), None
+    _, traza = correr_replica(p_muchos, semilla=5, con_traza=True)
+    sorteos = [d.autos_sorteados for d in traza.dias]
+    media_simulada = sum(sorteos) / len(sorteos)
+    error_media = abs(media_simulada - p.demanda.media) / p.demanda.media
+    controlar(
+        error_media < 0.03,
+        "La media de la demanda sorteada coincide con la de la tabla",
+        f"simulada {media_simulada:.1f} autos/día | tabla {p.demanda.media:.1f} | "
+        f"diferencia {error_media * 100:.2f} % ({len(sorteos)} días)",
+    )
+    peor = 0.0
+    for valor, probabilidad in zip(p.demanda.valores, p.demanda.probabilidades):
+        observada = sorteos.count(valor) / len(sorteos)
+        peor = max(peor, abs(observada - probabilidad))
+    controlar(
+        peor < 0.05,
+        "Cada valor de la tabla sale con la frecuencia que le corresponde",
+        f"la mayor diferencia entre probabilidad observada y teórica es {peor * 100:.2f} puntos",
+    )
+
+    # ------------------------------------------------------------------ 7
+    separador("7. Las llegadas siguen el perfil horario")
+    ind_perfil, _ = simular(replace(p, dias=90, dias_calentamiento=1), semilla=17)
+    llegadas = ind_perfil.por_hora.llegadas
+    total = sum(llegadas)
+    desvio_maximo = max(
+        abs(llegadas[h] / total - p.perfil.fracciones[h]) for h in range(24)
+    )
+    controlar(
+        desvio_maximo < 0.01,
+        "La proporción de llegadas de cada hora coincide con el perfil cargado",
+        f"mayor desvío: {desvio_maximo * 100:.2f} puntos porcentuales sobre {total:,} autos",
+    )
+    hora_mas_cargada = llegadas.index(max(llegadas))
+    controlar(
+        hora_mas_cargada == p.perfil.hora_pico(),
+        "La hora con más llegadas es la hora pico del perfil",
+        f"simulada: {hora_mas_cargada}:00 | perfil: {p.perfil.hora_pico()}:00",
+    )
+
+    # ------------------------------------------------------------------ 8
+    separador("8. Inventario: conservación de litros")
+    ind_inv, _ = simular(p, semilla=23)
+    t = ind_inv.c_total
+    esperado = p.tanque.nivel_inicial + t.litros_recibidos - t.litros_vendidos
+    diferencia = abs(ind_inv.nivel_tanque.valor - esperado)
+    controlar(
+        diferencia < 1.0,
+        "Nivel final = nivel inicial + litros recibidos - litros vendidos",
+        f"{ind_inv.nivel_tanque.valor:,.1f} L medidos vs {esperado:,.1f} L calculados "
+        f"(recibidos {t.litros_recibidos:,.0f} L, vendidos {t.litros_vendidos:,.0f} L)",
+    )
+    controlar(
+        ind_inv.nivel_tanque.minimo >= -1e-6,
+        "El tanque nunca queda en negativo",
+        f"nivel mínimo alcanzado: {ind_inv.nivel_tanque.minimo:,.1f} L",
+    )
+    controlar(
+        ind_inv.nivel_tanque.maximo <= p.tanque.capacidad + 1e-6,
+        "El tanque nunca supera su capacidad",
+        f"nivel máximo alcanzado: {ind_inv.nivel_tanque.maximo:,.1f} L de "
+        f"{p.tanque.capacidad:,.0f} L",
+    )
+    controlar(
+        0.0 <= ind_inv.nivel_servicio <= 1.0,
+        "El nivel de servicio está entre 0 % y 100 %",
+        f"{ind_inv.nivel_servicio * 100:.2f} %",
+    )
+
+    # ------------------------------------------------------------------ 9
+    separador("9. Inventario: la política hace lo que tiene que hacer")
+    tacaña, _ = correr_replica(con_politica(p, 4_000, 20_000), semilla=29)
+    generosa, _ = correr_replica(con_politica(p, 20_000, 20_000), semilla=29)
+    controlar(
+        tacaña.porcentaje_dias_quiebre > generosa.porcentaje_dias_quiebre,
+        "Con un punto de pedido más alto hay menos días con quiebre de stock",
+        f"punto 4.000 L: {tacaña.porcentaje_dias_quiebre:.1f} % de los días | "
+        f"punto 20.000 L: {generosa.porcentaje_dias_quiebre:.1f} %",
+    )
+    controlar(
+        generosa.nivel_tanque_promedio > tacaña.nivel_tanque_promedio,
+        "Pedir antes deja más combustible inmovilizado (el costo de la seguridad)",
+        f"punto 4.000 L: {tacaña.nivel_tanque_promedio:,.0f} L promedio | "
+        f"punto 20.000 L: {generosa.nivel_tanque_promedio:,.0f} L",
+    )
+    chico, _ = correr_replica(con_politica(p, 12_000, 10_000), semilla=29)
+    grande, _ = correr_replica(con_politica(p, 12_000, 30_000), semilla=29)
+    controlar(
+        chico.pedidos_dia > grande.pedidos_dia,
+        "Pedir de a poco obliga a pedir más seguido (más fletes)",
+        f"pedidos de 10.000 L: {chico.pedidos_dia * 30:.1f} pedidos/mes | "
+        f"de 30.000 L: {grande.pedidos_dia * 30:.1f} pedidos/mes",
+    )
+
+    # ------------------------------------------------------------------
+    print()
+    if _fallas == 0:
+        print("Todos los controles pasaron. El motor se comporta como corresponde.")
+        return 0
+    print(f"{_fallas} control(es) fallaron. Revisar antes de sacar conclusiones.")
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,175 +1,202 @@
 # Simulador de Estación de Servicio
 
-Simulador de eventos discretos de una estación de servicio, desarrollado para el Trabajo
-Práctico de **Investigación Operativa**.
+Simulador de eventos discretos desarrollado para el trabajo práctico de **Investigación Operativa**.
 
-En lugar de usar un software comercial (Simul8, FlexSim), se desarrolló el simulador
-completo: motor propio en Python con SimPy e interfaz web con Streamlit.
+El proyecto modela una estación de servicio completa con un motor propio en Python
+basado en SimPy y una interfaz interactiva en Streamlit. Permite analizar, con datos
+simulados, decisiones de capacidad e inventario.
 
-El modelo junta **las tres unidades de la materia** en un solo sistema:
+## Contenido
 
-- **Modelos de colas** — red de dos colas: surtidores y caja del minimarket, con abandono.
-- **Simulación Monte Carlo** — la demanda de cada día se sortea de una tabla de
-  frecuencias empírica, con los cinco pasos del apunte.
-- **Transporte / inventario** — el tanque de combustible, con política de reposición y
-  camión cisterna con plazo de entrega aleatorio.
+- [Qué resuelve](#qué-resuelve)
+- [Vistas de la aplicación](#vistas-de-la-aplicación)
+- [Iniciar el proyecto desde cero](#iniciar-el-proyecto-desde-cero)
+- [Ejecutar y verificar](#ejecutar-y-verificar)
+- [Modelo de simulación](#modelo-de-simulación)
+- [Escenarios y política de inventario](#escenarios-y-política-de-inventario)
+- [Criterio estadístico](#criterio-estadístico)
+- [Estructura del proyecto](#estructura-del-proyecto)
+- [Tecnologías](#tecnologías)
 
-Y responde **dos preguntas económicas** que compiten por la misma plata:
+## Qué resuelve
 
-1. ¿Conviene agregar un surtidor y/o un cajero?
-2. ¿Cuál es la mejor política de reposición de combustible?
+El modelo integra las tres unidades de la materia en un mismo sistema:
 
-## Cómo ejecutarlo
+- **Modelos de colas:** red de surtidores y caja del minimarket, con abandono de clientes.
+- **Simulación Monte Carlo:** la demanda diaria se genera desde una tabla de frecuencias empírica.
+- **Transporte e inventario:** tanque de combustible con política de reposición y entregas aleatorias de un camión cisterna.
 
-Con el entorno ya creado (carpeta `.venv`):
+Con esto responde dos preguntas de decisión:
+
+1. ¿Conviene incorporar un surtidor y/o un cajero?
+2. ¿Qué política de reposición de combustible minimiza el costo mensual?
+
+## Vistas de la aplicación
+
+| Pestaña | Contenido |
+| --- | --- |
+| 🎬 **Animación** | Operación de un día: llegadas, colas, surtidores, caja y nivel de tanque. |
+| 📊 **Indicadores** | Métricas de colas, clientes e inventario, con intervalos de confianza del 95 % y diagnóstico de cuello de botella. |
+| 🎲 **Demanda** | Desarrollo paso a paso del método Monte Carlo y registro diario de la demanda simulada. |
+| 🛢️ **Inventario** | Evolución del tanque y comparación de políticas de reposición. |
+| ⚖️ **Escenarios** | Comparación entre capacidades, con tablas, barras con IC y dispersión por réplica. |
+| 💰 **Economía** | Ingresos, costos, beneficio neto y período de repago de cada escenario. |
+| 📝 **Conclusión** | Recomendación construida a partir de los resultados simulados. |
+| 📖 **Modelo y método** | Supuestos, formulación del modelo y fundamento estadístico. |
+
+Los parámetros —incluida la tabla de frecuencias de demanda— se modifican desde la barra lateral.
+
+## Iniciar el proyecto desde cero
+
+### Requisitos previos
+
+- [Python](https://www.python.org/downloads/) 3.10 o superior.
+- `pip`, incluido con las instalaciones actuales de Python.
+- Git, solo si todavía hay que clonar el repositorio.
+
+### 1. Obtener el código
+
+Si todavía no tenés el proyecto en tu equipo:
 
 ```bash
-.venv/Scripts/streamlit run app.py
+git clone <URL_DEL_REPOSITORIO>
+cd proyecto-investigacion-colas
 ```
 
-Se abre solo en el navegador, en `http://localhost:8501`.
+Si ya lo descargaste, abrí una terminal en la carpeta raíz del proyecto.
 
-### Si hay que instalarlo desde cero
+### 2. Crear y activar el entorno virtual
+
+**Windows (PowerShell)**
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+**Windows (Símbolo del sistema)**
+
+```bat
+py -m venv .venv
+.venv\Scripts\activate.bat
+```
+
+**macOS o Linux**
 
 ```bash
-python -m venv .venv
-.venv/Scripts/python -m pip install -r requirements.txt
-.venv/Scripts/streamlit run app.py
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Verificar que el motor está bien
+> Si PowerShell impide ejecutar el script de activación, usá el Símbolo del sistema o ejecutá:
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`.
+
+### 3. Instalar las dependencias
+
+Con el entorno virtual activado:
 
 ```bash
-.venv/Scripts/python verificar.py
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-Corre 22 controles: reproducibilidad, conservación de clientes, **ley de Little**,
-utilización, monotonía, que la demanda simulada respete la tabla empírica, que las
-llegadas sigan el perfil horario, **conservación de litros** y el comportamiento de la
-política de reposición. Todos tienen que dar OK.
+### 4. Iniciar la aplicación
 
-## Qué hace
-
-| Pestaña | Qué muestra |
-|---|---|
-| 🎬 **Animación** | Un día completo funcionando: autos llegando, surtidores ocupándose, colas, gente pagando y el nivel del tanque bajando hasta que llega el camión. Con reloj, velocidad y barra de posición. |
-| 📊 **Indicadores** | Los indicadores de colas, de clientes y de inventario, con su intervalo de confianza del 95 %, y un diagnóstico automático de dónde está el cuello de botella. |
-| 🎲 **Demanda** | El método Monte Carlo paso a paso: la tabla de frecuencias, las probabilidades acumuladas, los intervalos de números aleatorios y el sorteo de cada uno de los 30 días. |
-| 🛢️ **Inventario** | El nivel del tanque durante el mes (dientes de sierra) y el barrido de políticas de reposición, con el costo total abierto en flete, almacenamiento y faltante. |
-| ⚖️ **Escenarios** | Comparación de Base / A / B / C con tabla, barras con IC y dispersión entre réplicas. |
-| 💰 **Economía** | Ingresos, costos de inventario, costo de capacidad, margen operativo, beneficio neto y repago de cada escenario. |
-| 📝 **Conclusión** | La recomendación, redactada a partir de los números, comparando las dos decisiones. |
-| 📖 **Modelo y método** | El modelo, los supuestos, ρ teórico y por qué el método es estadísticamente válido. |
-
-Todos los parámetros se cambian desde la barra lateral, incluida la tabla de frecuencias
-de la demanda.
-
-## El modelo
-
+```bash
+streamlit run app.py
 ```
-Monte Carlo: se sortea la demanda del día de una tabla de frecuencias
+
+Abrí la dirección que muestre la terminal, normalmente [http://localhost:8501](http://localhost:8501).
+
+## Ejecutar y verificar
+
+Con el entorno virtual ya creado, alcanza con activar el entorno y ejecutar Streamlit:
+
+```powershell
+# Windows (PowerShell)
+.\.venv\Scripts\Activate.ps1
+streamlit run app.py
+```
+
+También se puede ejecutar sin activarlo:
+
+```powershell
+.\.venv\Scripts\streamlit run app.py
+```
+
+Para comprobar la consistencia del motor de simulación:
+
+```powershell
+.\.venv\Scripts\python verificar.py
+```
+
+La verificación ejecuta 22 controles: reproducibilidad, conservación de clientes,
+ley de Little, utilización, monotonía, demanda empírica, perfil horario, conservación
+de litros y comportamiento de la política de reposición. Todos deben finalizar en `OK`.
+
+## Modelo de simulación
+
+```text
+Monte Carlo: se sortea la demanda del día desde una tabla empírica
       ↓
-Perfil horario: los autos se reparten en las 24 h (pico mañana, valle, pico tarde)
+Perfil horario: los autos se distribuyen en 24 h
       ↓
-[cola] → N surtidores → 30% → [cola] → M cajas → salida
+[cola] → N surtidores → 30 % → [cola] → M cajas → salida
    ↓        (Triangular)            (Triangular)   ↓
 abandono                                       abandono
    ↑
-   └── si el tanque está vacío, el auto ni siquiera hace la cola
+   └── si el tanque está vacío, el auto no ingresa a la cola
               ↑
    TANQUE: política (s, Q) + camión cisterna con plazo de entrega aleatorio
 ```
 
-- **Entidad**: auto/cliente. **Atributos**: litros a cargar, si compra en el minimarket.
-- **Recursos**: surtidores, cajas y el tanque de combustible.
-- **Una réplica es un mes completo** de operación (30 días).
+- **Entidad:** auto o cliente; atributos: litros a cargar y compra en minimarket.
+- **Recursos:** surtidores, cajas y tanque de combustible.
+- **Réplica:** un mes completo de operación, equivalente a 30 días.
 
-### Escenarios de capacidad
+## Escenarios y política de inventario
 
-| Escenario | Descripción |
-|---|---|
-| Base | Situación actual (3 surtidores, 1 caja) |
-| A | +1 surtidor |
-| B | +1 cajero |
-| C | Ambos |
+### Capacidad
 
-### Política de inventario
+| Escenario | Configuración |
+| --- | --- |
+| Base | Situación actual: 3 surtidores y 1 caja. |
+| A | Base + 1 surtidor. |
+| B | Base + 1 cajero. |
+| C | Base + 1 surtidor y 1 cajero. |
 
-Se prueban varias combinaciones de **punto de pedido (s)** y **cantidad a pedir (Q)**, y
-se elige la de menor costo total mensual:
+### Inventario
 
-**costo total = flete de los pedidos + almacenamiento + venta perdida por faltante**
+Se evalúan combinaciones de punto de pedido **(s)** y cantidad a pedir **(Q)**. La
+política elegida es la que minimiza el costo total mensual:
 
-## Rigor estadístico
+> **Costo total = flete de pedidos + almacenamiento + ventas perdidas por faltantes**
 
-- **Período de calentamiento**: la estación arranca vacía y con el tanque lleno; ese
-  transitorio se simula pero no se mide.
-- **Réplicas independientes**: cada escenario se corre varias veces con semillas distintas
-  y se informa promedio ± **intervalo de confianza del 95 %** (t de Student).
-- **Números aleatorios comunes**: los escenarios comparten las semillas, así que llegan
-  los mismos autos, cargan los mismos litros y el camión tarda lo mismo. La comparación
-  aísla el efecto de la capacidad.
-- **Promedios temporales**: cola, utilización y nivel del tanque se calculan como área
-  bajo la curva sobre tiempo, no como promedio de observaciones sueltas.
+## Criterio estadístico
 
-## Guion para la demo
+- **Calentamiento:** el transitorio inicial se simula, pero no se incorpora a las métricas.
+- **Réplicas independientes:** cada escenario se ejecuta con semillas distintas e informa promedio e intervalo de confianza del 95 % con t de Student.
+- **Números aleatorios comunes:** los escenarios usan las mismas semillas para aislar el efecto de la capacidad.
+- **Promedios temporales:** cola, utilización y nivel del tanque se calculan como área bajo la curva sobre el tiempo.
 
-1. **Arrancar** con `streamlit run app.py`. Ya abre con la simulación corrida.
-2. **Animación** → ▶. Mientras corre, señalar el reloj, cómo se llena el playón en la hora
-   pico y cómo el tanque baja hasta cruzar el punto de pedido y sale el camión.
-3. **Demanda**: mostrar la tabla de los 5 pasos de Monte Carlo y el registro día por día,
-   que es exactamente el formato del apunte. Los días de demanda alta son los que rompen
-   el sistema.
-4. **Indicadores**: los surtidores están ocupados menos de la mitad del tiempo, pero en la
-   hora pico se espera varios minutos. El promedio de 24 h esconde el problema.
-5. **Inventario**: el gráfico de dientes de sierra, y después apretar *Buscar la mejor
-   política* para mostrar el barrido y el compromiso entre flete, almacenamiento y
-   faltante.
-6. **Escenarios**: el escenario B (+1 cajero) da **exactamente igual** que el Base en los
-   surtidores, porque el minimarket no bloquea la carga. Se ve así de limpio gracias a los
-   números aleatorios comunes.
-7. **Conclusión**: el remate. El cuello de botella no es la capacidad de atención sino el
-   abastecimiento, y arreglar la política de reposición rinde más que comprar un surtidor
-   — sin invertir un peso.
+## Estructura del proyecto
 
-### Preguntas probables y su respuesta corta
-
-- *¿Por qué exponencial en las llegadas?* Porque los clientes llegan de forma independiente
-  entre sí; es el proceso de Poisson. La tasa cambia hora a hora según el perfil.
-- *¿Por qué triangular en el servicio?* Porque no hay datos históricos: sólo se puede
-  estimar mínimo, valor más probable y máximo.
-- *¿Por qué Monte Carlo para la demanda diaria?* Porque no se supone ninguna distribución
-  teórica: se usa directamente la tabla de frecuencias observada.
-- *¿Por qué el calentamiento?* Porque la estación arranca vacía y con el tanque lleno, y
-  eso no representa su estado normal.
-- *¿Por qué varias réplicas?* Porque una corrida es una sola muestra de un proceso
-  aleatorio. El intervalo de confianza dice cuánta confianza merece el promedio.
-- *¿Cómo sé que el simulador está bien?* `python verificar.py`: 22 controles, entre ellos
-  la ley de Little y la conservación de litros, que dan exactos.
-
-## Estructura del código
-
-```
-app.py                 interfaz Streamlit (única entrada del programa)
-verificar.py           22 controles de correctitud del motor
-sim/                   motor de simulación (Python puro, sin Streamlit)
-  config.py            parámetros, perfil horario, tabla empírica, tanque, escenarios
-  distribuciones.py    generación aleatoria con semilla y streams separados
-  modelo.py            procesos SimPy: días, llegadas, colas, tanque, reposición
+```text
+app.py                 interfaz Streamlit y punto de entrada
+verificar.py           controles de correctitud del motor
+requirements.txt       dependencias de Python
+sim/                   motor de simulación
+  config.py            parámetros, perfil horario, demanda, tanque y escenarios
+  distribuciones.py    generación aleatoria con streams separados
+  modelo.py            procesos SimPy: llegadas, colas, tanque y reposición
   estadisticas.py      colectores de indicadores
-  traza.py             cuadros de animación, serie del tanque y registro Monte Carlo
-  runner.py            réplicas, intervalos de confianza, escenarios y barrido
+  traza.py             animación, serie de tanque y registro Monte Carlo
+  runner.py            réplicas, IC, escenarios y barrido de políticas
   economia.py          análisis económico y recomendación
-ui/                    presentación
-  animacion.py         reproductor de la animación
-  graficos.py          gráficos Plotly
-  textos.py            etiquetas y textos de la interfaz
-docs/                  la propuesta original del trabajo
+ui/                    componentes de presentación
+docs/                  propuesta original del trabajo
 ```
 
 ## Tecnologías
 
-Python 3.14 · SimPy 4 (motor de eventos discretos) · Streamlit (interfaz) ·
-Plotly (gráficos) · pandas (tablas).
-#   p r o y e c t o - i n v e s t i g a c i o n - c o l a s  
- 
+Python · SimPy · Streamlit · Plotly · pandas · NumPy

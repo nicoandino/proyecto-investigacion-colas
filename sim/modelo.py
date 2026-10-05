@@ -94,10 +94,14 @@ class EstacionDeServicio:
     # Procesos de control
     # =========================================================================
     def correr_dias(self):
-        """Un proceso por día: sortea la demanda (Monte Carlo) y cierra el día."""
+        """Un proceso por día: sortea la demanda (Monte Carlo) o calcula determinista."""
         for dia in range(1, self.p.dias + 1):
-            # --- Paso 4 y 5 del método Monte Carlo: número aleatorio -> demanda ---
-            autos, numero = self.az.empirica(self.p.demanda, "demanda")
+            # --- Demanda: Monte Carlo o determinista según configuración ---
+            if self.p.modo_determinista:
+                autos, numero = self.az.determinista(self.p.autos_por_dia_fecha(dia))
+            else:
+                autos, numero = self.az.empirica(self.p.demanda, "demanda")
+
             self.autos_del_dia = autos
             self.tasas_hora = self.p.perfil.tasas_por_hora(autos)
             self.numero_aleatorio_dia = numero

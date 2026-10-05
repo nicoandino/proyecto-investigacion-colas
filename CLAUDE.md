@@ -58,8 +58,8 @@ Este proyecto **no es escalable a propósito**. Es un entregable académico, no 
 
 - Base de datos, autenticación, usuarios, multi-tenant, API REST, Docker.
 - Plugins, capas de abstracción "para el futuro", inyección de dependencias.
-- Varios tipos de combustible: multiplica tanques sin cambiar la naturaleza del problema.
-- Lavadero, GNC, camiones como clientes, turnos de empleados, fallas de equipos.
+- ~~Varios tipos de combustible~~ **SUPERADO (5/10/2026): SÍ se hace** (5 productos, un tanque por producto líquido). Ver `ORQUESTADOR_SIMULADOR.md` §2.3.
+- ~~GNC, turnos de empleados~~ **SUPERADO: SÍ se hacen** (GNC con cortes invernales; playeros por turno). Siguen prohibidos: lavadero, camiones como clientes masivos, fallas de equipos, horas extra/ausentismo.
 - Multiprocessing para acelerar: no vale la fragilidad que trae en Windows + Streamlit.
 
 **SÍ hacer**: que lo que hay esté **completo, correcto, visible y defendible frente al

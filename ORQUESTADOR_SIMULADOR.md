@@ -477,6 +477,56 @@ Métricas nuevas por grupo, playeros, motivo de pérdida, producto, plazo con co
 `config.py` (§7.1–7.2), `distribuciones.py` (streams **al final**, `discreta`), `modelo.py`, `estadisticas.py` (por grupo/motivo). Productos y tanques "de a uno". **`clasico()` debe reproducir los dorados exactamente.**
 **Gate:** 22/22 · N1–N5, N9, N10, N16 · réplica ≤ 1,5 s.
 
+> **PROGRESO DE LA FASE 2 (5/10/2026 — pausada por pedido del usuario).**
+> El trabajo en curso está en **`git stash@{0}`** de la rama `claude/simulator-graphic-orchestrator-wu2xh4`
+> ("Fase 2 en progreso (motor real: grupos, productos, playeros)"). Para retomar: `git stash pop`
+> y seguir la lista de abajo.
+>
+> **Hecho (en el stash, sin commitear):**
+> - `sim/config.py`: dataclasses `Producto`, `Grupo`, `TipoVehiculo`, `InventarioProducto` +
+>   builders desde el Registro (`productos_desde_registro` deriva la carga media por producto
+>   de VEH-00 y reproduce §14.2: 21,4 / 26,0 / 64,2 / 81,5 / 7 m³; `inventario_real` aplica
+>   INV-07 por producto). `ParametrosSimulacion` con `estacion_real`, `grupos`, `productos`,
+>   `tipos_vehiculo`, `matriz_tipos`, `playeros_por_turno`, `turnos`, `pct_gnc`,
+>   `capacidad_cola`, `disciplina_cola`, `inventario`, `demanda_relativa`, `carga_gnc`.
+>   Propiedades nuevas: `pesos_llegada()`, `media_servicio_liquidos()`, `rho_pico` con
+>   playeros, `autos_por_dia` con GNC. `clasico()` fija `estacion_real=False`,
+>   `sorteo_producto_primero=False`, `tabla_demanda_relativa=False`, `capacidad_cola=None`.
+> - `sim/distribuciones.py`: streams `"producto"` y `"tipo_vehiculo"` agregados AL FINAL;
+>   `discreta()` y `discreta_con_numero()`.
+> - `sim/estadisticas.py`: reescrito con `ContadoresGrupo`, `ContadoresProducto`, colectores
+>   por grupo/producto/motivo, `espera_cara` (para Little), `servicio_suma` (control 4),
+>   `litros_por_tipo` (N10) y helpers `nivel_inicial_total`/`capacidad_total`.
+> - `sim/modelo.py`: reescrito con dos montajes (real y clásico). Real: producto primero
+>   (Monte Carlo de 5 pasos), playeros por turno con `PriorityResource` + reservas
+>   (`controlar_turnos`), cola finita, disciplina `por_grupo`/`por_cara`, inventario por
+>   producto, motivos de §7.6; GNC siempre disponible y sin retener playero (PER-04; los
+>   episodios son Fase 6). Clásico: conserva el orden original de sorteos y de eventos.
+> - `sim/runner.py`: `ResultadoReplica` con campos por grupo/producto/motivo + `NO_METRICAS`
+>   y `correr_estacion_real()` (envuelve réplicas en un "Base" para la UI clásica).
+> - `sim/datos.py`: filas nuevas `SUR-00`, `MOD-01`, `DEM-00` y `MAPA_PARAMETROS` extendido
+>   (incluido `carga_gnc` → TIE-04).
+>
+> **Verificado en el stash:** los dorados salen EXACTOS por el motor nuevo
+> (`clasico()` → espera_surtidor 1.3919284647118675 y 3.6094022200315035 con semillas 1/2;
+> escenarios Base/A/B/C idénticos a §14.1).
+>
+> **Falta para cerrar la compuerta de la Fase 2:**
+> - [ ] `verificar.py`: adaptar los controles al nuevo default (el modelo REAL es el
+>       default): controles 5, 6 y 9 deben correr sobre `clasico()` (monotonía, tabla
+>       Monte Carlo absoluta y política de tanque único); controles 2, 3 y 4 sobre el
+>       modelo real con `espera_cara`/`servicio_suma`/capacidad total; control 8 con
+>       `nivel_inicial_total`/`capacidad_total`. Agregar **N2** (conservación por grupo y
+>       motivo), **N4** (Little por grupo), **N5** (playeros ≤ turno y ≤ caras, muestreo
+>       con traza), **N9** (mezcla en litros ≈ DEM-04 y GNC ≈ 3 % con ≥ 30.000 llegadas)
+>       y **N10** (media muestral auto ≈ 23,5 L ± 2 %, pick-up ≈ 40 L).
+> - [ ] `app.py`: selector de modelo (real/clásico); en modo real usar
+>       `correr_estacion_real()`, widgets de playeros/cola/disciplina, ocultar el barrido
+>       de políticas (llega en Fase 4) y que la pestaña Escenarios muestre el único
+>       "Base" real sin el veredicto de capacidad (el catálogo S0–S12 es Fase 7).
+> - [ ] Medir réplica ≤ 1,5 s, QA en navegador (sin errores de consola) y commit.
+
+
 ### Fase 3 — Animación nueva
 `Cuadro` v2 columnar; `ui/animacion.py` (§8.5) con `paleta_json()`. **Gate:** capturas de cada zona, de la cola desbordada y del camión · sin errores de consola · saltos funcionando · 22/22.
 

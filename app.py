@@ -54,7 +54,16 @@ from sim.runner import (
     grilla_sugerida,
     promedio_por_producto,
 )
-from ui import animacion, graficos
+from sim.red import (
+    ETIQUETA_ESCENARIO,
+    NOMBRE_NODO,
+    camino_mas_corto,
+    demora_por_corte,
+    descripcion_ruta,
+    dias_de_mes_en_corrida,
+    muestrear_plazos,
+)
+from ui import animacion, graficos, graficos_red
 from ui.datos_ui import (
     csv_registro,
     esquema_estacion_html,
@@ -572,6 +581,67 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
         inventario = base.inventario
 
+    # --- Ruta del camión y cortes (sólo la estación real) ---
+    red = None
+    if es_real:
+        with st.sidebar.expander("🛣️ Ruta del camión y cortes"):
+            st.markdown(
+                f"Fuentes {insignia_html(por_id('INV-05'))} {insignia_html(por_id('RED-12'))} "
+                f"{insignia_html(por_id('RED-13'))}: el camión sale del origen por el camino "
+                f"más corto; un corte en ese camino demora el viaje (desvío o espera, lo menor).",
+                unsafe_allow_html=True,
+            )
+            origen = st.radio(
+                "Origen del camión",
+                ["DOCK", "LUJAN"],
+                index=0 if base.red.origen == "DOCK" else 1,
+                format_func=lambda x: {
+                    "DOCK": "Dock Sud (991 km por Gral. Alvear)",
+                    "LUJAN": "Luján de Cuyo (planta YPF)",
+                }[x],
+            )
+            opciones = ["ninguno", "aleatorio"] + [c.id for c in base.red.cortes]
+            nombres_corte = {c.id: f"{c.id} · {c.nombre}" for c in base.red.cortes}
+            escenario = st.selectbox(
+                "Escenario de cortes",
+                opciones,
+                index=opciones.index(base.red.escenario_corte),
+                format_func=lambda x: ETIQUETA_ESCENARIO.get(x) or nombres_corte[x],
+            )
+            corte_dia = min(base.red.corte_dia, int(dias_por_horizonte))
+            if escenario in ("E1", "E2", "E4") and dias_por_horizonte > 1:
+                corte_dia = st.slider(
+                    "Día en que empieza el corte", 1, int(dias_por_horizonte), int(corte_dia), 1,
+                    help="Arranca a las 00:00 de ese día; los camiones que salen mientras "
+                         "dura se desvían o esperan.",
+                )
+            prob_corte = base.red.prob_corte_viaje
+            if escenario == "aleatorio":
+                prob_corte = st.slider(
+                    "Probabilidad de que un viaje encuentre un corte", 0, 60,
+                    int(round(prob_corte * 100)), 5,
+                    help="Sólo en jun–ago (RED-13, supuesto): fuera de invierno no hay cortes.",
+                ) / 100.0
+                if not set(base.red.meses_corte) & dias_de_mes_en_corrida(
+                    fecha_inicio, int(dias_por_horizonte)
+                ):
+                    st.caption(
+                        "⚠️ Este horizonte no incluye jun–ago: no se sortea ningún corte. "
+                        "Elegí 'Una estación → Invierno' o un mes de invierno."
+                    )
+            velocidad = st.slider(
+                "Velocidad media del camión (km/h)", 40, 90, int(base.red.velocidad_kmh), 5,
+                help="RED-11 (supuesto): entre los 80 km/h legales y los 60 urbanos.",
+            )
+            red = replace(
+                base.red,
+                origen=origen,
+                escenario_corte=escenario,
+                corte_dia=int(corte_dia),
+                prob_corte_viaje=float(prob_corte),
+                velocidad_kmh=float(velocidad),
+            )
+
     with st.sidebar.expander("🔬 Corrida"):
         st.info(
             f"Horizonte **{horizonte}**: desde el {fecha_inicio[1]}/{fecha_inicio[0]}, "
@@ -659,6 +729,7 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
             disciplina_cola=str(disciplina_cola),
             pct_gnc=float(pct_gnc),
             inventario=inventario,
+            red=red,
             **comunes,
         )
     else:
@@ -1860,6 +1931,160 @@ def pestania_modelo(p: ParametrosSimulacion) -> None:
 
 
 # =============================================================================
+# Pestaña: red y rutas (Fase 5)
+# =============================================================================
+def _demora_texto(red, id_origen: str, corte) -> str:
+    """Qué le pasa a un camión de ese origen que sale justo cuando empieza el corte."""
+    if corte.demora_fija_min > 0:
+        return f"+{corte.demora_fija_min:.0f} min por viaje (franja {corte.franja[0]:.0f}–{corte.franja[1]:.0f} h)"
+    r = replace(red, origen=id_origen)
+    duracion_min = corte.duracion.moda * 60.0
+    demora = demora_por_corte(r, corte.arcos, duracion_min)
+    if demora == 0:
+        return "no lo afecta (el corte no está en su ruta)"
+    alternativo = camino_mas_corto(r, cerrados=corte.arcos)
+    if demora < duracion_min - 1e-9:
+        base = camino_mas_corto(r)
+        return f"+{demora / 60:.1f} h (se desvía: +{alternativo.km - base.km:,.0f} km)"
+    return f"+{demora / 60:.1f} h (espera que se reabra)"
+
+
+def pestania_red(p: ParametrosSimulacion) -> None:
+    if p.red is None:
+        st.subheader("Red de abastecimiento")
+        st.info(
+            "El caso clásico no tiene red: su plazo de entrega es una sola triangular "
+            "(8–36 h) sin origen ni cortes. Elegí la **estación real** en la barra lateral.",
+            icon="🗺️",
+        )
+        return
+    red = p.red
+    optimo = camino_mas_corto(red)
+
+    st.subheader("Red de abastecimiento del camión")
+    st.caption(
+        "El camión sale del origen por el **camino más corto** (Dijkstra sobre los km de 10 "
+        "arcos, nota 06). Un corte demora el viaje sólo si el arco cerrado está en ese camino: "
+        "con origen Dock Sud, el corte nevado de la RN 143 Pareditas–San Rafael no está en la "
+        "ruta. La demora se suma al plazo base (INV-01)."
+    )
+    st.markdown(f"**Ruta óptima:** {descripcion_ruta(red).split(' · ')[0]}")
+    c2, c3 = st.columns(2)
+    c2.metric("Distancia", f"{optimo.km:,.1f} km".replace(",", "X").replace(".", ",").replace("X", "."), border=True)
+    c3.metric(
+        f"Tiempo de viaje a {red.velocidad_kmh:.0f} km/h", f"{optimo.minutos / 60:.1f} h".replace(".", ","),
+        help="Es sólo el viaje: el plazo de entrega (24–48 h) incluye además el pedido, "
+             "la carga y la descarga.",
+        border=True,
+    )
+
+    corte_activo = next((c for c in red.cortes if c.id == red.escenario_corte), None)
+    cerrados = corte_activo.arcos if corte_activo else ()
+    st.plotly_chart(graficos_red.grafico_red(red, cerrados), key="g_red")
+    if corte_activo is not None and corte_activo.arcos:
+        demora = demora_por_corte(red, corte_activo.arcos, corte_activo.duracion.moda * 60.0)
+        if demora == 0:
+            st.success(
+                f"El corte {corte_activo.id} **no está en la ruta** desde "
+                f"{NOMBRE_NODO[red.origen]}: el viaje no se entera.",
+                icon="✅",
+            )
+        else:
+            alternativo = camino_mas_corto(red, cerrados=corte_activo.arcos)
+            st.warning(
+                f"El corte {corte_activo.id} está en la ruta: el camión se demora "
+                f"{demora / 60:.1f} h (camino alternativo: {alternativo.km:,.1f} km, "
+                f"{alternativo.minutos / 60:.1f} h de viaje).",
+                icon="🚧",
+            )
+
+    st.markdown("##### Qué le hace cada corte a cada origen")
+    st.caption(
+        "Demora de un camión que sale justo cuando empieza el corte: mín(desvío, tiempo que "
+        "falta para que se reabra). E1 y E2 son cortes documentados (jul/ago-2026); E3 y E4 "
+        "son supuestos del grupo."
+    )
+    filas = []
+    for corte in red.cortes:
+        filas.append(
+            {
+                "Corte": f"{corte.id} · {corte.nombre}",
+                "Dock Sud": _demora_texto(red, "DOCK", corte),
+                "Luján de Cuyo": _demora_texto(red, "LUJAN", corte),
+            }
+        )
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+    st.markdown("##### Plazo de entrega con y sin cortes")
+    if red.escenario_corte == "ninguno":
+        st.info("Elegí un escenario de cortes en la barra lateral para ver el efecto.", icon="🚧")
+    else:
+        mes = 7
+        sin_corte, con_corte = muestrear_plazos(
+            p.inventario[0].plazo_entrega, red, 4000, st.session_state.semilla_usada, mes
+        )
+        etiqueta = (
+            f"Con cortes sorteados (julio, p = {red.prob_corte_viaje:.0%})"
+            if red.escenario_corte == "aleatorio"
+            else f"Un viaje que encuentra el corte {red.escenario_corte}"
+        )
+        st.plotly_chart(
+            graficos_red.grafico_plazos(sin_corte, con_corte, etiqueta), key="g_plazos_red"
+        )
+        media0, media1 = sum(sin_corte) / len(sin_corte), sum(con_corte) / len(con_corte)
+        st.caption(
+            f"Plazo medio: {media0:.1f} h sin cortes · {media1:.1f} h con cortes "
+            f"(+{media1 - media0:.2f} h por viaje). 4.000 viajes con los mismos plazos base."
+        )
+
+    st.markdown("##### Efecto en el quiebre de stock")
+    st.caption(
+        "Corre la estación completa con y sin el escenario elegido (mismas semillas) y compara."
+    )
+    if red.escenario_corte == "aleatorio" and not set(red.meses_corte) & dias_de_mes_en_corrida(
+        p.fecha_inicio, p.dias
+    ):
+        st.warning(
+            "El horizonte de esta corrida no incluye jun–ago: no hay cortes sorteados y la "
+            "comparación va a dar igual. Elegí 'Una estación → Invierno' en la barra lateral.",
+            icon="📅",
+        )
+    replicas_red = st.slider("Réplicas", 1, 4, 2, 1, key="rep_red")
+    if st.button("🚧 Simular el efecto de los cortes", disabled=red.escenario_corte == "ninguno"):
+        with st.spinner("Simulando con y sin cortes…"):
+            sin = correr_estacion_real_cacheado(
+                replace(p, red=replace(red, escenario_corte="ninguno")),
+                replicas_red,
+                st.session_state.semilla_usada,
+            )
+            con = correr_estacion_real_cacheado(p, replicas_red, st.session_state.semilla_usada)
+        st.session_state.efecto_cortes = (sin, con, red.escenario_corte)
+    efecto = st.session_state.get("efecto_cortes")
+    if efecto:
+        sin, con, escenario = efecto
+        filas = []
+        for etiqueta_m, clave, fmt in (
+            ("Plazo de entrega promedio (h)", "plazo_entrega", "{:.1f}"),
+            ("Camiones que encontraron un corte (%)", "viajes_demorados_pct", "{:.1f}"),
+            ("Demora por corte, promedio por viaje (h)", "demora_ruta_promedio", "{:.2f}"),
+            ("Días con quiebre (%)", "porcentaje_dias_quiebre", "{:.1f}"),
+            ("Nivel de servicio (%)", "nivel_servicio", None),
+            ("Litros no vendidos por día", "litros_no_vendidos_dia", "{:,.0f}"),
+        ):
+            if fmt is None:
+                v0, v1 = f"{sin.prom(clave) * 100:.1f}", f"{con.prom(clave) * 100:.1f}"
+            else:
+                v0, v1 = fmt.format(sin.prom(clave)), fmt.format(con.prom(clave))
+            filas.append({"Indicador": etiqueta_m, "Sin cortes": v0, f"Con {escenario}": v1})
+        st.dataframe(pd.DataFrame(filas), hide_index=True)
+        st.caption(
+            "Es el resultado de la última comparación; si cambiaste algo en la barra lateral, "
+            "volvé a apretar el botón. Un camión demorado deja el tanque más tiempo sin "
+            "reposición: el quiebre sube, y el óptimo de (s, Q) también cambia."
+        )
+
+
+# =============================================================================
 # Pestaña: la estación (caso real)
 # =============================================================================
 def pestania_estacion() -> None:
@@ -1992,6 +2217,7 @@ def correr_todo(
     st.session_state.costos_politicas = None
     st.session_state.politica_actual = None
     st.session_state.costos_real = None
+    st.session_state.efecto_cortes = None
 
 
 def main() -> None:
@@ -2047,6 +2273,7 @@ def main() -> None:
             "📊 Indicadores",
             "🎲 Demanda",
             "🛢️ Inventario",
+            "🗺️ Red y rutas",
             "⚖️ Escenarios",
             "💰 Economía",
             "📝 Conclusión",
@@ -2065,14 +2292,16 @@ def main() -> None:
     with pestanias[4]:
         pestania_inventario(p_corrida, st.session_state.parametros_eco)
     with pestanias[5]:
-        pestania_escenarios()
+        pestania_red(p_corrida)
     with pestanias[6]:
-        pestania_economia(p_corrida, st.session_state.parametros_eco)
+        pestania_escenarios()
     with pestanias[7]:
-        pestania_conclusion()
+        pestania_economia(p_corrida, st.session_state.parametros_eco)
     with pestanias[8]:
-        pestania_modelo(p_corrida)
+        pestania_conclusion()
     with pestanias[9]:
+        pestania_modelo(p_corrida)
+    with pestanias[10]:
         pestania_datos_fuentes()
 
     st.divider()

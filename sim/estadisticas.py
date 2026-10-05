@@ -138,6 +138,7 @@ class Contadores:
     pedidos_emitidos: int = 0
     pedidos_recibidos: int = 0
     dias_con_quiebre: int = 0
+    viajes_demorados: int = 0           # camiones que encontraron un corte (Fase 5)
 
     def reiniciar(self) -> None:
         for campo in self.__dataclass_fields__:
@@ -171,6 +172,7 @@ class ContadoresProducto:
     litros_recibidos: float = 0.0
     perdidos_sin_combustible: int = 0
     litros_perdidos_sin_combustible: float = 0.0   # litros que pidieron los que se fueron sin stock
+    viajes_demorados: int = 0                      # camiones de este producto que encontraron un corte
     pedidos_emitidos: int = 0
     pedidos_recibidos: int = 0
     dias_con_quiebre: int = 0
@@ -274,6 +276,7 @@ class Indicadores:
         }
         self.sin_combustible = SerieTemporal()   # indicador 0/1: fracción de tiempo sin nafta
         self.plazo_entrega = Muestras()
+        self.demora_ruta = Muestras()        # horas de demora por corte de ruta (sólo los demorados)
 
         # Litros por tipo de vehículo (N10)
         self.litros_por_tipo = {t: Muestras() for t in ids_tipos}
@@ -331,6 +334,7 @@ class Indicadores:
             self.espera_caja,
             self.tiempo_sistema,
             self.plazo_entrega,
+            self.demora_ruta,
             *self.esperas_grupo.values(),
             *self.esperas_cara_grupo.values(),
             *self.litros_por_tipo.values(),

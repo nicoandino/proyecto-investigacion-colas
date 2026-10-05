@@ -382,6 +382,93 @@ def inventario_real(
     return tuple(salida)
 
 
+# =============================================================================
+# Red de abastecimiento: arcos, cortes y escenario (algoritmos en sim/red.py)
+# =============================================================================
+@dataclass(frozen=True)
+class Arco:
+    """Un tramo de ruta entre dos nodos (se recorre en los dos sentidos)."""
+
+    a: str
+    b: str
+    km: float
+    ruta: str
+    cortable: bool = False
+
+
+@dataclass(frozen=True)
+class CorteRuta:
+    """Un corte forzado (E1–E4): qué arcos cierra, cuánto dura y qué demora fija agrega."""
+
+    id: str
+    nombre: str
+    arcos: tuple[tuple[str, str], ...]
+    duracion: Triangular                  # HORAS
+    demora_fija_min: float = 0.0          # obra: minutos extra por viaje
+    franja: tuple[float, float] | None = None   # horas del día en que rige la obra
+
+
+#: (a, b, ruta, cortable) en el orden de RED-01..RED-10 del Registro.
+_ARCOS_REGISTRO = (
+    ("RED-01", "LUJAN", "PAREDITAS", "RN 40", True),
+    ("RED-02", "PAREDITAS", "SANRAFAEL", "RN 143", True),
+    ("RED-03", "PAREDITAS", "SOSNEADO", "RN 40", True),
+    ("RED-04", "SOSNEADO", "SANRAFAEL", "RN 144", True),
+    ("RED-05", "ALVEAR", "SANRAFAEL", "RN 143 este", True),
+    ("RED-06", "SANRAFAEL", "MONTECOMAN", "RN 146", False),
+    ("RED-07", "MONTECOMAN", "LAPAZ", "RP 153", False),
+    ("RED-08", "LAPAZ", "LUJAN", "RN 7", False),
+    ("RED-09", "DOCK", "ALVEAR", "ruta sin verificar", False),
+    ("RED-10", "DOCK", "LUJAN", "ruta sin verificar", False),
+)
+
+
+def arcos_desde_registro() -> tuple[Arco, ...]:
+    """Los 10 arcos de la red (nota 06 §1.2–1.3)."""
+    return tuple(Arco(a, b, valor(id_), ruta, cortable)
+                 for id_, a, b, ruta, cortable in _ARCOS_REGISTRO)
+
+
+def cortes_desde_registro() -> tuple[CorteRuta, ...]:
+    """Los cortes forzados E1–E4 (RED-15)."""
+    return tuple(
+        CorteRuta(id_, nombre, tuple(arcos), Triangular(*dur), demora, franja)
+        for id_, nombre, arcos, dur, demora, franja in valor("RED-15")
+    )
+
+
+#: Nombre del origen en INV-05 → nodo de la red.
+_NODO_DE_ORIGEN = {"Dock Sud": "DOCK", "Luján de Cuyo": "LUJAN"}
+
+
+@dataclass(frozen=True)
+class ParametrosRed:
+    """De dónde sale el camión, por qué rutas llega y qué cortes puede encontrar."""
+
+    arcos: tuple[Arco, ...] = arcos_desde_registro()
+    origen: str = _NODO_DE_ORIGEN[valor("INV-05")]      # "DOCK" | "LUJAN"
+    destino: str = "SANRAFAEL"
+    velocidad_kmh: float = valor("RED-11")              # supuesto: 70 km/h
+    escenario_corte: str = valor("RED-12")              # ninguno · aleatorio · E1..E4
+    cortes: tuple[CorteRuta, ...] = cortes_desde_registro()
+    corte_dia: int = valor("RED-16")                    # día en que arranca un corte forzado
+    prob_corte_viaje: float = valor("RED-13")           # sólo en meses con cortes
+    duracion_aleatoria: Triangular = Triangular(*valor("RED-14"))
+    meses_corte: tuple[int, ...] = valor("RED-17")
+
+    def __post_init__(self) -> None:
+        nodos = {n for a in self.arcos for n in (a.a, a.b)}
+        if self.origen not in nodos or self.destino not in nodos:
+            raise ValueError("El origen y el destino tienen que ser nodos de la red.")
+        if self.velocidad_kmh <= 0:
+            raise ValueError("La velocidad del camión tiene que ser positiva.")
+        if not 0.0 <= self.prob_corte_viaje <= 1.0:
+            raise ValueError("La probabilidad de corte tiene que estar entre 0 y 1.")
+        validos = {"ninguno", "aleatorio", *(c.id for c in self.cortes)}
+        if self.escenario_corte not in validos:
+            raise ValueError(f"Escenario de corte desconocido: {self.escenario_corte}.")
+
+
 #: Los cinco productos de la estación real.
 PRODUCTOS_REALES = productos_desde_registro()
 #: Las tres zonas de surtidores.
@@ -565,6 +652,7 @@ class ParametrosSimulacion:
         valores=valor("DEM-07")[0], frecuencias=valor("DEM-07")[1]
     )
     inventario: tuple[InventarioProducto, ...] = INVENTARIO_REAL
+    red: ParametrosRed | None = ParametrosRed()   # None = el plazo no suma demoras de ruta
 
     # --- Inventario (clásico: un solo tanque) ---------------------------------
     tanque: ParametrosTanque = ParametrosTanque()
@@ -666,6 +754,7 @@ class ParametrosSimulacion:
             sorteo_producto_primero=False,
             tabla_demanda_relativa=False,
             capacidad_cola=None,
+            red=None,
             tanque=ParametrosTanque(
                 capacidad=40_000.0,
                 nivel_inicial=30_000.0,

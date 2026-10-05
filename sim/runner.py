@@ -90,6 +90,8 @@ class ResultadoReplica:
     # --- Estación real (Fase 2): por motivo, grupo y producto -----------------
     perdidos_cola_llena_dia: float = 0.0
     util_playeros: float = 0.0            # playeros ocupados ÷ playeros en turno (promedio temporal)
+    viajes_demorados_pct: float = 0.0     # % de los camiones que encontraron un corte (Fase 5)
+    demora_ruta_promedio: float = 0.0     # horas de demora por viaje (incluye los que no se demoran)
     espera_por_grupo: tuple[float, ...] = ()
     cola_por_grupo: tuple[float, ...] = ()
     util_por_grupo: tuple[float, ...] = ()
@@ -230,6 +232,12 @@ def correr_replica(
         plazo_entrega=ind.plazo_entrega.promedio,
         porcentaje_dias_quiebre=100.0 * c.dias_con_quiebre / dias,
         porcentaje_tiempo_sin_combustible=100.0 * ind.fraccion_sin_combustible,
+        viajes_demorados_pct=(
+            100.0 * c.viajes_demorados / c.pedidos_emitidos if c.pedidos_emitidos else 0.0
+        ),
+        demora_ruta_promedio=(
+            ind.demora_ruta.suma / c.pedidos_emitidos if c.pedidos_emitidos else 0.0
+        ),
         hora_pico=hora_pico,
         # --- Estación real: por motivo, grupo y producto ---
         perdidos_cola_llena_dia=c.perdidos_cola_llena / dias,

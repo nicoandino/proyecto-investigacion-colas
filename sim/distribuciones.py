@@ -38,6 +38,11 @@ STREAMS = (
     "entrega_vpower",
     "entrega_diesel_g2",
     "entrega_diesel_g3",
+    # Fase 5: los cortes de ruta, un stream por producto por la misma razón.
+    "corte_ruta_super",
+    "corte_ruta_vpower",
+    "corte_ruta_diesel_g2",
+    "corte_ruta_diesel_g3",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

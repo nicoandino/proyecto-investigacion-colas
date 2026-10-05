@@ -29,6 +29,7 @@ import json
 from datetime import date, timedelta
 
 from sim.config import ANO_REFERENCIA, ParametrosSimulacion
+from sim.red import ETIQUETA_ESCENARIO, descripcion_ruta
 from sim.traza import Cuadro, Traza
 from ui.tema import COLOR_PRODUCTO, PRODUCTO, paleta_json
 
@@ -70,6 +71,7 @@ def _columnas(cuadros: list[Cuadro], ids_grupos: list[str], ids_tanques: list[st
             "c": [round(f[2]) for f in fotos],
             "p": [round(f[3], 3) for f in fotos],
             "h": [round(f[4], 1) for f in fotos],
+            "d": [round(f[5], 1) for f in fotos],
         }
     return salida
 
@@ -98,6 +100,15 @@ def fecha_texto(p: ParametrosSimulacion, dia: int) -> str:
     fecha = inicio + timedelta(days=dia - 1)
     tipo = "fin de semana" if dia_semana >= 5 else "día hábil"
     return f"{_DIAS[dia_semana]} {fecha.day} de {_MESES[mes - 1]} · {tipo}"
+
+
+def _texto_ruta(p: ParametrosSimulacion) -> dict:
+    """Ruta del camión y escenario de cortes para el panel (sin red: el caso clásico)."""
+    if p.red is None:
+        return {"detalle": "", "escenario": "proveedor → estación"}
+    escenario = ETIQUETA_ESCENARIO.get(p.red.escenario_corte, f"Corte {p.red.escenario_corte}")
+    ruta = descripcion_ruta(p.red).rsplit(" · ", 1)[0]      # sin las horas
+    return {"detalle": ruta, "escenario": escenario}
 
 
 def _configuracion(
@@ -165,6 +176,7 @@ def _configuracion(
         "grupos": grupos,
         "productos": productos,
         "tanques": ids_tanques,
+        "ruta": _texto_ruta(p),
         "cajas": int(p.cajas),
         "probCompra": float(p.prob_compra),
         "frames": _columnas(traza.cuadros, ids_grupos, ids_tanques),
@@ -553,7 +565,7 @@ function dibujar(i) {
   s += `<rect x="${X_MINI}" y="${yc}" width="${W_MINI}" height="${Y_PERSONAL + 56 - yc}" rx="8" fill="${P.panel}"
           stroke="${P.borde}" stroke-width="1.5"/>`;
   s += texto(X_MINI + 12, yc + 21, "CAMIÓN CISTERNA", 13, { peso: 700, espaciado: 1 });
-  s += texto(X_MINI + W_MINI - 12, yc + 21, CONFIG.real ? "Dock Sud → estación" : "proveedor → estación", 12,
+  s += texto(X_MINI + W_MINI - 12, yc + 21, CONFIG.ruta.escenario, 12,
              { ancla: "end", color: P.tenue });
   const xa = X_MINI + 96, xb = X_MINI + W_MINI - 112;
   let fila = 0;
@@ -568,9 +580,14 @@ function dibujar(i) {
           <line x1="${xa}" y1="${y}" x2="${xb}" y2="${y}" stroke="${P.linea}" stroke-width="1.5" stroke-dasharray="8 7"/>`;
     s += camionIcono(xa + (xb - xa) * prog, y - 2, prod.color);
     s += texto(X_MINI + W_MINI - 12, y + 5, `llega en ${F.tk[id].h[i].toFixed(1)} h`, 12, { ancla: "end", peso: 700 });
+    const demora = F.tk[id].d[i];
+    if (demora > 0) {
+      s += `<rect x="${X_MINI + 12}" y="${y + 9}" width="9" height="9" rx="2" fill="${P.rojo}"/>`;
+      s += texto(X_MINI + 25, y + 18, `corte en la ruta: +${demora.toFixed(1)} h`, 11, { color: P.tinta, peso: 700 });
+    }
   });
   if (fila === 0) s += texto(X_MINI + 12, yc + 56, "sin pedidos en camino", 13, { color: P.tenue });
-  if (CONFIG.real) s += texto(X_MINI + 12, Y_PERSONAL + 46, "Ruta sin cortes (la red de rutas llega en la Fase 5)", 11, { color: P.tenue });
+  if (CONFIG.ruta.detalle) s += texto(X_MINI + 12, Y_PERSONAL + 46, CONFIG.ruta.detalle, 11, { color: P.tenue });
 
   // ---------------- Tanques ----------------
   s += texto(X0, Y_TANQUES - 10, "TANQUES (uno por producto líquido)", 13, { peso: 700, espaciado: 1 });

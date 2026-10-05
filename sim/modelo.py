@@ -44,6 +44,7 @@ import simpy
 from sim.config import MINUTOS_POR_DIA, ParametrosSimulacion
 from sim.distribuciones import Aleatorio
 from sim.estadisticas import Indicadores
+from sim.red import demora_de_viaje, mes_del_dia
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
 MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
@@ -88,7 +89,7 @@ class EstacionDeServicio:
         self.hubo_quiebre_hoy = False
         # Pedidos en camino por producto: [(minuto del pedido, plazo en minutos), ...]
         # (la animación dibuja el camión según cuánto del plazo ya transcurrió).
-        self.pedidos_abiertos: dict[str, list[tuple[float, float]]] = {}
+        self.pedidos_abiertos: dict[str, list[tuple[float, float, float]]] = {}
         self.autos_del_dia = int(p.demanda.media)
         self.tasas_hora = p.perfil.tasas_por_hora(self.autos_del_dia)
         self.numero_aleatorio_dia = 0
@@ -471,12 +472,13 @@ class EstacionDeServicio:
             abiertos = self.pedidos_abiertos.get(producto, [])
             if abiertos:
                 # El camión que llega primero (el que menos falta).
-                t0, plazo = min(abiertos, key=lambda x: x[0] + x[1])
+                t0, plazo, demora = min(abiertos, key=lambda x: x[0] + x[1])
                 progreso = min(1.0, max(0.0, (ahora - t0) / plazo))
                 faltan_horas = max(0.0, (t0 + plazo - ahora) / 60.0)
+                demora_horas = demora / 60.0
             else:
-                progreso, faltan_horas = -1.0, 0.0
-            salida.append((producto, nivel, en_camino, progreso, faltan_horas))
+                progreso, faltan_horas, demora_horas = -1.0, 0.0, 0.0
+            salida.append((producto, nivel, en_camino, progreso, faltan_horas, demora_horas))
         return tuple(salida)
 
     def registrar_inventario(self):
@@ -578,7 +580,7 @@ class EstacionDeServicio:
 
         plazo = self.az.triangular(self.p.tanque.plazo_entrega_minutos, "entrega")
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
-        pedido = (self.env.now, plazo)
+        pedido = (self.env.now, plazo, 0.0)
         self.pedidos_abiertos.setdefault("super", []).append(pedido)
         yield self.env.timeout(plazo)
         self.pedidos_abiertos["super"].remove(pedido)
@@ -610,8 +612,25 @@ class EstacionDeServicio:
         self.ind.contar_producto(producto, "pedidos_emitidos")
 
         plazo = self.az.triangular(info.plazo_entrega_minutos, f"entrega_{producto}")
+        # Cortes de ruta (Fase 5): el plazo base ya incluye el viaje normal; si el camión
+        # encuentra un corte, se le SUMA la demora (desvío o espera, la menor).
+        demora = 0.0
+        if self.p.red is not None:
+            dia = int(self.env.now // MINUTOS_POR_DIA) + 1
+            demora, _ = demora_de_viaje(
+                self.p.red,
+                self.env.now,
+                mes_del_dia(self.p.fecha_inicio, dia),
+                self.az,
+                f"corte_ruta_{producto}",
+            )
+            if demora > 0:
+                self.ind.contar_producto(producto, "viajes_demorados")
+                self.ind.contar("viajes_demorados")
+                self.ind.demora_ruta.agregar(demora / 60.0)
+        plazo += demora
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
-        pedido = (self.env.now, plazo)
+        pedido = (self.env.now, plazo, demora)
         self.pedidos_abiertos.setdefault(producto, []).append(pedido)
         yield self.env.timeout(plazo)
         self.pedidos_abiertos[producto].remove(pedido)

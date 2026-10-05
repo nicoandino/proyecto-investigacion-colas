@@ -53,6 +53,10 @@ Los controles cubren las dos partes del modelo:
   FASE 4 DEL ORQUESTADOR (política por producto)
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
+
+  FASE 5 DEL ORQUESTADOR (red de rutas)
+   23. N6 (km y minutos de §5-G), Dijkstra = fuerza bruta, demora por corte, la red sin
+       cortes no cambia nada y N11 (cortes, playeros y demanda).
 """
 
 from __future__ import annotations
@@ -592,12 +596,12 @@ def main() -> int:
     separador("13. N14: cero parámetros huérfanos")
     from dataclasses import fields
 
-    from sim.config import ParametrosEconomicos, ParametrosTanque
+    from sim.config import ParametrosEconomicos, ParametrosRed, ParametrosTanque
     from sim.datos import MAPA_PARAMETROS, REGISTRO as REGISTRO_DATOS
 
     ids_registro = {d.id for d in REGISTRO_DATOS}
     huerfanos = []
-    for clase in (ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos):
+    for clase in (ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos, ParametrosRed):
         for campo in fields(clase):
             clave = f"{clase.__name__}.{campo.name}"
             if clave not in MAPA_PARAMETROS or MAPA_PARAMETROS[clave] not in ids_registro:
@@ -620,8 +624,8 @@ def main() -> int:
     # El [theme] de .streamlit/config.toml está exceptuado: sus hex los prescribe el
     # propio §8.1 (regla 5) y son los únicos que puede haber fuera de ui/tema.py.
     archivos_ui = [
-        "app.py", "ui/graficos.py", "ui/animacion.py", "ui/datos_ui.py",
-        "ui/textos.py",
+        "app.py", "ui/graficos.py", "ui/graficos_red.py", "ui/animacion.py",
+        "ui/datos_ui.py", "ui/textos.py",
     ]
     infractores = []
     for nombre in archivos_ui:
@@ -845,6 +849,147 @@ def main() -> int:
         sum(ahorros.values()) > 0,
         "Con la política inicial (INV-07) hay algo para mejorar en al menos un tanque",
         f"ahorro total ${sum(ahorros.values()):,.0f} por mes (márgenes y flete placeholder)",
+    )
+
+    # ------------------------------------------------------------------ 19
+    separador("19. Fase 5: red de rutas (N6) y cortes (N11)")
+    from dataclasses import replace as reemplazar
+    from itertools import permutations
+
+    from sim.red import camino_mas_corto, demora_por_corte
+
+    red = p.red
+    luj = reemplazar(red, origen="LUJAN")
+    base_l = camino_mas_corto(luj)
+    cort_l = camino_mas_corto(luj, cerrados=(("PAREDITAS", "SANRAFAEL"),))
+    controlar(
+        abs(base_l.km - 221.8) < 1e-6 and abs(base_l.minutos - 190.1) < 0.05
+        and abs(cort_l.km - 399.8) < 1e-6
+        and abs((cort_l.km - base_l.km) - 178.0) < 1e-6
+        and round(cort_l.minutos - base_l.minutos) == 153,
+        "N6: Luján→estación 221,8 km / 190 min; con la RN 143 cortada 399,8 km (+178 km, +153 min)",
+        f"{base_l.km} km / {base_l.minutos:.1f} min | cortada: {cort_l.km:.1f} km "
+        f"(+{cort_l.km - base_l.km:.1f} km, +{cort_l.minutos - base_l.minutos:.1f} min) por "
+        f"{' → '.join(cort_l.ruta)}",
+    )
+    dock = camino_mas_corto(red)
+    dock_l = camino_mas_corto(red, cerrados=(("ALVEAR", "SANRAFAEL"),))
+    controlar(
+        abs(dock.km - 991.3) < 1e-6 and round(dock.minutos / 60, 1) == 14.2
+        and dock.ruta == ("DOCK", "ALVEAR", "SANRAFAEL")
+        and abs(dock_l.km - 1279.0) < 1.0 and dock.km < dock_l.km,
+        "N6: Dock Sud→estación 991,3 km / 14,2 h por Gral. Alvear, menos que por Luján (≈ 1.279 km)",
+        f"{dock.km} km / {dock.minutos / 60:.2f} h | por Luján: {dock_l.km:.1f} km "
+        f"(la nota 06 dice 1.279,0: 0,7 km de diferencia por el arco derivado)",
+    )
+
+    # Dijkstra contra fuerza bruta: se enumeran todos los caminos simples del grafo
+    def fuerza_bruta(r, cerrados):
+        cierres = {frozenset(c) for c in cerrados}
+        km_arco = {
+            frozenset((a.a, a.b)): a.km
+            for a in r.arcos
+            if frozenset((a.a, a.b)) not in cierres
+        }
+        nodos = {n for a in r.arcos for n in (a.a, a.b)} - {r.origen, r.destino}
+        mejor = float("inf")
+        for k in range(len(nodos) + 1):
+            for medio in permutations(sorted(nodos), k):
+                ruta = (r.origen, *medio, r.destino)
+                pares = [frozenset(par) for par in zip(ruta, ruta[1:])]
+                if all(x in km_arco for x in pares):
+                    mejor = min(mejor, sum(km_arco[x] for x in pares))
+        return mejor
+
+    conjuntos_cerrados = (
+        (),
+        (("PAREDITAS", "SANRAFAEL"),),
+        (("ALVEAR", "SANRAFAEL"),),
+        (("PAREDITAS", "SANRAFAEL"), ("PAREDITAS", "SOSNEADO"), ("SOSNEADO", "SANRAFAEL")),
+        (("SANRAFAEL", "MONTECOMAN"), ("ALVEAR", "SANRAFAEL"), ("SOSNEADO", "SANRAFAEL")),
+    )
+    casos = [(o, c) for o in ("DOCK", "LUJAN") for c in conjuntos_cerrados]
+    discrepancias = [
+        (o, c)
+        for o, c in casos
+        if abs(
+            camino_mas_corto(reemplazar(red, origen=o), cerrados=c).km
+            - fuerza_bruta(reemplazar(red, origen=o), c)
+        ) > 1e-9
+    ]
+    controlar(
+        not discrepancias,
+        "Dijkstra coincide con la enumeración de todos los caminos (10 casos, con y sin cortes)",
+        f"{len(casos)} combinaciones de origen y arcos cerrados"
+        + (f" | discrepan: {discrepancias}" if discrepancias else ""),
+    )
+
+    # Un corte que no está en la ruta no demora; si está, demora mín(desvío, duración)
+    fuera = demora_por_corte(red, (("PAREDITAS", "SANRAFAEL"),), 360.0)
+    dentro = demora_por_corte(luj, (("PAREDITAS", "SANRAFAEL"),), 10_000.0)
+    acotada = demora_por_corte(luj, (("PAREDITAS", "SANRAFAEL"),), 60.0)
+    aislado = demora_por_corte(
+        luj,
+        (("PAREDITAS", "SANRAFAEL"), ("LAPAZ", "LUJAN"), ("PAREDITAS", "SOSNEADO")),
+        500.0,
+    )
+    controlar(
+        fuera == 0.0 and abs(dentro - (cort_l.minutos - base_l.minutos)) < 1e-9
+        and acotada == 60.0 and aislado == 500.0,
+        "Corte fuera de la ruta = 0; en la ruta = mín(desvío, duración); sin alternativa = esperar",
+        f"Dock Sud + RN 143 oeste: {fuera:.0f} min | Luján: {dentro:.1f} min "
+        f"(con 60 min de corte: {acotada:.0f}) | aislado: espera {aislado:.0f} min",
+    )
+
+    # La red no cambia nada sin cortes: 'ninguno' y 'aleatorio' fuera de invierno = sin red
+    r_sin = correr_replica(reemplazar(p, red=None), semilla=71)[0]
+    r_ning = correr_replica(
+        reemplazar(p, red=reemplazar(red, escenario_corte="ninguno")), semilla=71
+    )[0]
+    r_enero = correr_replica(p, semilla=71)[0]
+    controlar(
+        r_sin == r_ning == r_enero,
+        "Sin cortes (o con cortes sorteados fuera de jun–ago) el resultado es idéntico al de sin red",
+        f"plazo {r_sin.plazo_entrega:.4f} h en los tres casos",
+    )
+
+    # N11: con cortes el plazo no baja, y los indicadores reaccionan como corresponde
+    fecha_jul, dias_jul = dias_y_fecha("mes", mes=7)
+    p_jul = reemplazar(p, fecha_inicio=fecha_jul, dias=dias_jul)
+    sin_c = correr_replica(
+        reemplazar(p_jul, red=reemplazar(luj, escenario_corte="ninguno")), semilla=72
+    )[0]
+    con_c = correr_replica(
+        reemplazar(
+            p_jul, red=reemplazar(luj, escenario_corte="aleatorio", prob_corte_viaje=0.5)
+        ),
+        semilla=72,
+    )[0]
+    controlar(
+        con_c.plazo_entrega > sin_c.plazo_entrega and con_c.viajes_demorados_pct > 0
+        and con_c.porcentaje_dias_quiebre >= sin_c.porcentaje_dias_quiebre,
+        "N11: con cortes el plazo es mayor y el quiebre no baja",
+        f"plazo {sin_c.plazo_entrega:.2f} → {con_c.plazo_entrega:.2f} h | "
+        f"{con_c.viajes_demorados_pct:.0f} % de los camiones demorados | quiebre "
+        f"{sin_c.porcentaje_dias_quiebre:.1f} → {con_c.porcentaje_dias_quiebre:.1f} %",
+    )
+    turnos_3 = ((0.0, 3), (6.0, 3), (14.0, 3), (22.0, 3))
+    turnos_1 = ((0.0, 1), (6.0, 1), (14.0, 1), (22.0, 1))
+    mas_playeros = correr_replica(
+        reemplazar(p, playeros_por_turno=(3, 3, 3), turnos=turnos_3), semilla=73
+    )[0]
+    pocos_playeros = correr_replica(
+        reemplazar(p, playeros_por_turno=(1, 1, 1), turnos=turnos_1), semilla=73
+    )[0]
+    mas_demanda = correr_replica(reemplazar(p, litros_mes=400_000.0), semilla=73)[0]
+    base_73 = correr_replica(p, semilla=73)[0]
+    controlar(
+        mas_playeros.espera_pico < pocos_playeros.espera_pico
+        and mas_demanda.espera_pico > base_73.espera_pico,
+        "N11: más playeros ⇒ menos espera; más demanda ⇒ más espera",
+        f"espera pico: 3 playeros {mas_playeros.espera_pico:.2f} min < 1 playero "
+        f"{pocos_playeros.espera_pico:.2f} min | 270.000 L {base_73.espera_pico:.2f} min < "
+        f"400.000 L {mas_demanda.espera_pico:.2f} min",
     )
 
     # ------------------------------------------------------------------

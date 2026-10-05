@@ -51,7 +51,8 @@ class Cuadro:
     #   cola: el producto (índice) de cada auto que espera, en orden de llegada.
     grupos: tuple = ()
     # Una foto por tanque: (producto, litros, litros en camino, progreso del camión
-    # entre 0 y 1 (-1 si no hay pedido), horas que faltan para que llegue).
+    # entre 0 y 1 (-1 si no hay pedido), horas que faltan para que llegue, horas de
+    # demora que le agregó un corte de ruta).
     tanques: tuple = ()
 
     @property

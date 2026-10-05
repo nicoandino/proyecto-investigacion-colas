@@ -1,4 +1,7 @@
 # Datos Operacionales — Estación Shell San Rafael
+
+> ⚠️ **AVISO (5/10/2026):** Este compilado es útil pero **sobreestima la confianza** y se contradice (horario 06–22 vs. 24 h oficial de Shell; "autos/día" que en realidad son litros/día; personal; mezcla de diésel). Las contradicciones y el valor adoptado de cada una están en `ORQUESTADOR §4.2`. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
+
 ## Consolidado de Investigación Profunda | Octubre 2026
 
 > **Documento de referencia para Fase 2 (Modelo Determinista)**  

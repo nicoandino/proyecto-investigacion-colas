@@ -1,368 +1,179 @@
-# 🚀 Guía de Onboarding — Simulador de Estación Shell San Rafael
+# 🚀 Onboarding para agentes — Simulador de la Shell de San Rafael (v2)
 
-> **Léeme primero si eres un agente nuevo en este proyecto.** 5 minutos para entender todo.
-
----
-
-## 📌 En 30 segundos: Qué es esto
-
-Simulador de eventos discretos (DES) para una estación de servicio Shell en San Rafael, Mendoza, Argentina. 
-
-**Pregunta:** ¿Conviene agregar 1 surtidor + 1 cajero? ¿Cuál es la mejor política de reposición de combustible?
-
-**Respuesta:** Simulamos 30 días de operación, medimos colas/esperas/ingresos, comparamos escenarios, y elegimos el que da más plata.
+> **Leé esto primero (5 minutos).** Después leé `ORQUESTADOR_SIMULADOR.md`, que es la especificación completa.
+> **Versión:** v2.0 · **5/10/2026** · Reemplaza a la v1, que tenía errores (listados en §3). **Si este archivo y otro documento se contradicen, mandan este archivo y el orquestador.**
 
 ---
 
-## 🎯 Estado Actual: Fase 2 (Octubre 2026)
+## 1. En 30 segundos
 
-### Qué está **HECHO** ✅
+Simulador de **eventos discretos** (Python + SimPy + Streamlit + Plotly) de **una estación Shell real**: **Av. Balloffet 1810 esq. Av. Los Sauces, San Rafael, Mendoza** (operador LOS SAUCES S.R.L.). Es el TP de **Investigación Operativa** (colas + Monte Carlo + inventario/redes).
 
-| Aspecto | Status | Detalles |
-|--------|--------|----------|
-| Motor DES (SimPy) | ✅ | Colas, abandono, tiempos aleatorios |
-| Tanque + política (s,Q) | ✅ | Inventario acoplado con colas |
-| UI Streamlit | ✅ | Sidebar con parámetros, pestañas de indicadores |
-| Animación SVG | ✅ | Reproductor interactivo de un día |
-| Modo determinista | ✅ | Sin Monte Carlo on-the-fly en demanda |
-| Horizonte variable | ✅ | Día/semana/mes/estación/año |
-| Datos consolidados | ✅ | 80+ fuentes verificadas |
-
-### Qué está **PENDIENTE** ⏳
-
-| Tarea | Prioridad |
-|-------|-----------|
-| Validación de campo (confirmar con gerente) | 🔴 CRÍTICA |
-| Ajustar demanda base de 120k → 270k | 🔴 CRÍTICA |
-| Ajustar playeros de 5-6 → 2-3 por turno | 🔴 CRÍTICA |
-| Implementar mix diésel G2/G3 | 🟡 Importante |
-| Implementar restricción GNC invierno | 🟡 Importante |
-| Análisis de sensibilidad | 🟢 Menos urgente |
+- **Producto del TP:** un **informe del caso**. El simulador ilustra escenarios; tiene que ser **completo, defendible y mostrar cada dato con su fuente**.
+- **Preguntas que responde:** (1) ¿alcanza la dotación de playeros en el pico? ¿conviene agregar capacidad? (2) ¿cuál es la mejor política de reposición de combustible, con camión desde Dock Sud y rutas que se cortan con nieve? (3) ¿cuánto se pierde cuando se corta el GNC en invierno y adónde va esa demanda? Todo en **pesos por mes**.
+- **Estética:** paleta **Shell** (amarillo `#FBCE07`, rojo `#DD1D21`; los hex difieren según la fuente). **Sin logo.**
 
 ---
 
-## 📊 Datos Validados Recientemente (Octubre 2026)
+## 2. Estado real (verificado el 5/10/2026)
 
-### Investigación: 5 agentes buscaron datos reales en Argentina
+| Cosa | Estado | Detalle |
+|---|---|---|
+| Motor DES (colas, abandono, tanque (s,Q), camión) | ✅ **Anda** | `python verificar.py` → **22/22 OK** |
+| UI Streamlit + animación SVG | ✅ **Anda** | la app levanta (`/_stcore/health` = 200) |
+| Con `modo_determinista = False` (default) | ✅ | números **idénticos** al proyecto original (dorados en `ORQUESTADOR §14.1`) |
+| **Modo "determinista" de Fase 2** | ❌ **Incorrecto** | trata **litros como autos** (120.000 L/mes ⇒ 4.000 autos/día ⇒ **4,2 M L/mes**), siempre simula **enero**, y no es determinista de verdad (`ORQUESTADOR §3`) |
+| Estación real (12 caras, 3 grupos, playeros, 5 productos, GNC, red) | ⏳ **No existe todavía** | el motor sigue siendo "3 surtidores + 1 caja + 1 tanque" |
+| Registro de datos con fuente y paleta Shell | ⏳ **No existe todavía** | |
+| Datos operacionales | ⚠️ **Hay, pero con contradicciones** | 20 conflictos catalogados en `ORQUESTADOR §4.2`, con el valor adoptado |
+| Datos **de la propia estación** | ❌ **Ninguno** | todo es estimación/supuesto hasta el relevamiento |
 
-**1️⃣ DEMANDA**
-- **Antes:** Estimación 100–150k L/mes
-- **Ahora:** **270k L/mes confirmado** (CREEBBA + Surtidores.com.ar)
-- **Rango:** 260–280k para estaciones medianas como San Rafael
-- **Estacionalidad:** ~6% máximo (insignificante)
-
-**2️⃣ MINIMARKET / SHELL SHOP**
-- **Antes:** 30% de clientes
-- **Ahora:** **20% confirmado** (dato directo YPF)
-- **Fuente:** YPF reporta 300k clientes/día × 20% = entran 60k al shop
-- **Rango según tipo:** 15% (chica) a 30% (premium Shell)
-
-**3️⃣ MIX DE DIÉSEL**
-- **G2 (gasoil común):** 75%
-- **G3 (gasoil ultra):** 25%
-- **Tendencia:** G2 cae -12.47%, G3 sube +11.52%
-- **Estaciones pequeñas:** Probablemente solo G2 (no tanques separados)
-
-**4️⃣ TURNOS Y PERSONAL**
-- **Playeros por turno:** 2–3 (NO 5–6 como teníamos)
-- **Cajeros:** 1 por turno ✅
-- **Encargado de turno:** 1 obligatorio por turno
-- **Total 24h:** 21 personas en 3 turnos
-- **Horarios exactos:** 06:00–14:00 / 14:00–22:00 / 22:00–06:00
-- **Regulación:** CCT 371/03 (SOESGyP), turnos rotativos
-
-**5️⃣ GNC EN INVIERNO**
-- **Restricción:** -50% oferta en junio–agosto
-- **Causa:** ENARGAS Resolución 409/2026 (prioridad residencial en invierno)
-- **Síntoma:** Presión en red cae → compresores sin capacidad → sin servicio
-- **% afectadas:** 80% estaciones con contrato interrumpible
-- **Capacidad compresor:** 20–25 autos/hora (estándar)
-- **Temperatura:** San Rafael -2°C en julio está dentro de rango (no afecta equipos)
+**Lo que hay que hacer:** corregir Fase 2 (Fase 0 del orquestador) y construir el resto por fases con compuertas. **No empieces por el rediseño: empezá por la Fase 0.**
 
 ---
 
-## 🏗️ Estructura del Código
+## 3. ⚠️ Errores conocidos en los documentos que vas a leer
+
+No te creas estos puntos aunque estén escritos con aplomo:
+
+1. **"270k L/mes = ~9.000 autos/día"** (v1 de este archivo) y **"100–150k L/mes = 3.300–5.000 autos/día"** (`DATOS_OPERACIONALES §1`): son **litros por día**, no autos. Con ~36 L por cliente, 270.000 L/mes son **≈ 250 clientes/día**. Si ponés 9.000 autos/día, el simulador colapsa (ρ_pico ≈ 22).
+2. **"El modelo determinista no necesita réplicas ni calentamiento"** (`FASE2`, `CLAUDE.md`): **falso.** Llegadas Poisson y tiempos aleatorios siguen ahí; el tanque arranca al 75 %. Réplicas, IC 95 % y calentamiento (2 días) **se mantienen**.
+3. **"Datos únicamente de fuentes verificadas"** (`CLAUDE.md`): **no.** Las etiquetas "Alta" de `DATOS_OPERACIONALES` **sobreestiman** la confianza (p. ej. "tanque de camión 300 L: Alta", sin dato argentino). Aplicá la **jerarquía de evidencia** (`ORQUESTADOR §4.1`).
+4. **"Horario 06–22, NO 24 h"** (`DATOS §5`): lo contradice la API oficial de Shell (`twenty_four_hour`) y los propios turnos nocturnos del documento. Default: **24 h**.
+5. **"2–3 playeros por turno, 21 personas"** (v1 de este archivo): `DATOS §4` dice **5 personas por turno = encargado 1 + playeros 2 + cajero 1 + tienda 1** (noche: 2 personas). Playeros adoptados: **1 · 2 · 2** (noche · mañana · tarde).
+6. **El código no tiene** un widget `playeros`, ni GNC, ni mix de diésel, ni "restricción −50 % en invierno" (la v1 lo insinuaba). **"−50 %" no tiene fuente**; el corte documentado es **total** (ENARGAS, estaciones con contrato interrumpible).
+
+Más detalle, y el resto de las contradicciones, en `ORQUESTADOR §3` y `§4.2`.
+
+---
+
+## 4. Qué archivo manda (y mapa del repo)
+
+**Orden de autoridad:** `ORQUESTADOR_SIMULADOR.md` > este archivo > `CASO_SHELL_SAN_RAFAEL.md` (contexto y plan de investigación) > `research_notes/…` (datos verificados, por parámetro) > `DATOS_OPERACIONALES_…md` (útil pero con errores) > `CLAUDE.md` / `TASK.md` / `FASE2_IMPLEMENTACION.md` (**desactualizados**, ver §3).
 
 ```
 proyecto-investigacion-colas/
-├── CLAUDE.md                          # Contexto del proyecto
-├── TASK.md                            # Checklist de fases
-├── DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md
-│                                      # 40+ parámetros con URLs (REFERENCIA)
-├── FASE2_IMPLEMENTACION.md            # Documentación técnica Fase 2
-├── ONBOARDING_PARA_AGENTES.md         # ESTE ARCHIVO
-│
-├── app.py                             # ENTRADA: Streamlit UI
-│
-├── sim/                               # MOTOR: Python puro, sin Streamlit
-│   ├── config.py                      # Dataclasses: Estacionalidad, ParametrosSimulacion
-│   ├── distribuciones.py              # RNG con streams separados
-│   ├── modelo.py                      # Procesos SimPy (días, llegadas, colas, tanque)
-│   ├── estadisticas.py                # Colectores de indicadores
-│   ├── economia.py                    # Análisis económico
-│   ├── runner.py                      # Corridas, réplicas, IC 95%
-│   └── traza.py                       # Animación y logs
-│
-├── ui/                                # PRESENTACIÓN: Streamlit components
-│   ├── animacion.py                   # Reproductor SVG
-│   ├── graficos.py                    # Plotly charts
-│   └── textos.py                      # Strings y etiquetas
-│
-└── verificar.py                       # 22 controles de correctitud
+├── ORQUESTADOR_SIMULADOR.md        # ★ especificación completa + fases + compuertas
+├── ONBOARDING_PARA_AGENTES.md      # ESTE archivo
+├── CASO_SHELL_SAN_RAFAEL.md        # contexto del caso, V1–V13, plan de investigación
+├── DATOS_OPERACIONALES_…md         # compilado de 8 áreas (con contradicciones: ORQUESTADOR §4.2)
+├── research_notes/…/               # 01 identidad · 03 vehículos/litros/tiempos · 06 logística/rutas (verificadas)
+│                                   #   (faltan 02, 04, 05: no asumir su contenido)
+├── app.py                          # Streamlit (única entrada)
+├── verificar.py                    # 22 controles del motor
+├── sim/                            # MOTOR: Python puro, sin Streamlit
+│   ├── config.py · distribuciones.py · modelo.py · estadisticas.py
+│   └── economia.py · runner.py · traza.py
+├── ui/                             # PRESENTACIÓN: animacion.py (SVG en JS) · graficos.py (Plotly) · textos.py
+└── .streamlit/config.toml          # fileWatcherType = "poll" (NO quitar)
 ```
+Se **van a agregar**: `sim/datos.py` (Registro), `sim/red.py` (Dijkstra), `sim/sensibilidad.py`, `ui/tema.py` (paleta única), `ui/datos_ui.py`.
+
+**Ramas:** `main` (original) · `main-7ss6h3` (Fase 2) · **`claude/simulator-graphic-orchestrator-wu2xh4` = rama de trabajo** (incluye todo lo anterior mergeado). **No crear Pull Request** salvo pedido del usuario.
 
 ---
 
-## 🚀 Cómo Correr
+## 5. Los 14 números que tenés que saber (valores adoptados)
 
-### 1. **Setup (primera vez)**
+| Qué | Valor adoptado | Conflicto / confianza |
+|---|---|---|
+| Surtidores | 6 de doble cara = **12 caras**: A nafta 4 · B diésel 2 · C GNC 6 | grupo; V3 abierta |
+| Horario | **24 h** | C1 |
+| Demanda | **270.000 L/mes** ⇒ 9.000 L/día ⇒ **≈ 252 clientes líquidos/día** (+ GNC 3 %) | **C2/C3 🔴**; estimación, baja-media |
+| Perfil horario | picos **07–10 h** y **16–18 h** (factor 3,5 y 3,0 vs. 1,0 de madrugada) | C16 |
+| Fin de semana | ×1,30 (normalizado al mes) | C17 |
+| Estacionalidad | **neutra** por defecto (hay presets) | C10 |
+| Mezcla en litros | Súper 28 · V-Power 19,5 · G2 29,3 · G3 23,2 % | C6, C7 |
+| Carga por vehículo | `Triangular(0,2 ; 0,3 ; 1,0) × tanque` (media 0,5·T): auto 47 L, pick-up 80 L, moto 3,7 L, camión 300 L (supuesto) | **C12 🔴** |
+| Tiempo en la cara | nafta/diésel `Triangular(2,5,8)` min; GNC `(5,7,12)` | C11 |
+| Playeros (noche · mañana · tarde) | **1 · 2 · 2**; 1 caja | **C5 🔴** (ρ_pico = 0,86 con 2) |
+| Minimarket | entra el **20 %** | C4 |
+| Plazo del camión | `Triangular(24,36,48)` h desde **Dock Sud** (991 km) | fuente: Shell Mendoza capital, 2023 |
+| GNC en invierno | corte **total** por episodios (2 × 6 días jun–ago), contrato interrumpible, 3 compresores, 30 % migra a nafta | **C8/C9** |
+| Economía | márgenes y flete **heredados sin fuente** (placeholders visibles); playero ≈ $1.680.000/mes | C18 |
+
+---
+
+## 6. Unidades y vocabulario (para no repetir el error de §3)
+
+- **Tiempo:** minutos (el día = 1440). **Dinero:** pesos. **Volumen:** litros, **salvo el GNC, que es en m³**. **Nunca** sumes litros con m³ ni los llames "autos".
+- **Litros/mes es la entrada de demanda; los clientes por día se derivan** (`ORQUESTADOR §14.2`).
+- **Cara** = lado de un surtidor = una posición de carga = un vehículo a la vez. **Playero** = quien atiende (servicio atendido).
+- **Réplica** = una corrida con otra semilla; se informa **promedio ± IC 95 %** (t de Student). **Números aleatorios comunes** = misma semilla entre escenarios.
+- **Dato / estimación / observación / supuesto / heredado**: los cinco tipos del Registro. **Heredado** = del proyecto hipotético, sin fuente.
+- **`[RESUMEN]`** = cifra vista sólo en el resumen de un buscador (no verificada). **`OK-orig`** = abierta y leída en el original.
+
+---
+
+## 7. Cómo correr (comandos probados)
 
 ```bash
-cd /home/user/proyecto-investigacion-colas
-python -m venv .venv                   # Crear entorno
-source .venv/bin/activate              # Activar (Linux/Mac)
-pip install -r requirements.txt        # Instalar dependencias
+cd proyecto-investigacion-colas
+python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+pip install -r requirements.txt                         # simpy, streamlit>=1.40, plotly>=6, pandas, numpy
+
+python verificar.py                                     # debe terminar con "Todos los controles pasaron" (22/22)
+python -m streamlit run app.py --server.headless true --server.port 8501    # http://localhost:8501
+python -m py_compile app.py sim/*.py ui/*.py            # chequeo de sintaxis
 ```
-
-### 2. **Ejecutar la UI**
-
-```bash
-streamlit run app.py
-```
-
-Abre en navegador: `http://localhost:8501`
-
-### 3. **Estructura de la UI**
-
-**Sidebar izquierdo (Parámetros):**
-- 🏪 Capacidad actual (surtidores, cajas)
-- 📊 **Fase 2: Modelo determinista** ← **NUEVO**
-  - Toggle: "Usar modelo determinista"
-  - Slider: Demanda base mensual (30k–300k L)
-  - Radio: Horizonte (día/semana/mes/estación/año)
-- 🚗 Demanda diaria (tabla Monte Carlo) ← Solo si Mode OFF
-- ⏱️ Tiempos de servicio
-- ⛽ Litros por carga
-- 🧍 Comportamiento del cliente
-- 🛢️ Tanque y reposición
-- 🔬 Corrida (días, réplicas, semilla)
-- 💵 Datos económicos
-
-**Pestañas principales:**
-- 🎬 Animación
-- 📈 Indicadores
-- 📊 Demanda (si Monte Carlo)
-- 🛢️ Inventario
-- 📉 Escenarios (Base vs. A vs. B vs. C)
-- 💰 Análisis Económico
-- ✅ Conclusión
-
-### 4. **Verificar que funciona**
-
-```bash
-python verificar.py
-# Debe decir: 22 controles en OK
-```
+- Si cambiás la **firma** de un módulo de `sim/` o `ui/`, **reiniciá Streamlit**: recarga `app.py` pero conserva el módulo importado viejo.
+- Para ver la app en un navegador headless (QA visual): `ORQUESTADOR §10.4`.
+- Corrida de referencia (mismo resultado siempre): `correr_replica(ParametrosSimulacion(), semilla=1)` → `espera_pico = 3.609402`.
 
 ---
 
-## 🔧 Cambios Necesarios Antes de Presentar
+## 8. Primeros pasos (Fase 0)
 
-### CRÍTICO — Actualizar parámetros
-
-```python
-# sim/config.py - Línea ~119-120
-
-DEMANDA_TIPICA = DemandaDiaria(
-    valores=(280, 320, 360, 400, 440),      # ← CAMBIAR a valores reales
-    frecuencias=(10, 20, 40, 20, 10),
-)
-```
-
-**Actual:** Demanda media ~360 autos/día = 120k L/mes
-
-**Debe ser:** ~9,000 autos/día = 270k L/mes
+1. `git checkout claude/simulator-graphic-orchestrator-wu2xh4` y verificá `python verificar.py` (22/22).
+2. Guardá los **números dorados** (`ORQUESTADOR §14.1`) como control N1.
+3. Corregí **B1, B2, B4, B5** (`ORQUESTADOR §3`): demanda desde **litros ÷ litros medios por cliente**, `fecha_inicio` real, "determinista" → "demanda esperada", calentamiento 2 días, **una** función `horizonte → (fecha_inicio, dias)`.
+4. Pasá la compuerta de la Fase 0 (incluye **N16**: 270.000 L/mes ⇒ 270.000 ± 3 % simulados).
+5. Reportá con el formato de `ORQUESTADOR §13` y esperá el OK antes de la Fase 2.
 
 ---
 
-Opción A (rápida): Cambiar demanda_base_mensual en UI a **270,000** y activar Fase 2
+## 9. Cómo agregar una variable (proceso v2)
 
-Opción B (precisa): Actualizar tabla DEMANDA_TIPICA
-
----
-
-### IMPORTANTE — Ajustar personal
-
-```python
-# app.py - Línea ~106-107
-
-with st.sidebar.expander("🏪 Capacidad actual", expanded=True):
-    playeros = st.number_input("Playeros instalados", 1, 8, 3, 1)
-    # ↑ Default es 3 (correcto: 2-3 por turno × 3 turnos = 6-9 total)
-```
-
-**Verificación:**
-- Mañana (06:00–14:00): 2–3 playeros
-- Tarde (14:00–22:00): 2–3 playeros
-- Noche (22:00–06:00): 2–3 playeros
-- **Total:** 6–9 playeros en la estación
+1. **Registrala** en `sim/datos.py` (`Dato` con valor, unidad, **fuente, tipo, confianza**, alternativas si hay conflicto).
+2. Leé su **default desde el Registro** en `sim/config.py` (dataclass `frozen=True`, **tuplas**, no listas/dicts).
+3. Usala en `sim/modelo.py` (si es aleatoria, con un **stream nuevo agregado AL FINAL** de `STREAMS`).
+4. Mostrala en `app.py` con su **insignia** (`ui/datos_ui.py`) y en la pestaña **Datos y fuentes**.
+5. Agregale un **control** en `verificar.py` y corré los 22 + los nuevos.
+6. Si es `supuesto`/`heredado`/`estimacion`, definí `bajo`/`alto` para que entre en el **tornado**.
 
 ---
 
-### NUEVO — Implementar mix diésel
+## 10. Qué NO hacer
 
-Actualmente el motor simula un único producto (Nafta Súper).
-
-**Para añadir G2/G3:**
-1. Duplicar tanques en config.py (uno para G2, otro para G3)
-2. Crear streams RNG separados para cada diésel
-3. Sortear tipo de diésel al llegar (75% G2, 25% G3)
-4. Mantener políticas (s,Q) independientes
-
-**Estimación de trabajo:** 2–3 horas de código
-
----
-
-### NUEVO — Restricción GNC en invierno
-
-**Actual:** GNC es 2–3% de la demanda, sin variación.
-
-**Cambio:** En junio–agosto, reducir disponibilidad GNC -50% (ENARGAS).
-
-**Implementación:**
-1. Detectar mes del año en modelo.py
-2. Si junio/julio/agosto: limitar tasa de llegada GNC × 0.5
-3. Documentar en DATOS_OPERACIONALES...
-
-**Estimación:** 1–2 horas
+- ❌ Inventar un número sin pasarlo por el Registro (regla de oro del caso).
+- ❌ Usar una cifra "Alta" de un documento compilado como si fuera evidencia (§3-3).
+- ❌ Dividir litros por 30 y llamarlo "autos" (§3-1).
+- ❌ Reordenar `STREAMS` o reutilizar un stream (rompe los números aleatorios comunes y los dorados).
+- ❌ `import streamlit` o `ui` dentro de `sim/`; `print()` en `sim/`.
+- ❌ Base de datos, login, API REST, Docker, plugins, multiprocessing, lavadero.
+- ❌ Hex de color fuera de `ui/tema.py`; amarillo como texto sobre blanco; el logo de Shell.
+- ❌ Declarar "verificado visualmente" sin haber abierto la app en un navegador.
+- ❌ Crear un Pull Request sin que lo pidan.
 
 ---
 
-## 📚 Archivos de Referencia
+## 11. Preguntas frecuentes de agentes
 
-Antes de tocar código, **lee estos en orden:**
+**¿Por qué no usamos el modo determinista tal cual?** Porque está mal en unidades y en calendario (§3). Se conserva la idea (demanda esperada por día, con estacionalidad) pero **corregida**; el **Monte Carlo** se mantiene para el **tipo de cliente y el producto** (es una unidad de la materia).
 
-1. **CLAUDE.md** — Contexto general, decisiones arquitectónicas
-2. **TASK.md** — Qué está hecho, qué falta (Fase 3.5 = Validación)
-3. **DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md** — 40+ parámetros con fuentes
-4. **FASE2_IMPLEMENTACION.md** — Detalles técnicos de cambios Fase 2
-5. **Este archivo (ONBOARDING_PARA_AGENTES.md)** — Guía rápida
+**¿Cuál de dos datos que se contradicen uso?** El de mayor nivel en la jerarquía (`ORQUESTADOR §4.1`); el otro queda como **alternativa** y como eje del tornado. Está resuelto para los 20 conflictos conocidos en `§4.2`; si encontrás uno nuevo, agregalo ahí.
 
----
+**¿Por qué 270.000 L/mes si la fuente dice 100–150k?** Porque las fuentes débiles convergen ahí (informe regional citado en la nota 03, promedio nacional de 270–380k, punto de equilibrio de una estación ≈ 315–400k) y 120k sólo se apoya en "San Rafael cayó 30 %". **No pude confirmar la cita "CREEBBA 270k"**: por eso es *estimación, confianza baja-media*, con **150k y 400k** como ejes de sensibilidad.
 
-## 🎯 Próximos Pasos (Por prioridad)
+**¿Qué falta de verdad?** Datos **de la propia estación**: demanda, dotación, GNC, mix diésel, shop (`ORQUESTADOR §12`). Sin relevamiento, todo es estimación y la app lo dice.
 
-### ✅ **Fase 3.5: Validación de campo (CRÍTICA)**
-
-**Antes de seguir avanzando, validar con el gerente de la estación:**
-
-```markdown
-[ ] Demanda actual (litros/mes) — comparar con 270k
-[ ] Personal por turno:
-    - Mañana (06:00–14:00): ___ playeros, ___ cajeros
-    - Tarde (14:00–22:00): ___ playeros, ___ cajeros
-    - Noche (22:00–06:00): ___ playeros, ___ cajeros
-[ ] Horario exacto (¿06:00–22:00 o 24h?)
-[ ] Tipos diésel (¿G2? ¿G3? ¿Mix?)
-[ ] Minimarket: ¿realmente 20%?
-[ ] GNC: ¿experimenta restricciones en invierno?
-```
-
-**Entregable:** Documento actualizado DATOS_OPERACIONALES... con confirmaciones.
+**¿Y el relevamiento?** Una visita con el encargado + conteo de un día hábil y uno de fin de semana. Checklist en `ORQUESTADOR §12`. Lo que se cargue entra al Registro como `observacion` (🔵).
 
 ---
 
-### 🟡 **Fase 3.6: Sensibilidad (IMPORTANTE)**
+## 12. Mensaje de arranque
 
-Con datos validados:
-- Variar demanda ±20% → impacto en colas/esperas
-- Variar personal ±1 → impacto en tiempo/laborales
-- Simular cortes RN junio–agosto → demanda reducida
-- Gráficos de tornado (pareto sensibilidad)
-
-**Entregable:** Reportes con recomendaciones de robustez.
+> *"Leé `ONBOARDING_PARA_AGENTES.md` y después `ORQUESTADOR_SIMULADOR.md` completo. Ejecutá la Fase 0 (corregir el código de Fase 2) y la Fase 1 (registro de datos + tema Shell). Pasá sus compuertas y reportame con el formato de §13. No avances a la Fase 2 sin mi OK."*
 
 ---
-
-### 🟢 **Fase 4: Presentación Final**
-
-- Boxplots dispersión por escenario
-- Exportar resultados a CSV/Excel
-- Exportar gráficos como PNG
-- Redactar conclusión económica final
-
----
-
-## 💡 Tips para trabajar con esto
-
-### Si necesitas cambiar parámetros:
-1. **Editar en `app.py` (UI):** Slider, radio buttons, etc. → afecta solo esa sesión
-2. **Editar en `sim/config.py` (código):** Cambios permanentes → afecta todos los usuarios
-
-### Si necesitas debugging:
-```bash
-python -c "
-from sim.config import ParametrosSimulacion, Estacionalidad
-p = ParametrosSimulacion(modo_determinista=True, demanda_base_mensual=270000)
-print(f'Demanda/día: {p.autos_por_dia:.0f}')
-print(f'Estacionalidad junio: {p.estacionalidad.indice_mes(6)}')
-"
-```
-
-### Si cambias el motor:
-Ejecuta `python verificar.py` después para asegurar que los 22 controles siguen en OK.
-
----
-
-## 🔗 Recursos Externos
-
-- **CLAUDE.md:** Contexto arquitectónico completo
-- **TASK.md:** Checklist de fases
-- **DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md:** Tabla de 40+ parámetros con URLs
-- **FASE2_IMPLEMENTACION.md:** Documentación técnica Fase 2
-
----
-
-## 🤝 Si eres un agente y necesitas ayuda
-
-**Pregunta:** "¿Cómo agrego variable X al modelo?"
-
-**Pasos típicos:**
-1. Definir en `sim/config.py` (dataclass field + default)
-2. Usar en `sim/modelo.py` (en procesos SimPy)
-3. Exponer en `app.py` (slider/radio en sidebar)
-4. Documentar en CLAUDE.md (por qué existe)
-5. Verificar con `python verificar.py`
-
-**Pregunta:** "¿Cuáles son los 22 controles de verificar.py?"
-
-Ver `verificar.py` línea ~250+. Incluye:
-- Conservación (llegadas = atendidos + perdidos)
-- Ley de Little (L = λ·W)
-- Conservación de litros
-- Monotonicidad (más surtidores → menos espera)
-- Reproducibilidad (misma semilla = mismo resultado)
-
----
-
-## 📌 Última cosa: Comandos útiles
-
-```bash
-# Compilar verificación sintaxis
-python -m py_compile app.py sim/config.py sim/modelo.py
-
-# Correr tests del motor
-python verificar.py
-
-# Limpiar cache Streamlit
-rm -rf ~/.streamlit/cache
-
-# Ver git log del proyecto
-git log --oneline -10
-```
-
----
-
-**Última actualización:** Octubre 5, 2026  
-**Autores:** Claude Haiku 4.5 + 5 agentes de investigación  
-**Próxima revisión:** Después de validación de campo
+**Última actualización:** 5/10/2026 · **Grupo:** Andino–Assenza · **Próxima revisión:** después del relevamiento en la estación.

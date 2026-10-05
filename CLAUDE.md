@@ -1,5 +1,8 @@
 # CLAUDE.md — Simulador de Estación de Servicio
 
+> ⚠️ **AVISO (5/10/2026):** Este archivo describe el alcance anterior y contiene afirmaciones **incorrectas** sobre la "Fase 2" ("datos únicamente de fuentes verificadas", "la fórmula es exacta", réplicas/calentamiento innecesarios): el modo determinista mezcla litros con autos y siempre simula enero. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
+
+
 ## Qué es esto
 
 Software de simulación de eventos discretos (DES) desarrollado a medida para el

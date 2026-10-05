@@ -1,5 +1,8 @@
 # Fase 2 Implementación — Modelo Determinista con Datos Verificados
 
+> ⚠️ **AVISO (5/10/2026):** Este documento tiene errores: el ejemplo "120.000 L ⇒ 4.000 autos/día" mezcla litros con autos (el motor simula 4,2 M L/mes), "no se necesitan réplicas" y "calentamiento innecesario" son falsos, y un "mes" siempre simula enero. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
+
+
 ## Resumen Ejecutivo
 
 Se completó la transición del simulador de una propuesta académica hipotética a un **modelo determinista de caso real** para la estación Shell de San Rafael, Mendoza. Los cambios involucran:

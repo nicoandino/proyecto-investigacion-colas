@@ -1,475 +1,419 @@
-# ORQUESTADOR — Del simulador hipotético al simulador de la Shell de San Rafael
+# ORQUESTADOR v2 — Simulador de la Shell de San Rafael (de hipotético a caso real)
 
-> **Para quién es este archivo:** para un agente de código que arranca en frío. Leelo entero antes de tocar nada. Es la fuente de verdad del *trabajo gráfico y práctico* que falta. Si algo de acá contradice a `CLAUDE.md` o `TASK.md`, **gana este archivo** (esos dos describen el proyecto hipotético anterior; ver §2.3).
+> **Para quién es este archivo:** un agente de código que arranca en frío. Leelo **entero** antes de tocar nada. Es la fuente de verdad del trabajo **gráfico y práctico** que falta. **Si este archivo contradice a `CLAUDE.md`, `TASK.md`, `FASE2_IMPLEMENTACION.md`, `DATOS_OPERACIONALES_…md` o `ONBOARDING_PARA_AGENTES.md`, gana este archivo** (los otros tienen errores documentados en §3 y §4).
 >
-> **Versión:** v1.0 · **Fecha de redacción:** 5/10/2026 · **Rama de trabajo:** `claude/simulator-graphic-orchestrator-wu2xh4`
->
-> **Aviso sobre el origen:** el pedido original hablaba de un `onboarding.md` con "todo el contexto". **Ese archivo no existe en el repo** (ni en ninguna rama). Este orquestador se armó con: `CASO_SHELL_SAN_RAFAEL.md` (borrador v0.1), `research_notes/Datos reales estación Shell San Rafael/{01,03,06}_*.md`, `CLAUDE.md`, `TASK.md`, `README.md` y la lectura completa del código. Si aparece un `onboarding.md`, **reconciliarlo con §5 y §6 antes de seguir** (si difiere, avisar al usuario; no elegir en silencio).
+> **Versión:** v2.0 · **Fecha:** 5/10/2026 · **Reemplaza a:** v1.0 (escrita antes de que existieran los datos operacionales y el código de "Fase 2").
+> **Compañero:** `ONBOARDING_PARA_AGENTES.md` (lectura rápida de 5 min; este archivo es la especificación completa).
 >
 > **Mensaje de arranque sugerido para pegarle al agente:**
-> *"Leé `ORQUESTADOR_SIMULADOR.md` completo. Ejecutá la Fase 0 y la Fase 1, pasá sus compuertas (gates) y reportame con el formato de §13. No avances a la Fase 2 sin mi OK."*
+> *"Leé `ONBOARDING_PARA_AGENTES.md` y después `ORQUESTADOR_SIMULADOR.md` completo. Ejecutá la Fase 0 (corregir el código de Fase 2) y la Fase 1 (registro de datos + tema Shell). Pasá sus compuertas y reportame con el formato de §13. No avances a la Fase 2 sin mi OK."*
 
 ---
 
-## 0. Cómo trabajar con este archivo (protocolo del agente)
+## 0. Protocolo del agente
 
-1. **Orden de lectura obligatorio** (≈ 25 min): este archivo → `CASO_SHELL_SAN_RAFAEL.md` → `CLAUDE.md` → `sim/config.py` → `sim/modelo.py` → `app.py` → `ui/animacion.py` → `ui/graficos.py` → `ui/textos.py` → `verificar.py`. Las notas de investigación (`research_notes/…`) se consultan **por parámetro** (la tabla de §5 dice en qué archivo y sección está cada dato).
-2. **Trabajá por fases (§9).** Cada fase tiene archivos, entregable visible y **compuerta** (comandos que deben pasar). No se abre la fase siguiente con la compuerta en rojo.
-3. **Un commit por fase** (mensajes en castellano, descriptivos). Pushear a la rama de trabajo. **No crear Pull Request** salvo que el usuario lo pida.
-4. **Nunca inventes un número en silencio.** Todo valor nuevo entra por el **Registro de datos** (§5.1) con `tipo`, `fuente` y `confianza`. Si no hay dato, es `SUPUESTO` y la interfaz lo muestra con su insignia (§8.4). Esta es la regla de oro del caso (`CASO §0`).
-5. **Distinguí tres cosas en todo lo que escribas:** *dato* (tiene fuente), *supuesto* (sin fuente, marcado) y *propuesta del orquestador* (decisión de diseño de este archivo, reversible). La columna "Origen" de §5 lo indica.
-6. **Si una decisión abierta (§6) bloquea tu trabajo**, usá el **default** que está ahí, dejalo detrás de un parámetro y anotalo en el reporte. Preguntale al usuario sólo si el default no existe.
+1. **Orden de lectura** (≈ 30 min): `ONBOARDING_PARA_AGENTES.md` → este archivo → `CASO_SHELL_SAN_RAFAEL.md` → `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md` → `research_notes/…/{01,03,06}_*.md` (consultarlas **por parámetro**; §5 dice dónde está cada dato) → `sim/config.py` → `sim/modelo.py` → `app.py` → `ui/*` → `verificar.py`.
+2. **Fases con compuertas (§9).** No se abre la fase siguiente con la compuerta en rojo. **Un commit por fase**, en castellano. Pushear a la rama de trabajo. **No crear Pull Request** salvo que el usuario lo pida.
+3. **Nunca inventes un número en silencio.** Todo valor entra por el **Registro de datos** (§5.1) con `tipo`, `fuente` y `confianza`. Sin dato ⇒ `SUPUESTO` visible en la interfaz.
+4. **Tres clases de afirmación**, siempre distinguidas: *dato* (tiene fuente), *supuesto* (sin fuente, marcado) y *propuesta del orquestador* (decisión de diseño reversible; columna "Origen" de §5).
+5. **Una cifra con etiqueta "Alta" en un documento NO es alta por eso.** Los documentos nuevos (`DATOS_OPERACIONALES…`, `ONBOARDING…`) fueron compilados por agentes en paralelo y **sobreestiman la confianza** (§4). Aplicá la jerarquía de evidencia de §4.1.
+6. **Si una decisión abierta (§6) te bloquea**, usá el **default**, dejalo detrás de un parámetro y anotalo en el reporte. Preguntale al usuario sólo si no hay default.
 7. **Reportá con el formato de §13** al cerrar cada fase.
+
+### 0.1 Estado del repositorio (verificado el 5/10/2026)
+| Rama | Contenido |
+|---|---|
+| `main` | Proyecto hipotético original (b83b4db): estación genérica, 22 controles. |
+| `main-7ss6h3` | **Fase 2** (f41adb6): `DATOS_OPERACIONALES…`, `FASE2_IMPLEMENTACION.md`, modo "determinista" (`config.py`, `distribuciones.py`, `modelo.py`, `app.py`) + `ONBOARDING_PARA_AGENTES.md` (08250f0). |
+| `claude/simulator-graphic-orchestrator-wu2xh4` | **Rama de trabajo.** Es `main` + **merge de `main-7ss6h3`** + este orquestador. Es la que hay que usar. |
+
+Sobre el código mergeado: `python verificar.py` → **22/22 OK**; `py_compile` OK; la app levanta (`/_stcore/health` = 200); con `modo_determinista=False` (default) los números son **idénticos** a los del proyecto original (§14.1). **El problema no es que "no ande": es que el modo nuevo es numéricamente incorrecto (§3).**
 
 ---
 
 ## 1. Misión y definición de "terminado"
 
-**Misión.** Pasar de un simulador *hipotético* (3 surtidores, 1 caja, 1 tanque, números inventados, paleta oscura genérica) a **la herramienta del caso real**: la estación **Shell de Av. Balloffet 1810 esq. Av. Los Sauces, San Rafael, Mendoza** (operador LOS SAUCES S.R.L.). El producto central del TP es un **informe del caso**; el simulador ilustra los escenarios. Pero el simulador tiene que ser **completo, defendible, y mostrar cada dato con su fuente**.
+**Misión.** Pasar de un simulador *hipotético* a **la herramienta del caso real**: la estación **Shell de Av. Balloffet 1810 esq. Av. Los Sauces, San Rafael, Mendoza** (LOS SAUCES S.R.L.). El producto central del TP es un **informe del caso**; el simulador ilustra escenarios. Tiene que ser **completo, defendible y mostrar cada dato con su fuente y su confianza**, con la **paleta Shell**.
 
-**Está terminado cuando se cumplen TODAS:**
-
-| # | Criterio verificable |
+| # | Criterio verificable (todos deben cumplirse) |
 |---|---|
-| D1 | La estación modelada tiene **12 caras en 3 grupos** (A nafta 4 · B diésel 2 · C GNC 6), minimarket y **playeros por turno**; servidores = *mín(caras libres, playeros en turno)* para nafta/diésel. |
-| D2 | **Cinco productos** (Súper, V-Power, Diésel común, V-Power Diesel, GNC). Líquidos con **tanque propio**; GNC sin tanque (depende de **disponibilidad**). |
-| D3 | **Red de abastecimiento** con camino más corto (Dijkstra), cortes de ruta y su efecto en el plazo de entrega y en el quiebre de stock. |
-| D4 | **Corte de GNC en invierno** con ventana horaria, y **migración** de parte de esos clientes a nafta. |
-| D5 | **Cuatro estaciones del año** con juego de parámetros propio, y comparativa entre ellas. |
-| D6 | **Cada parámetro del modelo** se muestra en la app con valor, unidad, fuente, nivel, tipo y confianza, y se puede **exportar a CSV** (anexo de fuentes). Cero parámetros "huérfanos" (lo verifica un control automático). |
-| D7 | La interfaz usa la **paleta Shell** (§8.1) de forma coherente en tema de Streamlit, gráficos Plotly y animación SVG, con contraste legible (control automático, §10.3). |
-| D8 | La **animación** muestra el playón real: 3 zonas, 12 posiciones de carga, playeros, cola que puede desbordar a la avenida, minimarket, **tanques por producto**, camión en ruta y estado del GNC. |
-| D9 | **Análisis de sensibilidad** (tornado) sobre los `SUPUESTO`s: cuánto mueven el resultado en $/mes. |
-| D10 | `python verificar.py` pasa **los 22 controles originales + los nuevos** de §10.2; el **caso degenerado** reproduce *exactamente* los números dorados de §14.1. |
-| D11 | `CLAUDE.md`, `TASK.md` y `README.md` actualizados al nuevo alcance (§9, Fase 10). |
+| D0 | **El modo de demanda por litros mensuales es numéricamente correcto**: con `demanda_mensual = 270.000 L`, el motor simula **270.000 L/mes ± 3 %** (control N16). Hoy simula ≈ 9,4 millones (§3-B1). |
+| D1 | La estación tiene **12 caras en 3 grupos** (A nafta 4 · B diésel 2 · C GNC 6), minimarket y **playeros por turno**; servidores = *mín(caras libres, playeros en turno)* en nafta/diésel. |
+| D2 | **Cinco productos** (Súper, V-Power, Diésel G2, Diésel G3/V-Power Diesel, GNC). Líquidos con **tanque propio**; GNC sin tanque (**disponibilidad** + capacidad de compresores). |
+| D3 | **Red de abastecimiento** con camino más corto, cortes de ruta y su efecto en plazo y quiebre. |
+| D4 | **Corte de GNC en invierno** (corte **total** por episodios, no "−50 %") con **migración** a nafta. |
+| D5 | **Calendario real**: el horizonte (día/semana/mes/estación/año) simula **meses concretos**, con estacionalidad **elegible** (§5-C). |
+| D6 | **Cada parámetro** se muestra con valor, unidad, fuente, nivel, tipo y confianza, **con las alternativas en conflicto**, y se exporta a CSV. Cero parámetros huérfanos (N14). |
+| D7 | **Paleta Shell** coherente en Streamlit, Plotly y animación, con contraste legible (N15). |
+| D8 | **Animación** del playón real: 3 zonas, 12 posiciones, playeros, cola que desborda a la avenida, minimarket, **tanques por producto**, camión en ruta, estado del GNC. |
+| D9 | **Sensibilidad** (tornado) sobre todos los `supuesto`/`heredado`/`estimacion`, **incluyendo cada contradicción de §4** como eje. |
+| D10 | `verificar.py`: los **22 controles originales + los de §10.2**; el **caso degenerado** reproduce los números dorados de §14.1. |
+| D11 | `CLAUDE.md`, `TASK.md`, `README.md` y los documentos de Fase 2 **corregidos** (Fase 10). |
 
 ---
 
-## 2. Contexto condensado (lo imprescindible)
+## 2. Contexto condensado
 
 ### 2.1 Qué pasó
-El profesor objetó que el proyecto se apoyaba en una **simulación hipotética** (demanda, tiempos y costos inventados). Se pivotó a **un caso real comprobable**: una estación concreta con datos con fuente. Consigna original: *"cualquier tema, que corra en algún software, que tenga alguna complejidad, preferiblemente aspectos económicos. Colas, transporte, Montecarlo, etc."* Se usa **motor propio** (no Simul8). Grupo: **Andino–Assenza**. Materia: Investigación Operativa.
+El profesor objetó la **simulación hipotética** (datos inventados). Se pivotó a **un caso real comprobable**. Consigna: *"cualquier tema, que corra en algún software, con alguna complejidad, preferiblemente aspectos económicos. Colas, transporte, Montecarlo, etc."* Motor propio (no Simul8). Grupo **Andino–Assenza**. Materia: Investigación Operativa. Fase 2 (otro agente, 5/10/2026) consolidó datos operacionales y agregó el modo "determinista".
 
-### 2.2 La estación (resumen; detalle en §5 y en `research_notes/…/01_*.md`)
-- **Dirección oficial (Shell):** "BALLOFFET 1810 ESQ. LOS SAUCES", San Rafael, CP 5600. Grafía correcta **Balloffet** (la SE y OSM escriben "Ballofet"). "Bayofet/Bayofed" **no existe** en ninguna fuente: es una deformación fonética del audio original; **no usarla**.
-- **Surtidores (según el grupo, captura de Google Maps):** 6 surtidores de doble cara = **12 caras**. S1–S2 nafta (Súper y V-Power), S3 diésel, S4–S6 GNC. Cada captura muestra 6 flechas rojas (6+6): *una flecha = una cara = un carril de acceso*.
-- **Servicio atendido por playero** (Shell: `full_service` + `manned`), **playa 24 h**, minimarket (`shop`, horario **sin confirmar**), baño, aire y agua. No figuran ATM ni lavadero.
-- **Entorno:** Av. Balloffet es la **RN 143** (tramo urbano, 4 carriles, 60 km/h); Av. Los Sauces es la **RP 158**. Zona **urbana consolidada** (no rural). Otras Shell a 2,26 y 3,60 km; ninguna estación a < 1,5 km.
-- **Abastecimiento líquido:** camión cisterna; para Shell el origen documentado es **Dock Sud** (Buenos Aires), ≈ 991 km vía Gral. Alvear (nivel C, 2023, confianza media). Luján de Cuyo es origen de otras banderas.
-- **GNC:** viene de la red de gas, se comprime en la estación; en **invierno** se restringe por orden de Ecogas (caso documentado: San Rafael, 23/6/2022, 8 estaciones afectadas).
+### 2.2 La estación (detalle en §5-A)
+- **Dirección oficial (Shell):** "BALLOFFET 1810 ESQ. LOS SAUCES", San Rafael, CP 5600. Grafía correcta **Balloffet**. "Bayofet/Bayofed" **no existe** en ninguna fuente.
+- **Surtidores (grupo, capturas de Google Maps):** 6 surtidores de doble cara = **12 caras**; S1–S2 nafta, S3 diésel, S4–S6 GNC; *una flecha = una cara = un carril* (6 + 6 flechas).
+- **Servicio atendido por playero** (Shell API: `full_service` + `manned`), **playa 24 h** (Shell API: `twenty_four_hour`). Minimarket (Datos: "Shell Select", ≈ 140 m², **nombre y horario sin confirmar**).
+- **Entorno:** Av. Balloffet = **RN 143** (tramo urbano, 4 carriles, 60 km/h); Av. Los Sauces = **RP 158**. Zona **urbana consolidada**.
+- **Abastecimiento líquido:** camión cisterna; origen documentado **Dock Sud** (≈ 991 km vía Gral. Alvear; nivel C, 2023). **GNC:** red de gas + compresión; en invierno se corta por orden del ENARGAS a las estaciones con contrato **interrumpible**.
 
 ### 2.3 Qué se conserva y qué queda superado
-| Se conserva | Queda superado (ya NO rige) |
+| Se conserva | Queda superado |
 |---|---|
-| Motor SimPy, streams RNG con semilla y **números aleatorios comunes** | `CLAUDE.md` § "NO hacer": **varios combustibles** y **fallas de equipos** (ahora se hacen). |
-| Colas (FIFO), Monte Carlo de **5 pasos**, inventario **(s, Q)**, economía, **22 controles** | "**Un solo producto**" y "**un solo tanque**". |
-| IC 95 % (t de Student), calentamiento, promedios temporales | "**Una réplica = un mes genérico**": ahora un mes por **estación del año**. |
-| Convenciones: castellano, `frozen=True`, `sim/` sin Streamlit, sin `print()` en `sim/` | Tabla de demanda, perfil horario y tiempos **inventados** (pasan a `SUPUESTO` visibles hasta tener dato). |
+| SimPy, streams RNG con semilla y **números aleatorios comunes**; colas FIFO; inventario (s, Q); economía; 22 controles; IC 95 %; **calentamiento** y **réplicas** | `CLAUDE.md` "NO hacer": **varios combustibles** y **fallas de equipos**; "un solo producto"; "una réplica = un mes genérico" |
+| Monte Carlo de **5 pasos** (ahora también para **tipo de cliente** y **producto**, §7.2) | La tabla de demanda diaria y el perfil horario **inventados** (pasan a `heredado` visible o se reemplazan por los de §5-C) |
+| `sim/` sin Streamlit, castellano, `frozen=True`, sin `print()` en `sim/` | **Las afirmaciones de Fase 2** de §3-B6 ("no se necesitan réplicas", "calentamiento innecesario", "datos únicamente de fuentes verificadas") |
 
-**Siguen prohibidos** (no escalable a propósito): base de datos, autenticación, API REST, Docker, plugins, capas de abstracción "para el futuro", **multiprocessing**, lavadero, camiones como *clientes del surtidor de forma masiva*, turnos de empleados con **horas extra/ausentismo**.
-
----
-
-## 3. Reglas inamovibles (invariantes)
-
-1. **`sim/` nunca importa `streamlit` ni `ui/`.** El motor corre solo (script o notebook).
-2. **Todo en castellano** (nombres, docstrings, textos de UI).
-3. **Unidades:** tiempo en **minutos** (día = 1440), dinero en **pesos**, volumen en **litros**. **Excepción única y explícita: el GNC se mide en m³** (así se vende; su precio es $/m³). Cada `Producto` declara su `unidad`. **Prohibido sumar litros con m³**: agregá en **pesos** o por producto.
-4. `@dataclass(frozen=True)` para parámetros; **tuplas, no listas/dicts mutables** dentro de las dataclasses de parámetros.
-5. **Reproducibilidad:** toda aleatoriedad sale de `sim/distribuciones.py` con semilla explícita. **Streams nuevos se AGREGAN AL FINAL de `STREAMS`** (la semilla de cada stream depende de su índice; reordenar rompe la reproducción de todo lo anterior).
-6. Los atributos del cliente (tipo de vehículo, producto, litros, si compra) se sortean **al llegar**, no al ser atendido (números aleatorios comunes entre escenarios).
-7. Sin `print()` en `sim/`. El motor devuelve datos.
-8. **No romper los 22 controles de `verificar.py`.** El **caso degenerado** (§10.1) existe justamente para garantizarlo.
-9. **Ningún parámetro sin fila en el Registro de datos** (§5.1).
-10. **No usar el logo/pecten de Shell** (marca registrada). Se usa **sólo la paleta**. Pie fijo en la app: *"Proyecto académico de Investigación Operativa; no es oficial ni está afiliado a Shell."*
+**Siguen prohibidos** (no escalable a propósito): base de datos, autenticación, API REST, Docker, plugins, abstracciones "para el futuro", **multiprocessing**, lavadero, camiones como clientes masivos, horas extra/ausentismo.
 
 ---
 
-## 4. Mapa del código actual y qué cambia
+## 3. Auditoría del código de Fase 2 (hay que corregirlo **primero**)
 
-Línea base **verificada el 5/10/2026**: `python verificar.py` → "Todos los controles pasaron" (22/22). Python 3.11 en este entorno (el proyecto declara 3.14; no usar nada específico de 3.14). Dependencias: `simpy`, `streamlit>=1.40`, `plotly>=6`, `pandas`, `numpy`.
+Evidencia reproducible con `python` sobre la rama de trabajo. Resumen: el modo "determinista" de `main-7ss6h3` **mezcla litros con autos**, **siempre simula enero** y **no es determinista**.
 
-| Archivo | Hoy | Cambio requerido | Fase |
+| ID | Defecto | Evidencia | Corrección (Fase 0) |
 |---|---|---|---|
-| `sim/config.py` (410 l.) | `ParametrosSimulacion` plano: `surtidores`, `cajas`, 1 `ParametrosTanque`, `PerfilHorario`, `DemandaDiaria`, `Escenario`(+1 surtidor/cajero), `ParametrosEconomicos` | Agregar **`Producto`, `GrupoSurtidores`, `TipoVehiculo`, `Turno`, `EstacionDelAnio`, `ParametrosRed`, `ParametrosGNC`**; `ParametrosSimulacion` pasa a componerlos. **Mantener un constructor de compatibilidad** (`ParametrosSimulacion.clasico()` = defaults de hoy). | 2, 4–7 |
-| `sim/datos.py` | **No existe** | **NUEVO:** Registro de datos (§5.1) con TODAS las filas de §5. Fuente única de los defaults. | 1 |
-| `sim/distribuciones.py` | 7 streams | Agregar al final: `"vehiculo"`, `"producto"`, `"corte_gnc"`, `"corte_ruta"`, `"migracion"`. Agregar `discreta(pesos, stream)` (sorteo por pesos). | 2 |
-| `sim/modelo.py` (404 l.) | 1 `Resource` surtidores + 1 caja + 1 tanque | Recursos **por grupo**; **playeros por turno**; cola finita/balking; tanque **por producto**; camión con **plazo = base + efecto de la red**; **ventana de corte GNC** + migración; clientes con `tipo`, `producto`. | 2, 4, 5, 6 |
-| `sim/red.py` | **No existe** | **NUEVO:** grafo + Dijkstra (`heapq`, sin dependencias) + estado de arcos (§7.4). | 5 |
-| `sim/estadisticas.py` | contadores globales | Contadores **por grupo y por producto**, por **motivo de pérdida** (§7.6), por franja horaria y por estación del año. | 2, 4 |
-| `sim/traza.py` | `Cuadro` de 13 campos | `Cuadro` **v2** (§8.6): por grupo y por producto, playeros, GNC, camión. Serie de tanques ×4. | 3 |
-| `sim/runner.py` | `ResultadoReplica` plano; `escenarios_desde` | Resultados **por grupo/producto**; catálogo de escenarios **S1–S8** (§7.7); corrida **por estación del año**; `barrer_politicas` por producto. | 4, 7, 8 |
-| `sim/economia.py` | margen único, 1 tanque | Márgenes **por producto**; flete **por km**; costo de playeros; anualización. | 8 |
-| `sim/sensibilidad.py` | **No existe** | **NUEVO:** tornado (§7.9). | 9 |
-| `ui/tema.py` | **No existe** | **NUEVO:** **única fuente** de la paleta (§8.1): constantes Python + `css_global()` + `paleta_json()` para el SVG. | 1 |
-| `ui/datos_ui.py` | **No existe** | **NUEVO:** insignias, `etiqueta(dato_id)`, tabla de fuentes, export CSV. | 1 |
-| `ui/animacion.py` (415 l.) | SVG 1000×520, 3 columnas, 1 tanque, paleta oscura propia | **Rediseño completo** (§8.5). | 3 |
-| `ui/graficos.py` (490 l.) | Plotly `plotly_white`, colores sueltos | Todo consume `ui/tema.py`; gráficos nuevos (§8.3). | 1, 4–9 |
-| `ui/textos.py` | Métricas y textos del modelo viejo | Métricas nuevas; `SUPUESTOS` pasa a **generarse desde el Registro**. | 1, 4 |
-| `app.py` (948 l.) | 8 pestañas, sidebar de números sueltos | Reestructura (§8.2); sidebar **alimentada por el Registro**. | 1–9 |
-| `.streamlit/config.toml` | `fileWatcherType = "poll"` | Agregar `[theme]` (§8.1). **No quitar el `poll`.** | 1 |
-| `verificar.py` | 22 controles | + controles de §10.2. | todas |
-| `CLAUDE.md`, `TASK.md`, `README.md` | Proyecto hipotético | Reescribir (Fase 10). | 10 |
-
-Rendimiento de partida: réplica de 30 días ≈ 0,5 s; corrida de 4 escenarios × 4 réplicas ≈ 12–15 s; barrido de 13 políticas × 2 réplicas ≈ 16 s. **Presupuesto nuevo:** réplica ≤ 1,5 s; todo lo pesado va **detrás de un botón propio** y con `st.cache_data`.
+| **B1** | **Error de unidades.** `autos_por_dia = demanda_base_mensual / 30` divide **litros por mes** y lo trata como **autos por día**. | `modo_determinista=True, demanda_base_mensual=120.000` ⇒ `autos_por_dia = 4.000`, `litros_por_dia = 140.000`, ⇒ **4,2 M L/mes** (35× lo pedido); ρ_pico = **9,7**. Con 270.000 ⇒ 9.000 autos/día, **9,45 M L/mes**, ρ_pico = **21,9**; una corrida de 3 días da `perdidos_cola/día = 6.931` y `sin_combustible/día = 3.204`. El propio ejemplo de `FASE2_IMPLEMENTACION.md` ("120.000 L ⇒ 4.000 autos") **está mal**. | `autos_por_dia = (demanda_mensual_L / días_del_mes) / litros_medios_por_cliente` (§7.1). Correcto: 270.000 L/mes ⇒ 9.000 L/día ⇒ **≈ 252 clientes líquidos/día** (§14.2). |
+| **B2** | **Un "mes" siempre es enero.** `mes = ((dia_del_anio-1)//30)+1` recibe `dia` = 1..`dias` (contado desde el inicio de la corrida, no del calendario). | Para `dias=1..30` hay **un solo valor** de demanda (índice enero = 100). "Estación (90)" = ene–mar. Invierno **nunca** se simula salvo con "año". | Parámetro `fecha_inicio` (mes y día); mapear día→mes con calendario real (§7.1). |
+| **B3** | **La tabla de estacionalidad del código no coincide con su fuente.** | Código: Mar 70, Abr 75, May 80, Ago 90, Sep 95, Oct 92, Nov 98, Dic 105 (media 83,75). `DATOS_OPERACIONALES §6`: Mar 80, Abr 65, May 60, Ago 75, Sep 70, Oct 70, Nov 75, Dic 85 (media 73,3). Además es un **proxy de ocupación hotelera** (rango 55–100, ×1,8), mientras `ONBOARDING` dice "~6 % máximo (insignificante)". | Tres presets elegibles y **neutro por defecto** (§5-C, DEM-06). |
+| **B4** | **"Determinista" es un nombre engañoso.** Sólo el **total diario** es fijo: las llegadas siguen siendo Poisson y los tiempos de servicio aleatorios. | `FASE2` y `CLAUDE.md` afirman "no se necesitan réplicas" y "calentamiento innecesario": **falso**. El tanque arranca al 75 %, las colas vacías y los tiempos son aleatorios ⇒ hay transitorio y varianza. Y con `dias_calentamiento = 0` el transitorio **contamina** los indicadores. | Renombrar a **"demanda esperada"**; **mantener réplicas e IC**; calentamiento por defecto **2 días** en ambos modos. |
+| **B5** | **`horizonte` no hace nada en el motor.** `_dias_segun_horizonte()` **nunca se llama**; el campo `horizonte` sólo viaja a `ParametrosSimulacion`; la UI calcula los días por su cuenta. `Estacionalidad` se importa en `app.py` y no se usa. | `grep` (§0.1). | Que `dias` y `fecha_inicio` salgan de **una sola** función `horizonte → (fecha_inicio, dias)`. |
+| **B6** | **Documentos con afirmaciones falsas o engañosas.** | (i) `FASE2`: "no se necesitan réplicas", "calentamiento innecesario"; (ii) `CLAUDE.md`: "Datos únicamente de fuentes verificadas", "la fórmula es exacta"; (iii) `ONBOARDING`: manda cambiar la demanda a "**~9.000 autos/día = 270k L/mes**" (**son 9.000 L/día**, no autos) y describe un widget `playeros` y un "21 personas" que no existen en el código ni en la fuente (§4-C5). | Corregir los tres (Fase 10). **Hasta entonces llevan un aviso en la primera línea.** |
+| **B7** | **Rendimiento del horizonte "año".** 365 días ≈ 12 × una réplica de un mes (≈ 6 s) **por réplica y por escenario**. | — | Año = **una corrida por escenario** (más réplicas sólo si el usuario las pide); cacheada y detrás de botón. |
 
 ---
 
-## 5. Los datos
+## 4. Contradicciones entre fuentes y cómo se resuelven
+
+### 4.1 Jerarquía de evidencia (aplicar siempre, en este orden)
+1. **Observación propia en la estación** (relevamiento con fecha, hora y método).
+2. **Registro primario** de la estación u organismo oficial **abierto en el original** (API de Shell, Secretaría de Energía).
+3. **Prensa/organismos abiertos en el original** `[OK-orig]` con fecha de la nota.
+4. **Agregados nacionales o proxies** (flota, mercado, ocupación hotelera).
+5. **Resúmenes de buscador `[RESUMEN]`**, cifras **sin URL** o "confirmadas" por un documento compilado sin enlace.
+6. **Supuesto del orquestador.**
+
+**Reglas:** (a) gana el nivel más alto; (b) a igual nivel, gana el que **declara fuente**; (c) el valor perdedor **no se descarta**: queda como **alternativa** en el Registro y como **eje de sensibilidad**; (d) un conflicto que cambia un resultado ≥ 20 % se marca **🔴 relevar** (§12).
+
+### 4.2 Registro de contradicciones
+| ID | Tema | Fuentes en conflicto | **Valor adoptado** (y por qué) | Alternativas (sensibilidad) | Impacto |
+|---|---|---|---|---|---|
+| **C1** | **Horario** | Shell API: playa `twenty_four_hour` (nivel 2, leído el 5/10/2026; **hoy el proxy bloqueó una re-lectura**). `DATOS §5`: "06–22, NO 24 h" (patrón típico, **sin fuente**, "verificar"). El mismo `DATOS` lista turno noche 22–06 con personal; `ONBOARDING`: "21 personas en 3 turnos de 24 h". | **24 h** (fuente primaria + los propios turnos de ambos documentos). | **S10: cierre nocturno 22–06.** El perfil horario de `DATOS §2` ya asigna demanda a la madrugada (factor 1,0). | 🔴 Medio |
+| **C2** | **Demanda mensual** | `ONBOARDING`: "270k L/mes **confirmado** (CREEBBA + Surtidores.com.ar), rango 260–280k" — **sin URL; no pude confirmarlo**. `DATOS §1`: base **100–150k** ("SUPUESTO"). Código: 120k. Hipotético heredado: 360 autos × 35 L ≈ 378k. `DATOS §1`: Shell país 600k L/estación/mes; promedio nacional 270–380k. Nota 03 D5: 330 m³ por boca (2018, baja); "≈ 270.000 L/mes" en un resumen de informe regional (sin fecha). Búsqueda web: punto de equilibrio de una estación ≈ 315.000–400.000 L/mes (2021). | **270.000 L/mes** (central; **estimación, confianza baja-media**): es el valor donde convergen las fuentes débiles; el de 120k tiene sólo el argumento "San Rafael cayó 30 %". | **150.000 / 400.000 L/mes** (ejes de sensibilidad). | 🔴 **Alto** |
+| **C3** | **Litros vs. autos** | `DATOS §1` ("100–150 k L/mes = 3.300–5.000 autos/día @ 50 L") y `ONBOARDING` ("~9.000 autos/día = 270k L/mes") confunden **litros/día** con **autos/día** (error ≈ ×35–50). Código: B1. | **Litros/mes es la variable de entrada; los autos se derivan** (÷ litros medios por cliente, §14.2). | — | 🔴 **Crítico** |
+| **C4** | **Entrada al minimarket** | Heredado 30 % (sin fuente); `ONBOARDING`: **20 %** "dato directo YPF: 300k clientes/día × 20 %" (**no pude confirmarlo**; la búsqueda sólo halló otras cifras de YPF Full); `DATOS §5`: "30–50 % de los que cargan (estimado)"; el propio `ONBOARDING` da el rango 15 % (chica) a 30 % (Shell premium). | **20 %** (el único con fuente declarada, aunque débil). | **15 % / 30 % / 45 %** | Bajo-medio |
+| **C5** | **Personal** | `ONBOARDING`: "**2–3 playeros por turno**, 21 personas, 1 encargado por turno". `DATOS §4`: mañana y tarde **5 personas = encargado 1 + playeros 2 + cajero 1 + tienda 1**; noche **2 = playero 1 + cajero 1**; total ≈ 12. (`DATOS §tabla` dice "5–6 *personas*", y `ONBOARDING` lo leyó como "5–6 *playeros*".) | **Playeros (noche, mañana, tarde) = 1 · 2 · 2**; **cajas = 1**; encargado y personal de tienda **sólo como costo**. Es el único desglose por rol. | Playeros **2·3·3** (`ONBOARDING`); autoservicio (S9, −1 por turno). | 🔴 **Alto** (con 2 playeros ρ_pico = 0,86) |
+| **C6** | **Mix diésel G2/G3** | `ONBOARDING`: **75 % / 25 %** (tendencias −12,47 % / +11,52 %). `DATOS §7`: G2 24 %, G3 19 % del mercado (= **55 % / 45 %** del diésel; −11,22 % / +8,52 %). Nota 01: la **SE declara ambos** productos para esta estación. `DATOS` también dice "S3 sólo G2 (verificar)". | **55 % / 45 %** (tabla con fuente declarada, Surtidores.com.ar ago-2026) y **ambos activos** (SE). | **75 / 25** y **100 / 0** (sólo G2). | Medio |
+| **C7** | **Mezcla de producto** | `DATOS §7`: mercado nacional **por volumen** (Súper 23, V-Power 16, G2 24, G3 19, GNC 2–3). Flota nacional **por cantidad** (nafta 63,5 / diésel 25,5 / GNC 10,6; nota 03). | **Mezcla en LITROS** (`DATOS §7`, normalizada a los 4 líquidos: 28,0 / 19,5 / 29,3 / 23,2) y **GNC como 3 % de los clientes**. Las llegadas se derivan por producto (§14.2). | GNC **11 %** (parque GNC 11,2 %, ENARGAS); mezcla de flota. | Medio |
+| **C8** | **GNC: 6 caras vs. 2–3 %** | La estación dedica **6 de 12 caras** al GNC; `DATOS` le asigna **2–3 %** del volumen. | Se modela como está, **y la app muestra una alerta de coherencia**: "6 caras para ≈ 3 % de los clientes: probable sobredimensionamiento o subestimación de la demanda GNC". | GNC 3 % / 11 % / 20 %. | 🔴 Medio |
+| **C9** | **GNC en invierno** | `ONBOARDING`: "−50 % de oferta jun–ago, **Res. ENARGAS 409/2026**, 80 % de estaciones interrumpibles, compresor 20–25 autos/h" (**sin URL; no hallé la Resolución 409/2026**). `DATOS §7`: "cortes de **10–14 días** en jun/jul, caras GNC = 0". Nota 06/CASO: ventanas horarias 17–01 h y 09 h "hasta nuevo aviso" (San Rafael, 2022, 8 estaciones). **Verificado hoy:** ENARGAS ordenó (abril-2026, AMBA) **cortes de 24 h "hasta nuevo aviso"** a las estaciones con **contrato interrumpible**; las de contrato firme siguen. | **Corte TOTAL** (no −50 %), por **episodios**: 2 episodios × 6 días en jun–ago (≈ 12 días, `DATOS`), con **contrato interrumpible** por defecto. **No citar "Res. 409/2026".** Compresores = **3** (20–25 autos/h × 7 min ÷ 60 ≈ 2,6; **cifra sin fuente**). | Contrato **firme** (sin cortes); ventanas horarias (17–01, 09–24); **−50 %** como capacidad parcial; 0–60 % de migración. | Alto en invierno |
+| **C10** | **Estacionalidad** | Código (tabla propia) ≠ `DATOS §6` ≠ `ONBOARDING` ("~6 %"). Todo proxy hotelero. | **Neutra (1,00)** por defecto + presets (B3). La ocupación hotelera **no** es ventas de combustible; la serie real está en la SE (§12). | Leve ±6 %; Proxy turístico (`DATOS §6`). | Medio |
+| **C11** | **Tiempo de servicio** | `DATOS §3`: nafta/diésel **Triangular(2,5,8)** (3 papers UNLP/UTN/UNC, sin medir en San Rafael); GNC **(5,7,12)**; minimarket **(2,4,10)**. Nota 03: **(2,4 ; 3,7 ; 5,0)** (punto medio de dos refs. débiles) y GNC **10–30 min** `[RESUMEN]` (probablemente incluye espera); heredado minimarket (1,5 ; 3 ; 6). | `DATOS §3` (fuentes argentinas con URL). | Nota 03 (bajo para nafta; alto para GNC). | Medio |
+| **C12** | **Litros por carga** | `DATOS §8`: autos 40–50 L, SUV 80, camión 120–500 L ("litros/carga promedio" ≈ tanque lleno, **sin fuente**). Nota 03: la gente carga **≈ 30 % del tanque**, llenar "es muy raro" (único anclaje empírico, 2020, baja). | **Regla de nota 03** (media = 0,5 × tanque; §5-D). | Preset **alto** (media 0,8·T, **casi lleno**, `DATOS`) y **bajo** (0,3·T). **Para los mismos litros cambia ×0,6 / ×1,7 la cantidad de clientes** (158 / 420 por día) y ρ_pico con 2 playeros pasa de 0,86 a 0,54 / 1,43. | 🔴 **Alto** |
+| **C13** | **Tanques de vehículos** | `DATOS`: auto 50 L (**"Alta"**), camión 300 L ("Alta"). Nota 03: auto **47 L** (Autocosmos `OK-orig`; rango 42–52), camión **sin dato argentino**. | **47 L**; camión **300 L como supuesto** (la "Alta" no tiene fuente). | 42–52 L; camión 120–600 L. | Bajo |
+| **C14** | **Servicios** | `DATOS §5`: lavado, Agroservice, cambio de aceite, Shell Select 140 m². Nota 01 (lista oficial Shell): sólo shop, baño, aire y agua; "no figura" lavadero ni ATM. | No se modela lavadero (fuera de alcance). Nombre del shop: **"Shell Select (nombre sin confirmar)"**. | — | Bajo |
+| **C15** | **Autoservicio** | `DATOS §5`: permitido en Mendoza (Decreto 46/2025, Res. 147/2025; **no verificado por mí**). Shell API: `full_service` + `manned`. | **Servicio atendido.** | **S9 autoservicio**: −1 playero por turno. | Medio |
+| **C16** | **Perfil horario** | `DATOS §2` (texto): madrugada = **1/40** del pico. `DATOS §2` (su propia tabla): madrugada **1,0** vs. pico **3,5** (= 1/3,5). Heredado: picos 08 y 19 con factor 2,0. | **La tabla de `DATOS §2`** (24 factores, §14.3); la afirmación "1/40" **no se usa** (la tabla la contradice y su fuente —ventas YPF por descuento nocturno— no es un perfil). | Perfil heredado. | Medio |
+| **C17** | **Fin de semana / quincena** | `DATOS §2`: fin de semana **+24 % a +50 %** (tabla ×1,3–1,5); cambio de quincena **+100 %** 1–3 días/mes (fuente: limitación de camiones, débil). | Fin de semana **×1,30**, **normalizado** para conservar los litros del mes (§14.4). Quincena: **escenario S12**, no default. | ×1,24 – ×1,50. | Bajo-medio |
+| **C18** | **Salarios** | Heredado: $900.000. `DATOS §4`: playero **$1.545.472** básico (≈ $1.680.000 con adicionales), cajero $1.666.391 (≈ $1.800.000), encargado $1.600.406; fuente "FECRA oct-2026" pero **la URL dice "enero-2026"**. | **Costos totales estimados** ($1.680.000 / $1.800.000 / $1.740.000), confianza **media**; **vigencia a verificar**. | Básico sin adicionales. | Medio |
+| **C19** | **Precios** | `DATOS §7` (sept-2026): Súper $2.141, Premium $2.300+, G2 $2.116, **G3 $2.641**, GNC $699/m³ (**oct-2025**). Nota 01 (Mendoza, 6/5/2026): Súper $2.099, V-Power $2.399, **V-Power Diesel $2.411**. SE de la propia estación: **congelados** (2025). | Para **referencia** usar `DATOS §7` (más reciente). **El modelo usa márgenes, no precios.** | — | Informativo |
+| **C20** | **Otros** | Mercuria: nota 01 "jun-2026, cierre pendiente" vs. `DATOS §5` "1/9/2026, Mercuria 60 % / Manzano 20 % / Edenor 20 %". Estaciones en San Rafael: 15 (OSM), 16 (SE), 20 (`DATOS`). Tránsito RN 143/144 "4.000–5.000 veh/día" (`DATOS`, sin fuente) vs. TMDA (tramo urbano **sin cifra**). Temperatura jul: mín media **2,3 °C** (`DATOS`) vs. "−2 °C" (`ONBOARDING`): no son contradictorios (media vs. extremo). | Registrar y mostrar; **ninguno entra al modelo**. | — | Nulo |
+
+---
+
+## 5. Los datos (valores adoptados)
 
 ### 5.1 Registro de datos (contrato — Fase 1)
-
 Crear `sim/datos.py`:
 
 ```python
 @dataclass(frozen=True)
 class Dato:
-    id: str                      # "DEM-05"
-    nombre: str                  # "Litros por carga (autos nafta)"
-    valor: float | str | tuple   # el valor que usa el modelo
-    unidad: str                  # "L", "min", "h", "$/L", "m³", "%", "km", "-"
-    bajo: float | None = None    # rango de sensibilidad
+    id: str                       # "DEM-01"
+    nombre: str
+    valor: object                 # lo que usa el modelo
+    unidad: str
+    bajo: float | None = None     # extremos de sensibilidad
     alto: float | None = None
-    nivel: str = "?"             # A estación · B San Rafael · C Mendoza · D ciudad parecida · E Argentina/otro
-    tipo: str = "supuesto"       # "dato" | "estimacion" | "observacion" | "supuesto" | "heredado"
-    confianza: str = "baja"      # "alta" | "media" | "baja" | "sin_dato"
-    fuente: str = ""             # título corto + organismo
-    url: str = ""
-    fecha_fuente: str = ""       # fecha ORIGINAL de la nota (no la del buscador)
-    nota: str = ""               # contradicciones, advertencias
-    origen: str = "investigacion"# "investigacion" | "grupo" | "orquestador"
+    nivel: str = "?"              # A estación · B San Rafael · C Mendoza · D ciudad parecida · E Argentina/otro
+    tipo: str = "supuesto"        # dato | estimacion | observacion | supuesto | heredado
+    confianza: str = "baja"       # alta | media | baja | sin_dato
+    fuente: str = ""; url: str = ""; fecha_fuente: str = ""
+    nota: str = ""
+    origen: str = "investigacion" # investigacion | grupo | datos_operacionales | orquestador | heredado
+    conflicto: str = ""           # id de §4.2 (p. ej. "C2")
+    alternativas: tuple = ()      # ((nombre, valor, fuente), ...) los valores que perdieron
 ```
+Reglas: (a) `REGISTRO` + `por_id()` + `valor()`; (b) **todos los defaults de `config.py` salen del Registro**; (c) `tipo="heredado"` = placeholder visible sin fuente; (d) `con_valor(id, nuevo)` crea una copia con `tipo="observacion"` (relevamiento propio); (e) N14 falla si un campo de los parámetros no tiene `Dato`. Hay un **borrador** de este módulo del v1 descartado (valores de §5 v1); **no reutilizarlo sin reconciliarlo con esta sección**.
 
-Reglas: (a) `REGISTRO: tuple[Dato, ...]` + `por_id(id)`; (b) **los defaults de `config.py` se construyen leyendo el Registro** (nunca literales sueltos); (c) `tipo="heredado"` = valor del proyecto hipotético **sin fuente**, se mantiene como placeholder hasta tener dato y se muestra como tal; (d) el control **N14** (§10.2) falla si algún campo de `ParametrosSimulacion` no tiene `Dato` asociado.
+### 5.2 Tabla maestra
+Leyenda **Origen**: `INV` = notas 01/03/06 · `DO` = `DATOS_OPERACIONALES` · `ONB` = `ONBOARDING` · `GRP` = grupo · `ORQ` = orquestador · `HER` = heredado. Todas las fuentes se consultaron el 5/10/2026; usar la **fecha de la nota original**, no la del buscador.
 
-### 5.2 Tabla maestra de parámetros
-
-Leyenda de **Origen**: `INV` = nota de investigación (`01`/`03`/`06`) · `GRP` = lo dijo el grupo · `ORQ` = propuesta de este orquestador · `HER` = heredado del proyecto hipotético. **Conf.**: A/M/B/— (alta/media/baja/sin dato). Todas las fuentes se consultaron el 5/10/2026 salvo indicación; las fechas de cada nota original están en las notas de investigación (usar *esas* fechas, no las del buscador).
-
-#### A. Identidad y servicios (nota 01 §1A)
+#### A. Estación (informativos; no alimentan el modelo)
 | ID | Dato | Valor | Nivel | Tipo | Conf. | Origen / fuente |
 |---|---|---|---|---|---|---|
-| EST-01 | Dirección | Balloffet 1810 esq. Los Sauces, San Rafael, CP 5600 | A | dato | A | INV · Shell localizador (API geoapp) + SE |
-| EST-02 | Operador / CUIT | LOS SAUCES S.R.L. / 30-67218048-8 | A | dato | A | INV · Shell, SE y OSM coinciden |
-| EST-03 | Bandera | Shell (SHELL C.A.P.S.A., idempresa 674) | A | dato | A | INV · SE |
-| EST-04 | Coordenadas | −34,62833 ; −68,35832 | A | dato | A | INV · SE y Shell (dif. ≈ 6 m) |
-| EST-05 | Horario playa | 24 h todos los días | A | dato | A | INV · Shell `twenty_four_hour` |
-| EST-06 | Horario minimarket | 24 h (**sin confirmar**; Shell: `shop_open_status: unknown`) | A | supuesto | B | GRP · V10 |
-| EST-07 | Servicios | tienda, baño, aire y agua, servicio atendido, pago en surtidor/móvil, tarjeta de flota. **No figuran** ATM ni lavadero ("no figura" ≠ "no existe") | A | dato | A/M | INV · Shell |
-| EST-08 | Calzadas | Balloffet = RN 143 (4 carriles, 60 km/h, OSM); Los Sauces = RP 158 | A | dato | M | INV · Gob. Mendoza 2018/2025 + OSM |
-| EST-09 | Otras Shell | CAR GAS (2,26 km), PUNTO MITRE (3,60 km); ninguna estación a < 1,5 km | B | dato | A | INV · Shell API; CASO §3.4 |
+| EST-01 | Dirección | Balloffet 1810 esq. Los Sauces, San Rafael, CP 5600 | A | dato | A | INV · Shell API + SE |
+| EST-02 | Operador / CUIT | LOS SAUCES S.R.L. / 30-67218048-8 | A | dato | A | INV · Shell, SE, OSM |
+| EST-03 | Bandera | Shell (SHELL C.A.P.S.A., id 674) | A | dato | A | INV · SE |
+| EST-04 | Coordenadas | −34,62833 ; −68,35832 | A | dato | A | INV |
+| EST-05 | Horario de la playa | **24 h** (C1) | A | dato | A | INV · Shell API `twenty_four_hour` |
+| EST-06 | Horario del minimarket | 24 h **sin confirmar** (Shell: `unknown`; `DO`: 06–22) | A | supuesto | B | GRP / DO · V10 |
+| EST-07 | Servicios | tienda ("Shell Select", ≈ 140 m², nombre sin confirmar), baño, aire y agua, servicio atendido, pago en surtidor/móvil, tarjeta de flota. `DO` suma lavado/Agroservice (**no figuran en la lista oficial**) | A | dato | M | INV + DO (C14) |
+| EST-08 | Calzadas | Balloffet = RN 143; Los Sauces = RP 158 | A | dato | M | INV |
+| EST-09 | Cercanía | otras Shell a 2,26 y 3,60 km; ninguna estación a < 1,5 km | B | dato | A | INV |
+| EST-10 | Contexto corporativo | venta a Mercuria (jun-2026, cierre pendiente según nota 01; "1/9/2026" según `DO`) | E | dato | M | INV / DO (C20) |
 
 #### B. Surtidores y personal
-| ID | Dato | Valor | Nivel | Tipo | Conf. | Origen / fuente |
+| ID | Dato | **Adoptado** | Alternativa | Nivel | Tipo | Conf. | Origen |
+|---|---|---|---|---|---|---|---|
+| SUR-01 | Caras por surtidor | 2 (6 surtidores = 12 caras) | — | A | dato | M | GRP |
+| SUR-02 | Grupo A (nafta) | S1, S2 → 4 caras → Súper y V-Power | — | A | dato | M | GRP · V3 |
+| SUR-03 | Grupo B (diésel) | S3 → 2 caras → **G2 y G3** | sólo G2 | A | dato | M | GRP + SE (C6) |
+| SUR-04 | Grupo C (GNC) | S4–S6 → 6 caras | — | A | dato | M | GRP |
+| SUR-05 | Vehículos por cara | 1 | — | A | supuesto | M | GRP |
+| SUR-06 | Compresores GNC | **3** simultáneos (derivado de 20–25 autos/h × 7 min) | sin límite (6) · 2 | A | supuesto | sin dato | ONB (**sin fuente**) · C9 |
+| PER-01 | Playeros por turno (noche 22–06 · mañana 06–14 · tarde 14–22) | **1 · 2 · 2** | 2·3·3 (ONB) | A | estimacion | B | DO §4 (C5) |
+| PER-02 | Cajeros (cajas) por turno | 1 · 1 · 1 | — | A | estimacion | B | DO §4 |
+| PER-03 | Encargado / personal de tienda | encargado 1 (M, T); tienda 1 (M, T) — **sólo costo** | — | A | estimacion | B | DO §4 |
+| PER-04 | El GNC retiene playero | No (sólo conecta la manguera) | sí | A | supuesto | sin dato | ORQ |
+| PER-05 | Capacidad de cola por grupo | 8 autos | 4 – 14 | A | supuesto | sin dato | ORQ (relevar) |
+| PER-06 | Disciplina de cola | `por_grupo` (FIFO único) | `por_cara` | A | supuesto | sin dato | CASO §7 |
+
+#### C. Demanda ★ (lo que más mueve el modelo)
+| ID | Dato | **Adoptado** | Alternativas / rango | Tipo | Conf. | Origen · conflicto |
 |---|---|---|---|---|---|---|
-| SUR-01 | Surtidores / caras | 6 / 12 | A | dato | M | GRP · V2 |
-| SUR-02 | Grupo A nafta | S1, S2 → 4 caras → Súper y V-Power | A | dato | M | GRP · V3 (**contradicción a resolver**, §6) |
-| SUR-03 | Grupo B diésel | S3 → 2 caras → Diésel común y V-Power Diesel | A | dato | M | GRP · V3/V5 + SE declara Gas Oil G2 **y** G3 |
-| SUR-04 | Grupo C GNC | S4, S5, S6 → 6 caras | A | dato | M | GRP |
-| SUR-05 | Vehículos por cara | 1 a la vez (una manguera activa por cara) | A | supuesto | M | GRP · V2/V4 |
-| SUR-06 | Compresores GNC | = nº de caras GNC (**sin límite** hasta relevar) | A | supuesto | — | ORQ · V6 |
-| PER-01 | Playeros por turno | **placeholder:** noche 22–06 → 2 · mañana 06–14 → 4 · tarde 14–22 → 4 | A | supuesto | — | ORQ · **sin dato**, relevar (CASO §5.4) |
-| PER-02 | Cajeros por turno | 1 en los tres turnos | A | heredado | — | HER (caja única) |
-| PER-03 | GNC retiene playero | No (el playero sólo conecta, ≈ 1 min; se desprecia) | A | supuesto | — | ORQ |
-| PER-04 | Capacidad de cola antes de la avenida | 8 autos por grupo (excedente = no entra) | A | supuesto | — | ORQ · relevar (CASO §5.3) |
-| PER-05 | Disciplina de cola | **cola única por grupo** (default) · opción **fila por cara** (línea múltiple, sin cambio de fila) | A | supuesto | — | ORQ · CASO §7 |
+| DEM-01 | **Demanda mensual** | **270.000 L/mes** (≈ 9.000 L/día) | 150.000 · 400.000 | estimacion | B-M | ONB + INV/DO · **C2, C3** |
+| DEM-02 | Perfil horario (24 factores) | `[1,1,1,1,1,1, 1,5, 3,5,3,5,3,5, 2,2, 1,5,1,5, 1,5,1,5, 3,3, 2,2, 1,5,1,5, 1,1]` (§14.3) | perfil heredado (08 y 19 h) | estimacion | B | DO §2 · C16 |
+| DEM-03 | Fin de semana | **×1,30**, normalizado al mes (§14.4) | 1,24 – 1,50 | estimacion | M | DO §2 · C17 |
+| DEM-04 | Mezcla de producto en **litros** (líquidos) | Súper **28,0** · V-Power **19,5** · G2 **29,3** · G3 **23,2** % | mix de flota; G2/G3 = 75/25 | estimacion | B | DO §7 · C6, C7 |
+| DEM-05 | Clientes GNC (% de las llegadas) | **3 %** | 11 % · 20 % | estimacion | B | DO §7 · C8 |
+| DEM-06 | Estacionalidad mensual (12 factores) | **Neutra** `1,00 × 12` | Leve ±6 % · Proxy turístico (Ene 100, Feb 60, Mar 80, Abr 65, May 60, **Jun 55**, Jul 85, Ago 75, Sep 70, Oct 70, Nov 75, Dic 85) | supuesto | sin dato | C10 |
+| DEM-07 | Variabilidad día a día | modo "esperada" (fija) o **Monte Carlo** con factores relativos `(0,78 · 0,89 · 1,00 · 1,11 · 1,22)` y frecuencias `(10·20·40·20·10)` | — | heredado | sin dato | HER (la tabla original, **reescalada a relativa**) |
+| DEM-08 | **Entrada al minimarket** | **20 %** | 15 · 30 · 45 | estimacion | B | ONB · C4 |
+| DEM-09 | Eventos (opcionales) | Vendimia 17–26 ene **+30–50 %** · Las Leñas (jun-ago) **+30 %** de paso por RN 143 · Carnaval **+40 %** · vacaciones de invierno 9–20 jul | — | dato | B | DO §6 |
+| DEM-10 | Cierre de ruta y demanda | al cerrarse la RN 143 la demanda **externa baja**; en el pre-cierre (1–2 días) **sube** | — | supuesto | sin dato | DO §6 (cuantificación = **escenario**, no default) |
 
-#### C. Demanda (nota 03 + herencia; **es el hueco más grande**)
-| ID | Dato | Valor | Nivel | Tipo | Conf. | Origen / fuente |
-|---|---|---|---|---|---|---|
-| DEM-01 | Autos por día (Monte Carlo) | tabla: 280/320/360/400/440 con frecuencias 10/20/40/20/10 (media 360) | — | heredado | — | HER. **No tiene fuente.** Orden de magnitud coherente con 200–330 m³/mes por estación (D5 Surtidores.com.ar 2018, baja; tesis UCES [RESUMEN]). **Reemplazar con el relevamiento.** |
-| DEM-02 | Perfil horario | `PERFIL_TIPICO` (24 factores; picos 08 h y 19 h) | — | heredado | — | HER |
-| DEM-03 | Tipo de día | hábil 1,00 · fin de semana 1,00 · feriado 1,00 (**sin dato** → neutro, pero editable) | — | supuesto | — | ORQ (CASO §5.1) |
-| DEM-04 | Mezcla de tipo de vehículo | moto 10 % · auto 73,8 % · pick-up/utilitario 13,5 % · camión/ómnibus 2,7 % | E | estimación | B | ORQ sobre D10 (flota nacional 82/15/3 % → ×0,9) + motos 10 % supuesto |
-| DEM-05 | Mezcla de producto (de los que cargan) | Súper 52,1 · V-Power 11,4 · Diésel común 21,7 · V-Power Diesel 3,8 · GNC 10,6 (**normalizar a 100**) | E | estimación | B | ORQ sobre D11 (flota nac.: nafta 63,5 / diésel 25,5 / GNC 10,6 %); reparto premium/común **supuesto** (18 % / 15 %) |
-| DEM-06 | Estacionalidad de la demanda | verano/otoño/invierno/primavera = 1,00 cada una (**sin dato**) | B/C | supuesto | — | ORQ. Fuentes candidatas: SE ventas mensuales por provincia, DEIE Mendoza, turismo San Rafael (vendimia = marzo, vacaciones de invierno = julio) |
+#### D. Vehículos y litros por carga (nota 03 §1C–1D; sin cambios respecto de v1)
+Regla (verificada algebraicamente): litros de una carga ~ `Triangular(0,20·T ; 0,30·T ; 1,00·T)`; moda 0,30·T (único anclaje: nota 03 D1, ≈ 30 % del tanque), máx 1,00·T (límite físico), **media exacta 0,50·T**. Sensibilidad = **tres presets de la distribución** (no escalar por un factor: con el tope en T, escalar 1,6× daría media 0,6·T, no 0,8·T): **bajo** `(0,10 ; 0,20 ; 0,60)·T` → media 0,30·T (nota 03, escenario bajo) · **base** `(0,20 ; 0,30 ; 1,00)·T` → 0,50·T · **alto** `(0,50 ; 0,90 ; 1,00)·T` → 0,80·T (≈ la "carga casi llena" de `DO §8`, C12).
 
-#### D. Vehículos y litros por carga (nota 03 §1C–1D)
-Regla del orquestador (**derivada y verificada algebraicamente**): litros de una carga ~ `Triangular(0,20·T ; 0,30·T ; 1,00·T)`, con `T` = tanque. Moda 0,30·T (único anclaje empírico: D1, ≈ 30 % del tanque, 2020, **baja**), máximo 1,00·T (límite físico), media **exacta 0,50·T** (convención de la nota). El mínimo 0,20·T es `SUPUESTO`. *La nota da 0,30/0,50/1,00·T como tres **escenarios de la media**, no como una distribución; esta triangular es la forma de cumplir la media base con un máximo físico. Para sensibilidad: escalar toda la distribución por k ∈ {0,6; 1,0; 1,6} con tope en T.*
+| ID | Tipo | Tanque T | Litros/carga (mín · moda · máx) → media | Fuente · conf. |
+|---|---|---|---|---|
+| VEH-01 | Auto | **47 L** (42–52) | 9,4 · 14,1 · 47 → **23,5** | INV D16 (Autocosmos `OK-orig`) · M |
+| VEH-02 | Pick-up / utilitario | **80 L** | 16 · 24 · 80 → **40** | INV D18 (`RESUMEN`) · M-B |
+| VEH-03 | Moto 110 cc | **3,7 L** (3,5–4,1) | 0,74 · 1,11 · 3,7 → **1,85** | INV D19 (`RESUMEN`) · M-B |
+| VEH-04 | Camión / ómnibus | **300 L** (**supuesto**; 120–600) | 60 · 90 · 300 → **150** | ORQ / DO · sin dato (C13) |
+| VEH-05 | Auto GNC | cilindro **14 m³** | 2,8 · 4,2 · 14 → **7 m³** | INV §2.10 (`RESUMEN`) · B |
 
-| ID | Tipo | Tanque T | Litros por carga (mín · moda · máx) → media | Participación | Fuente | Conf. |
-|---|---|---|---|---|---|---|
-| VEH-01 | Auto nafta | **47 L** (promedio ponderado de Yaris/Cronos/208/Polo; rango 42–52) | 9,4 · 14,1 · 47 → **23,5** | 73,8 % | INV D16 (Autocosmos, OK-orig) | M |
-| VEH-02 | Pick-up / utilitario | **80 L** (Hilux/Ranger/Amarok) | 16 · 24 · 80 → **40** | 13,5 % | INV D18 (**[RESUMEN]**: fichas oficiales dieron 403) | M-B |
-| VEH-03 | Moto 110 cc | **3,7 L** (3,5–4,1) | 0,74 · 1,11 · 3,7 → **1,85** | 10 % | INV D19 ([RESUMEN]) | M-B |
-| VEH-04 | Camión / ómnibus | **300 L** (**sin dato argentino**; Europa 120–1.000 L) | 60 · 90 · 300 → **150** | 2,7 % | ORQ (el "300–400 L" del informe externo es *no verificable*). Hay un ómnibus en la captura 1. | — |
-| VEH-05 | Auto GNC (m³) | cilindro mediano **14 m³** | 2,8 · 4,2 · 14 → **7 m³** | (parte del 10,6 %) | INV D25/§2.10 ([RESUMEN]); regla ORQ | B |
-| — | Tractor / maquinaria | **excluido** (sin evidencia de que carguen en estación) | — | 0 % | INV D21 | — |
-
-Chequeo de calibración que **la app debe mostrar**: litros/día esperados = Σ(autos × participación × media de litros) y compararlo contra la banda 200.000–330.000 L/mes por estación (D5; confianza baja). Con los defaults, ≈ 360 autos × 27 L ≈ 9.700 L/día ≈ 290.000 L/mes, **sin descontar** los clientes GNC (que miden m³, no litros), así que el valor real será algo menor (**coherente en orden de magnitud, no una validación**).
-
-#### E. Tiempos de servicio (nota 03 §1E)
-| ID | Dato | Valor | Nivel | Tipo | Conf. | Origen |
-|---|---|---|---|---|---|---|
-| TIE-01 | Caudal de surtidor | 40 L/min estándar · 90–120 L/min alto caudal (diésel) | E | dato | B | INV D22/D23 (Paraguay 2012, no es norma argentina) |
-| TIE-02 | **Tiempo total por vehículo en la cara** (maniobra + carga + cobro + salida) nafta/diésel | `Triangular(2,4 ; 3,7 ; 5,0)` min | E | supuesto | muy baja | INV §1E (punto medio de dos referencias débiles; **sin medición**) |
-| TIE-03 | Extra camión/ómnibus | `+ litros / 90` min | E | supuesto | B | ORQ (con 40 L/min el caudal **no** es cuello de botella para autos) |
-| TIE-04 | Tiempo de carga GNC | `Triangular(10 ; 15 ; 30)` min | E | supuesto | B | INV D25 ([RESUMEN]; 10–30 min, "probablemente incluye espera"); moda = ORQ |
-| TIE-05 | Compra en minimarket | `Triangular(1,5 ; 3 ; 6)` min | — | heredado | — | HER |
-| TIE-06 | Prob. de entrar al minimarket | 0,30 en todos los tipos (**hipótesis a contrastar:** GNC compra más → escenario 0,45, *no* default) | — | heredado | — | HER · CASO §4 |
-| TIE-07 | Paciencia (cola de cara / caja) | 10 / 8 min | — | heredado | — | HER |
-
-#### F. Inventario y logística (nota 06)
-| ID | Dato | Valor | Nivel | Tipo | Conf. | Origen / fuente |
-|---|---|---|---|---|---|---|
-| INV-01 | Plazo pedido→entrega | `Triangular(24 ; 36 ; 48)` h | C | dato (extremos supuestos) | M | INV 06 §1.5 · Sitio Andino 27-oct-2023: "casi 1 día y medio" (estación Shell de Mendoza **capital**, no San Rafael). **Reemplaza** el `Triangular(8,16,36)` h inventado. |
-| INV-02 | Carga del camión | 30.000 L (27.000–34.000) | C | estimación | M | INV 06 §1.4 · 27.000 L (2023) y 34.000 L (2009); promedio redondeado |
-| INV-03 | Capacidad de cada tanque subterráneo | 20.000 L por producto líquido (10.000–25.000) | C | supuesto | B | INV 06 §1.4 · aviso de venta de Guaymallén, **no verificado** |
-| INV-04 | Tiempo de descarga | 45 min (30–90) | — | supuesto | — | INV 06 (sin fuente; sensibilidad baja) |
-| INV-05 | Origen del combustible | **Dock Sud** (default; Shell/Raízen) · alternativa **Luján de Cuyo** (YPF; inferencia) | C | dato/inferencia | M | INV 06 §1.1. Shell fue vendida a Mercuria (jun-2026); la logística puede cambiar. |
-| INV-06 | Política de reposición real | **no documentada** (pedido "a demanda" del encargado: *"solicitamos a la refinería y nos mandan el volumen necesario"*) | C | — | B | INV 06 §1.6 |
-| INV-07 | Política (s, Q) inicial por producto | s ≈ consumo en el plazo + seguridad ⇒ cubrir **1,5 días**; Q = lo que entra sin pasar el tanque. Calcularlo en código (`grilla_sugerida` adaptada). | — | ORQ | — | ORQ |
-| INV-08 | Camión **consolidado** | un viaje lleva varios productos (observado: 27.000 L de gasoil **y** naftas en un solo camión) | C | dato | M | INV 06 §1.4. Ver §7.3 |
-| INV-09 | Crisis de abastecimiento Shell | faltante 3–4 días en el Gran Mendoza (29-jul→1/2-ago-2023); Shell sin combustible a media mañana en San Rafael el 27-oct-2023 | B/C | dato | B-M | INV 06 §1.1/1.5 → **escenario S7** |
-
-#### G. Red de abastecimiento (nota 06 §1.2, §1.3)
-Tiempo de viaje del camión = `km ÷ 70 km/h` (**supuesto**: promedio entre 80 km/h legales para camiones/sustancias peligrosas —Ley 24.449 art. 51— y 60 km/h de cruces urbanos/obras; OSRM da 81 km/h promedio, inalcanzable para un camión).
-
-| Nodo A | Nodo B | Ruta | km | min a 70 km/h | Cortable |
+**Tipo de vehículo por producto** (diseño **"producto primero"**, §7.2): *supuestos* ORQ, sin fuente.
+| Producto | moto | auto | pick-up | camión/ómnibus | Carga media del producto |
 |---|---|---|---|---|---|
-| `LUJAN` (refinería YPF) | `PAREDITAS` | RN 40 | 114 *(derivado: 221,8 − 107 − ≈3)* | 98 | sí (nieve) |
-| `PAREDITAS` | `SANRAFAEL` (estación) | RN 143 | 107 | 92 | **sí** (nieve jun–ago; obra) |
-| `PAREDITAS` | `SOSNEADO` | RN 40 | 176 | 151 | sí (nieve) |
-| `SOSNEADO` | `SANRAFAEL` | RN 144 | 132 | 113 | sí (nieve) |
-| `ALVEAR` (Gral. Alvear) | `SANRAFAEL` | RN 143 este | 87,5 (84–94) | 75 | opcional (sin datos de corte) |
-| `SANRAFAEL` | `MONTECOMAN` | RN 146 | 54,1 | 46 | no |
-| `MONTECOMAN` | `LAPAZ` | RP 153 *(trazado **no verificado**)* | 204,7 | 175 | no |
-| `LAPAZ` | `LUJAN` | RN 7 | 141,0 | 121 | no |
-| `DOCK` (Dock Sud) | `ALVEAR` | ruta **no verificada** | 903,8 | 775 | no |
-| `DOCK` | `LUJAN` | ruta **no verificada** | 1.056,5 | 906 | no |
+| Súper | 12 % | 85 % | 3 % | — | 21,4 L |
+| V-Power | — | 85 % | 15 % | — | 26,0 L |
+| Diésel G2 | — | 20 % | 55 % | 25 % | 64,2 L |
+| Diésel G3 | — | 15 % | 45 % | 40 % | 81,5 L |
+| GNC | — | 100 % | — | — | 7 m³ |
 
-**Resultados esperados (los usa el control N6):** Luján→estación directo = **221,8 km / 190 min** (por Pareditas). Con RN 143 cortada el mínimo es la variante **norte** (141 + 204,7 + 54,1 = **399,8 km**, **+178 km**, **+153 min**) frente a la sur (114 + 176 + 132 = 422 km). Dock Sud→estación vía Alvear = **991,3 km / 14,2 h** < vía Luján 1.279,0 km / 18,3 h.
-**Consecuencia clave que la app debe mostrar:** si el origen es **Dock Sud** (Shell), el corte nevado de la RN 143 *Pareditas–San Rafael* **no está en su ruta**; sí lo estaría para un origen Luján. (Inferencia sin confirmar: que los camiones Shell entren por Gral. Alvear.)
-
-**Cortes documentados → escenarios, NO probabilidades** (hay 3 casos, no una estadística):
-| Escenario | Descripción | Duración | Base |
-|---|---|---|---|
-| E1 | RN 143 (Pareditas–San Rafael) cerrada por nieve | 6 h (supuesto sobre el caso 17-ago-2026: cerrada a las 12:55, reabierta ≈ 16:00) | 3 medios |
-| E2 | RN 143 + RN 40 + RN 144 cerradas (caso 1–2-jul-2026) | 24–48 h (supuesto; seguía cortada a las 09:00 del 2-jul) | Los Andes, Sitio Andino |
-| E3 | Obra de reconstrucción de la RN 143: restricción 8–18 h | demora = **30 min por viaje** (**sin dato**; NO ENCONTRADO) | Sitio Andino 27-jun-2026 |
-Estacionalidad de los cortes por nieve: **jun–ago** (media; 3 casos). Fuera de esos meses `p_corte = 0` por defecto.
-
-#### H. GNC (CASO §6.2; sin nota de investigación aún)
-| ID | Dato | Valor | Tipo | Conf. | Origen |
+#### E. Tiempos de servicio (C11)
+| ID | Dato | **Adoptado** | Alternativa (nota 03) | Tipo · conf. | Origen |
 |---|---|---|---|---|---|
-| GNC-01 | Disponibilidad | corte por orden de Ecogas en olas de frío; el residencial tiene prioridad | dato | M | CASO §6.2 · Sitio Andino 23/6/2022 (8 estaciones afectadas en San Rafael) |
-| GNC-02 | Ventanas observadas | (a) 17:00→01:00 (8 h) · (b) desde 09:00 "hasta nuevo aviso" | dato | M | idem |
-| GNC-03 | Prob. de día con corte | invierno **0,10** · resto 0 (**placeholder**; 1 solo caso documentado) | supuesto | — | ORQ |
-| GNC-04 | Migración a nafta durante el corte | **30 %** del GNC pasa a Súper (el resto se pierde) | supuesto | — | ORQ (CASO §6.2 pide relevarlo; sensibilidad 0–60 %) |
-| GNC-05 | Flujo máximo de la red de gas | **no hay datos de capacidad** → se modela como **ventana de corte aleatoria** (fallback que autoriza `CASO §6.2`). El flujo máximo (Edmonds-Karp) es **opcional y último** (Fase 6b): sólo con capacidades reales. | — | — | CASO |
+| TIE-01 | Caudal | 40 L/min (90–120 alto caudal) | — | dato · B | INV D22/D23 (Paraguay 2012) |
+| TIE-02 | Nafta y diésel (por vehículo en la cara) | **Triangular(2 ; 5 ; 8) min** | (2,4 ; 3,7 ; 5,0) | supuesto · M | DO §3 (UNLP/UTN/UNC, sin medición local) |
+| TIE-03 | Extra de camión/ómnibus | `+ litros ÷ 90` min | — | supuesto · B | ORQ |
+| TIE-04 | GNC | **Triangular(5 ; 7 ; 12) min** | (10 ; 15 ; 30) | supuesto · M-B | DO §3 |
+| TIE-05 | Compra en el minimarket | **Triangular(2 ; 4 ; 10) min** | (1,5 ; 3 ; 6) heredado | supuesto · B | DO §3 |
+| TIE-06 | Paciencia (cola de cara / caja) | 10 / 8 min | 5 – 20 | heredado · sin dato | HER |
 
-#### I. Economía (**el otro gran hueco**; todo lo "heredado" es placeholder visible)
-| ID | Dato | Valor | Tipo | Conf. | Nota |
+#### F. Abastecimiento (nota 06; sin cambios)
+| ID | Dato | Valor | Tipo · conf. | Fuente |
+|---|---|---|---|---|
+| INV-01 | Plazo pedido→entrega | **Triangular(24 ; 36 ; 48) h** (reemplaza `Triangular(8,16,36)` h) | dato · M | Sitio Andino 27-oct-2023 "casi 1 día y medio" (Shell **Mendoza capital**); extremos supuestos |
+| INV-02 | Carga del camión | 30.000 L (27.000–34.000) | estimación · M | 27.000 L (2023) y 34.000 L (2009) |
+| INV-03 | Tanque por producto líquido | 20.000 L (10.000–25.000) | supuesto · B | aviso de venta Guaymallén **no verificado** |
+| INV-04 | Descarga | 45 min (**incluida** en el plazo base; informativo) | supuesto | — |
+| INV-05 | Origen | **Dock Sud**; alternativa Luján de Cuyo (YPF) | dato · M | Sitio Andino 2023, Los Andes 2023 |
+| INV-06 | Política real | no documentada (pedido "a demanda") | dato · B | Sitio Andino 2023 |
+| INV-07 | Política (s, Q) inicial | `s` = **1,5 días** de consumo del producto; `Q = min(cap − s, máx(2,5 × consumo/día, 0,5 × cap))`; nivel inicial 75 % | supuesto | ORQ |
+| INV-08 | Camión consolidado | un viaje lleva varios productos (observado: 27.000 L de gasoil **y** naftas) | supuesto · M | Sitio Andino 2023 |
+| INV-09 | Crisis de abastecimiento (S7) | plazo **Triangular(72 ; 84 ; 96) h** durante 3–4 días | estimación · B | Los Andes 31-jul-2023 |
+
+#### G. Red de rutas (nota 06 §1.2–1.3; sin cambios respecto de v1 §5-G)
+Tiempo de viaje = `km ÷ 70 km/h` (RED-11, supuesto: entre 80 km/h legales y 60 km/h urbanos; OSRM da 81 km/h, inalcanzable para un camión).
+
+| Arco | Ruta | km | min | Cortable |
+|---|---|---|---|---|
+| `LUJAN`–`PAREDITAS` | RN 40 | 114 *(derivado)* | 98 | sí |
+| `PAREDITAS`–`SANRAFAEL` | RN 143 | 107 | 92 | **sí** (nieve jun–ago; obra) |
+| `PAREDITAS`–`SOSNEADO` | RN 40 | 176 | 151 | sí |
+| `SOSNEADO`–`SANRAFAEL` | RN 144 | 132 | 113 | sí |
+| `ALVEAR`–`SANRAFAEL` | RN 143 este | 87,5 | 75 | opcional |
+| `SANRAFAEL`–`MONTECOMAN` | RN 146 | 54,1 | 46 | no |
+| `MONTECOMAN`–`LAPAZ` | RP 153 *(no verificado)* | 204,7 | 175 | no |
+| `LAPAZ`–`LUJAN` | RN 7 | 141,0 | 121 | no |
+| `DOCK`–`ALVEAR` | *(no verificada)* | 903,8 | 775 | no |
+| `DOCK`–`LUJAN` | *(no verificada)* | 1.056,5 | 906 | no |
+
+**Resultados esperados (control N6):** Luján→estación = **221,8 km / ≈ 190 min**; con RN 143 cortada = **399,8 km** (+178 km, **+153 min**) por el norte (141 + 204,7 + 54,1; la variante sur suma 422); Dock Sud→estación vía Alvear = **991,3 km / 14,2 h** < vía Luján 1.279,0 km. **Consecuencia que la app debe mostrar:** con origen Dock Sud, el corte nevado de la RN 143 *Pareditas–San Rafael* **no está en la ruta**.
+**Cortes (escenarios, no probabilidades; 3 casos documentados):** E1 = RN 143 cerrada **6 h** (17-ago-2026); E2 = RN 143 + RN 40 + RN 144 **24–48 h** (1–2-jul-2026); E3 = obra: restricción 8–18 h, demora **30 min por viaje** (sin dato); probabilidad de que un viaje encuentre un corte (invierno): **0,10** (supuesto); fuera de invierno 0. Duración de un corte aleatorio: Triangular(3 ; 6 ; 24) h (supuesto).
+
+#### H. GNC (C8, C9)
+| ID | Dato | **Adoptado** | Alternativa | Tipo · conf. | Origen |
 |---|---|---|---|---|---|
-| ECO-01 | Margen por litro | $100/L | heredado | — | Equivale a ≈ 4,8 % del Súper a $2.099. **Sin fuente.** Candidatas: CECHA, FECRA. Parametrizar también como **% del precio**. |
-| ECO-02 | Margen minimarket por compra | $2.500 | heredado | — | |
-| ECO-03 | Precios al público (referencia) | Mendoza, 6/5/2026: Súper **$2.099** · V-Power **$2.399** · V-Power Diesel **$2.411** · YPF Diésel 500 $2.173 | dato | A (a esa fecha) | INV 01 D4. **+15,4 % en 2 meses:** actualizar a octubre-2026 antes de usar. |
-| ECO-04 | Precios declarados por la propia estación a la SE | Súper $1.315 · Premium $1.555 · Gas Oil G2 $1.389 · G3 $1.574 (fecha 21/6/2025); **GNC $668,50/m³** (8/11/2024) | dato | **baja como precio vigente** | INV 01 §1B. **Congelados 15–23 meses: NO usar como precio de octubre 2026.** Otras de San Rafael (Puma/DAPSA, sep-2026): $2.171–2.189 (B, baja). |
-| ECO-05 | Inversión por surtidor / operativo mensual | $18.000.000 / $250.000 | heredado | — | |
-| ECO-06 | Sueldo cajero / playero | $900.000 / **sin dato** (usar el mismo placeholder, rotulado) | heredado | — | Convenio del gremio de estaciones de servicio: **verificar nombre y vigencia** (CASO §5.4) |
-| ECO-07 | **Flete** | `costo_fijo + costo_por_km × km_ida_y_vuelta` | ORQ | — | $150.000 por viaje (heredado) es **implausible** para ≈ 1.000 km con 30.000 L; **parametrizar por km** y consultar transportistas. Placeholder rotulado. |
-| ECO-08 | Almacenamiento | $25 por litro-mes | heredado | — | |
-| ECO-09 | Anualización | año = 3 × Σ(4 meses representativos) | ORQ | — | Rotularlo siempre como estimación |
+| GNC-01 | Contrato de suministro | **interrumpible** (sufre cortes) | firme (sin cortes) | supuesto · sin dato | ONB "80 % de las estaciones" **sin fuente**; ENARGAS abr-2026 (verificado) |
+| GNC-02 | Episodios de corte en invierno | **2 episodios × 6 días** entre el 1/jun y el 31/ago (≈ 12 días) | 0 – 4 episodios | estimación · B | DO §7 ("10–14 días en jun/jul") |
+| GNC-03 | Forma del corte | **total, 24 h** ("hasta nuevo aviso") | ventanas 17–01 h y 09–24 h (San Rafael 2022); **−50 %** de capacidad | dato · M | ENARGAS abr-2026; Sitio Andino 23/6/2022 |
+| GNC-04 | Migración a nafta durante el corte | **30 %** | 0 – 60 % | supuesto · sin dato | `DO`: "no hay migración documentada" ⇒ supuesto explícito |
+| GNC-05 | Flujo máximo de la red de gas | sin datos de capacidad ⇒ **ventana/episodio aleatorio** | Edmonds-Karp sólo con capacidades reales | — | CASO §6.2 |
 
-### 5.3 Advertencias de datos que la app debe MOSTRAR (pestaña "Datos y fuentes")
-1. **Precios congelados** de la propia estación en la SE (ECO-04) y +15,4 % en 2 meses en Mendoza (ECO-03).
-2. **Fuentes [RESUMEN]** (D18, D19, D20, D21, D25): cifras vistas sólo en el resumen del buscador, **no verificadas en el original**.
-3. **Nombre/Grafía:** Balloffet vs Ballofet; "Bayofet/Bayofed" no existe.
-4. **Parque de Mendoza:** 907.079 (2024) vs ≈ 789.000 (5 % de la flota nacional 2025): definiciones distintas, sin resolver.
-5. **Dock Sud** es el origen documentado para una Shell de Mendoza **capital** en 2023; Shell se vendió a Mercuria (jun-2026).
-6. **GNC en m³**, no en litros; sin datos de carga ni de tiempos argentinos.
-7. **Sin datos de la propia estación** (volúmenes, horarios del shop, personal): hoy todo es `SUPUESTO`/`heredado` hasta el relevamiento (§12).
-8. **Fechas del buscador erróneas** en varias notas (ya corregidas en las fichas con la fecha del original).
+#### I. Economía (el otro hueco; todo "heredado" es placeholder visible)
+| ID | Dato | **Adoptado** | Tipo · conf. | Nota |
+|---|---|---|---|---|
+| ECO-01 | Margen por litro | $100/L (≈ 4,7 % del Súper a $2.141) | **heredado** · sin dato | Candidatas: CECHA, FECRA. Parametrizar también como % del precio. |
+| ECO-02 | Margen por compra en minimarket | $2.500 | heredado | `DO`: el shop = 5–10 % de los ingresos de la estación |
+| ECO-03 | Margen por m³ de GNC | $100/m³ | heredado | mismo placeholder |
+| ECO-04 | Sueldo playero / cajero / encargado | **$1.680.000 / $1.800.000 / $1.740.000** (con adicionales) | estimación · M | `DO §4` (FECRA); **la URL dice enero-2026** (C18) |
+| ECO-05 | Inversión por cara/surtidor nuevo; operativo mensual | $18.000.000; $250.000/mes | heredado | |
+| ECO-06 | Flete | `fijo + $/km × km ida y vuelta`: fijo **$150.000** (heredado), $/km **0** (sin dato) | heredado / supuesto | $150.000 es **implausible** para ≈ 1.000 km con 30.000 L: consultar transportistas. La app avisa si origen = Dock Sud y $/km = 0. |
+| ECO-07 | Almacenamiento | $25 por litro-mes | heredado | |
+| ECO-08 | Precios (referencia, informativos) | Súper $2.141 · Premium $2.300+ · G2 $2.116 · G3 $2.641 · GNC $699/m³ (oct-2025) | dato · M | `DO §7`, sept-2026 (C19) |
+| ECO-09 | Anualización | año = 3 × Σ de los 4 meses representativos | supuesto | rotular **estimación** |
+
+### 5.3 Advertencias que la app debe mostrar (pestaña "Datos y fuentes")
+1. **Cada contradicción de §4.2** con el valor adoptado y las alternativas.
+2. **Precios de la propia estación en la SE congelados** (2025) y subas de 15 % en 2 meses.
+3. **`[RESUMEN]`**: tanques de pick-up y moto, cilindro de GNC, tiempo de GNC (no verificados en el original).
+4. **Cifras "confirmadas" sin URL** (270.000 L/mes, 20 % de minimarket, "Res. ENARGAS 409/2026", compresor 20–25 autos/h).
+5. **Alerta de coherencia C8** (6 caras GNC vs. 3 % de clientes).
+6. Dock Sud = origen documentado para una Shell de **Mendoza capital**, 2023.
+7. **GNC en m³**, no en litros.
+8. **Sin datos de la propia estación:** hoy todo es estimación/supuesto hasta el relevamiento (§12).
 
 ---
 
-## 6. Decisiones abiertas (V1–V13) y el default a usar
+## 6. Decisiones abiertas y defaults
 
-Si el usuario no respondió, **usá el default, dejalo detrás de un parámetro y documentalo**. Ningún default debe ser irreversible.
-
-| # | Pregunta | Default | Cómo se hace reversible |
+| # | Pregunta | Default | Reversible por |
 |---|---|---|---|
-| V1 | Grafía y esquina | "Balloffet", esquina Los Sauces | constante en `ui/textos.py` |
-| V2 | ¿Un vehículo por cara? | Sí (12 posiciones de carga) | `GrupoSurtidores.caras`, `SUR-05` |
-| V3 | **Contradicción:** ¿S3 es sólo diésel o los tres primeros son nafta? | **S1–S2 nafta, S3 sólo diésel** (versión final del grupo). Nota: la captura 1 está rotulada "surtidores a nafta" (los tres) y Shell lista también `midgrade_gasoline` y `premium_diesel`. | Grupos y productos **por configuración**, no por código |
-| V4 | ¿2 mangueras de una cara a la vez? | No (una manguera activa por cara) | — |
-| V5 | ¿Diésel común y/o premium? | **Ambos** (la SE los declara: Gas Oil G2 y G3); V-Power Diesel = G3 (equivalencia **media-baja**, no verificada en original) | `Producto.activo` |
-| V6 | ¿Cuántos compresores GNC? | Sin límite (= caras GNC) | `ParametrosGNC.compresores` |
-| V7 | ¿Siempre playero? | Sí, 24 h, sin autoservicio | `Turno.playeros` |
-| V8 | ¿Una flecha = una cara = un carril? | Sí | animación (§8.5) |
-| V9 | ¿"Seguir esa lógica en el minimarket"? | Describirlo y calibrarlo como los surtidores; **1 caja** (heredado); nombre genérico "Minimarket" (el nombre comercial **no está confirmado**: Shell sólo dice `shop`) | `Turno.cajeros` |
-| V10 | Horario y servicios extra | Playa 24 h (fuente); shop 24 h (supuesto); no modelar lavadero/ATM | `EST-06` |
-| V11 | ¿Relevamiento en el lugar? | **Pendiente.** La app debe tener el camino listo para cargarlo (§12) | importador CSV |
-| V12 | ¿Año completo o mes por estación? | **Un mes representativo por estación** (4 corridas); opción "año completo" = 12 meses (con aviso de tiempo) | `ParametrosSimulacion.meses` |
-| V13 | Criterio de "ciudad parecida" | Jerarquía A→B→C→D; D = ciudades intermedias del interior (hoy sin uso) | campo `nivel` |
-| N1 | (nuevo) ¿Cola única por grupo o fila por cara? | **Cola única por grupo**; opción fila por cara para comparar (escenario S8) | `PER-05` |
-| N2 | (nuevo) ¿Camión consolidado? | Primero **un camión por producto** (simple); **después** consolidado (§7.3) | `ParametrosTanque.consolidado` |
-| N3 | (nuevo) ¿Origen del combustible? | Dock Sud | `ParametrosRed.origen` |
-| N4 | (nuevo) ¿Hex exactos de la paleta? | `#FBCE07` / `#DD1D21` (ver §8.1: las fuentes **difieren**) | un solo archivo: `ui/tema.py` |
+| V1 | Grafía | "Balloffet" | constante en `ui/textos.py` |
+| V2/V8 | ¿Un vehículo por cara? ¿una flecha = una cara? | Sí / Sí (12 posiciones) | `SUR-01`, `SUR-05` |
+| V3 | **S3: ¿sólo diésel o nafta?** (la captura 1 dice "surtidores a nafta" para los tres) | S1–S2 nafta, S3 sólo diésel | grupos por configuración |
+| V4 | ¿Dos mangueras a la vez? | No | — |
+| V5 | ¿Diésel común y/o premium? | **Ambos** (SE los declara) | `Producto.activo` |
+| V6 | ¿Compresores GNC? | 3 | `SUR-06` |
+| V7 | ¿Siempre playero? | Sí, 24 h | autoservicio = S9 |
+| V9/V10 | Minimarket y horario | 1 caja; **"Shell Select (nombre sin confirmar)"**; playa 24 h, shop 24 h (supuesto) | `EST-06` |
+| V11 | Relevamiento | **Pendiente**: camino de carga listo en la app (§8.4) | importador CSV |
+| V12 | ¿Año o mes por estación? | **Mes representativo por estación** (ene · abr · **jul** · oct); "año" = 365 días con calendario | `fecha_inicio`, `dias` |
+| V13 | "Ciudad parecida" | jerarquía A→B→C→D; D sin uso | campo `nivel` |
+| N1 | ¿Cola única por grupo o por cara? | única por grupo | `PER-06` |
+| N2 | ¿Camión consolidado? | primero 1 por producto; después consolidado | `consolidado` |
+| N3 | ¿Origen? | Dock Sud | `ParametrosRed.origen` |
+| N4 | ¿Hex de la paleta? | `#FBCE07` / `#DD1D21` (las fuentes **difieren**; §8.1) | `ui/tema.py` |
+| **N5** | ¿Se conserva el Monte Carlo? | **Sí**: (a) variabilidad diaria opcional (DEM-07); (b) **Monte Carlo de 5 pasos para tipo de cliente y producto** (§7.2). Es una unidad de la materia y se defiende mejor que "determinista". | `modo_demanda` |
+| **N6** | ¿Calentamiento? | **2 días** en ambos modos (B4) | `dias_calentamiento` |
+| **N7** | ¿Estacionalidad? | **Neutra** + presets (C10) | DEM-06 |
 
 ---
 
 ## 7. Especificación del motor (`sim/`)
 
-> Los bloques de código son **contratos**, no implementaciones completas. Respetar nombres y semántica; completar el resto según las convenciones del repo.
+> Los bloques son **contratos**, no implementaciones. Respetar nombres y semántica.
 
-### 7.1 Configuración (`sim/config.py`)
-
+### 7.1 Demanda (corrige B1, B2, B5)
 ```python
 @dataclass(frozen=True)
-class Producto:
-    id: str                 # "super", "vpower", "diesel", "vpower_diesel", "gnc"
-    nombre: str
-    unidad: str             # "L" | "m3"
-    grupo: str              # "A" | "B" | "C"
-    tiene_tanque: bool      # False para GNC
-    activo: bool = True
-    precio: float = 0.0     # $/unidad (referencia, ver ECO-03)
-    margen: float = 0.0     # $/unidad (ECO-01)
-
-@dataclass(frozen=True)
-class GrupoSurtidores:
-    id: str                 # "A", "B", "C"
-    nombre: str             # "Nafta", "Diésel", "GNC"
-    surtidores: tuple[str, ...]      # ("S1","S2")
-    caras_por_surtidor: int = 2
-    productos: tuple[str, ...] = ()
-    compresores: int | None = None   # sólo GNC; None = sin límite
-    requiere_playero: bool = True    # False para GNC (PER-03)
-    @property
-    def caras(self) -> int: return len(self.surtidores) * self.caras_por_surtidor
-
-@dataclass(frozen=True)
-class TipoVehiculo:
-    id: str                 # "moto", "auto", "pickup", "camion"
-    nombre: str
-    tanque: float           # litros
-    participacion: float    # 0..1 (se normaliza)
-    mezcla_producto: tuple[tuple[str, float], ...]   # (producto, peso)
-    litros: Triangular      # ya calculado desde el tanque (regla §5.2-D)
-    extra_servicio_por_litro: float = 0.0            # min/L (camión)
-
-@dataclass(frozen=True)
-class Turno:
-    nombre: str; desde_h: int; hasta_h: int; playeros: int; cajeros: int
-
-@dataclass(frozen=True)
-class EstacionDelAnio:
-    nombre: str                     # "verano" | "otoño" | "invierno" | "primavera"
-    mes_representativo: int         # 1..12 (para rotular y para la nieve)
-    factor_demanda: float = 1.0
-    p_corte_gnc_dia: float = 0.0
-    p_corte_ruta_viaje: float = 0.0 # prob. por viaje de que haya un corte activo
-    perfil: PerfilHorario | None = None   # None = usa el base
+class ParametrosDemanda:
+    litros_mes: float = 270_000.0          # DEM-01  (LITROS por mes; la variable de entrada)
+    modo: str = "esperada"                  # "esperada" (fija por día) | "monte_carlo" (factores relativos DEM-07)
+    perfil: PerfilHorario = ...             # DEM-02
+    factor_fin_de_semana: float = 1.30      # DEM-03
+    estacionalidad: tuple[float, ...] = (1.0,) * 12   # DEM-06 (preset)
+    pct_gnc: float = 0.03                   # DEM-05 (clientes)
+    pct_minimarket: float = 0.20            # DEM-08
 ```
+- **`fecha_inicio: tuple[int,int]`** (mes, día) en `ParametrosSimulacion`; **una sola función** `dias_y_fecha(horizonte, estacion|mes) -> (fecha_inicio, dias)`: día = 1, semana = 7, mes = 30 (o el real), **estación = 90 desde el 1 del mes representativo**, año = 365 desde el 1/ene. Cada día se mapea a su **mes de calendario** y su **día de la semana**.
+- **Litros del día** = `litros_mes / días_del_mes_ref × índice_mes(÷ media de los índices) × factor_tipo_de_día(normalizado, §14.4)`.
+- **Clientes del día** = `litros_día / litros_medios_por_cliente_líquido` (§14.2), más los clientes GNC (`pct_gnc`). **Se prohíbe** dividir litros por 30 y llamarlo "autos".
+- Si `modo = "monte_carlo"`: se sortea un **factor relativo** de la tabla empírica (5 pasos, intervalos 01–00) y se multiplica; el registro por día de la pestaña Demanda se conserva.
+- El motor **sigue** usando llegadas Poisson no homogéneas (λ(t) por hora) y tiempos aleatorios: **réplicas, IC 95 % y calentamiento se mantienen** (B4).
 
-`ParametrosSimulacion` compone: `grupos`, `productos`, `tipos_vehiculo`, `turnos`, `cajas` (por turno vía `Turno`), `tanques` (uno por producto con tanque, cada uno con su `(s, Q)`), `red`, `gnc`, `estacion_del_anio`, `tipo_de_dia`, `capacidad_cola`, `disciplina_cola`. **`ParametrosSimulacion.clasico()`** devuelve exactamente los defaults de hoy (ver §10.1).
-
-### 7.2 Proceso de un cliente (`sim/modelo.py`)
-
+### 7.2 Cliente: "producto primero" + Monte Carlo de 5 pasos
 Al **llegar** (todo se sortea acá, con streams propios):
-1. `tipo` ← `discreta(participaciones, "vehiculo")`; `producto` ← `discreta(mezcla del tipo, "producto")`; `litros` ← `Triangular` del tipo (stream `"litros"`); `t_servicio` según §5.2-E (stream `"carga"`); `compra` ← Bernoulli (stream `"decision"`).
-2. **¿Producto disponible?** Líquido: `nivel[producto] ≥ litros`. GNC: ¿hay ventana de corte activa? → ver §7.5. Si no hay: se registra la pérdida con su **motivo** (§7.6) y el cliente **no hace cola**.
-3. **¿Hay lugar en la cola?** Si `len(cola del grupo) ≥ capacidad_cola` → **no entra** (`perdido_cola_llena`).
-4. **Cola y servicio:** pedir una **cara** del grupo; si el grupo `requiere_playero`, pedir además un **playero** (ver abajo). Paciencia como hoy (`pedido | timeout`). El combustible se **descuenta al empezar a cargar** (decisión 6 de `CLAUDE.md`, que sigue vigente), **del tanque del producto**.
-5. Si compra → cola de **cajas** como hoy (con `cajeros` del turno vigente).
+1. **Producto** ← sorteo por pesos de llegada derivados de la mezcla en **litros** (§14.2), más `pct_gnc` para GNC. *(Monte Carlo de 5 pasos, tabla visible: frecuencia → probabilidad → acumulada → intervalo de números aleatorios → sorteo.)*
+2. **Tipo de vehículo** ← sorteo condicionado al producto (matriz de §5-D). *(Segunda tabla Monte Carlo, también visible.)*
+3. **Litros** ← `Triangular` del tipo (stream `"litros"`); GNC: `carga_m3`. **Tiempo de servicio** según el grupo (TIE-02/04) + `litros/90` si es camión. **Compra** ← Bernoulli(`pct_minimarket`).
+4. **¿Hay producto?** Líquido: `nivel[producto] ≥ litros`. GNC: ver §7.5. Si no, pérdida con **motivo** (§7.6); el cliente **no hace cola**.
+5. **¿Hay lugar en la cola?** Si `len(cola del grupo) ≥ capacidad_cola` ⇒ no entra (`cola_llena`).
+6. **Cola y servicio:** cara del grupo (+ **playero** si el grupo lo requiere; adquisición **cara primero, playero después**, sin *deadlock*); paciencia como hoy sobre el tiempo **total** hasta empezar a ser atendido. El combustible se descuenta **al empezar a cargar**, **del tanque del producto**.
+7. Si compra ⇒ cola de **cajas** como hoy.
 
-**Playeros por turno.** Orden de adquisición: **cara primero, playero después**. No hay *deadlock* porque un playero sólo se retiene mientras se atiende a un auto que ya tiene cara. Capacidad dinámica: usar `simpy.PriorityResource(capacity=max_playeros)` y un proceso `controlar_turnos()` que, en cada cambio de turno, **toma** (prioridad −1) o **libera** "reservas ficticias" hasta que `capacity − reservas = playeros del turno`. El efecto emergente *"servidores = mín(caras libres, playeros en turno)"* es el deseado: un auto puede ocupar una cara esperando que lo atiendan (fiel a la realidad). Mismo patrón para cajeros si varían por turno.
-
-**Disciplina de cola.** `por_grupo` = un `Resource` por grupo (FIFO). `por_cara` = un `Resource(capacity=1)` por cara; el cliente elige la fila más corta **al llegar** y **no cambia** (línea múltiple de la cátedra). Misma interfaz de indicadores.
+**Playeros por turno.** `simpy.PriorityResource(capacity=máx_playeros)` + proceso `controlar_turnos()` que en cada borde de turno/refuerzo toma (prioridad −1) o libera "reservas ficticias" hasta que `capacity − reservas = playeros del turno` (`req.cancel()` si la reserva todavía no se concedió, `release` si sí). Efecto emergente buscado: **servidores = mín(caras libres, playeros)**. Mismo patrón para cajas por turno. **Refuerzo en el pico** (`((desde_h, hasta_h, extra), …)`) para el escenario S2.
+**Disciplina:** `por_grupo` = un `Resource` por grupo (FIFO); `por_cara` = un `Resource(1)` por cara, el cliente elige la fila más corta **al llegar** y no cambia.
 
 ### 7.3 Inventario por producto y camión
-- Un `nivel` por producto con `tiene_tanque`. `posición = nivel + litros_en_camino` (decisión vigente). Política `(s, Q)` **por producto**.
-- **N2 (dos etapas).** *Etapa 1:* un camión por producto (cada pedido su flete). *Etapa 2 (consolidado):* un viaje se dispara cuando **cualquier** posición ≤ `s`; carga hasta `capacidad_camion` (30.000 L) repartida entre los productos con posición ≤ `1,3·s` (proporcional a su `Q`); **un solo flete por viaje**. Dejar la etapa 2 detrás de `consolidado=True`.
-- **Plazo de entrega = `plazo_base` (INV-01, triangular 24–36–48 h) + `demora_por_corte`** (§7.4). Conservar el stream `"entrega"` para el plazo base; el efecto de la red sale de `"corte_ruta"`.
-- Quiebre por producto: `sin_combustible` pasa a ser **una serie temporal por producto**.
-- **Escenario S7 (crisis de abastecimiento):** el plazo se extiende 72–96 h (INV-09) durante una ventana configurable.
+- Un `nivel` por producto líquido; posición = nivel + en camino; **(s, Q) por producto**. Quiebre = **serie temporal por producto**.
+- **N2 (dos etapas):** etapa 1, un camión por producto; etapa 2 (`consolidado=True`), un viaje se dispara cuando **cualquier** posición ≤ `s`, carga hasta 30.000 L entre los productos con posición ≤ `1,3·s` (proporcional a su Q) y **un solo flete**.
+- **Plazo = base (INV-01) + demora por corte de ruta (§7.4)**; el stream `"entrega"` se conserva para la base. **S7:** plazo (72 ; 84 ; 96) h durante una ventana.
 
 ### 7.4 Red (`sim/red.py`)
-```python
-@dataclass(frozen=True)
-class Arco:
-    a: str; b: str; km: float; ruta: str
-    cortable: bool = False
-@dataclass(frozen=True)
-class ParametrosRed:
-    arcos: tuple[Arco, ...]
-    origen: str = "DOCK"           # "DOCK" | "LUJAN"
-    destino: str = "SANRAFAEL"
-    velocidad_kmh: float = 70.0
-    # cada corte: (id_arco, duracion_h) activo en una ventana del mes
-    escenario_corte: str = "ninguno"   # "ninguno" | "E1" | "E2" | "E3"
-```
-- `camino_mas_corto(red, origen, destino, arcos_cerrados) -> (km, minutos, ruta)` por Dijkstra con `heapq` (**sin networkx**, para no sumar dependencias).
-- Si un corte parte la ruta óptima: `demora = min( tiempo_ruta_alternativa − tiempo_ruta_original , duración_restante_del_corte )` (el camión toma el desvío o espera la reapertura, lo que sea menor). Esa demora **se suma al plazo** (CASO §6.1).
-- Los cortes se sortean **por mes** (stream `"corte_ruta"`): en invierno (jun–ago) con `p_corte_ruta_viaje`; E1/E2/E3 se pueden **forzar** como escenarios.
-- La red es **determinista salvo el estado de los arcos**.
+`Arco(a, b, km, ruta, cortable)`, `ParametrosRed(arcos, origen, destino, velocidad_kmh, escenario_corte)`. `camino_mas_corto(red, origen, destino, cerrados) -> (km, min, ruta)` con **Dijkstra (`heapq`), sin networkx**. Demora = `min(tiempo_alternativa − tiempo_original, duración_restante_del_corte)`, **sumada al plazo**. Cortes forzados E1–E4 o sorteados (jun–ago, `p = 0,10` por viaje; stream `"corte_ruta"`).
 
-### 7.5 GNC (`sim/modelo.py`)
-- `ParametrosGNC`: `p_corte_dia`, `ventanas: tuple[tuple[float,float],...]` (hora inicio/fin; defaults GNC-02), `migracion_a_nafta` (GNC-04), `compresores`.
-- Cada día, con `p_corte_dia` (stream `"corte_gnc"`), se elige una ventana de GNC-02 y queda activa. Durante la ventana: los clientes GNC **no se atienden en GNC**; con prob. `migracion` (stream `"migracion"`) **se convierten en cliente de Súper** (mismo auto, litros según su tipo; entra a la cola del grupo A) y el resto se pierde (`perdido_corte_gnc`). **Los GNC que ya están cargando terminan.**
-- Cliente migrado: se cuenta aparte (`migrados_gnc_a_nafta`) para poder mostrar "adónde va esa demanda".
+### 7.5 GNC (corrige C9)
+`ParametrosGNC(contrato, episodios, dias_por_episodio, forma, compresores, migracion_a_nafta, carga_m3)`.
+- Con `contrato = "interrumpible"`, en jun–ago se sortean **episodios** (stream `"corte_gnc"`): durante un episodio las **6 caras GNC no atienden** (los que ya cargan terminan). `forma = "total_24h"` (default) | `"ventana"` (17–01 / 09–24) | `"parcial_50"` (mitad de los compresores).
+- **Compresores** = recurso con capacidad `compresores` (default 3) que se toma tras la cara y se retiene durante la carga ⇒ **el compresor, no las 6 caras, limita el GNC**.
+- Cliente GNC durante el corte: con prob. `migracion` (stream `"migracion"`) **pasa a Súper** (mismo auto; litros según su tipo; entra a la cola del grupo A), si no se pierde (`corte_gnc`). Se cuenta `migrados_gnc_a_nafta` aparte.
 
 ### 7.6 Motivos de pérdida (taxonomía fija; la UI usa estos nombres)
-`sin_combustible` (por producto) · `abandono_espera` (reneging) · `cola_llena` (balking) · `corte_gnc` · `abandono_caja` (compra perdida). Más: `migrados_gnc_a_nafta` (no es pérdida). **Todo cliente que llega termina en exactamente una de: atendido · perdido (un motivo) · migrado→atendido/perdido · sigue adentro** (base del control de conservación).
+`sin_combustible` (por producto) · `abandono_espera` · `cola_llena` · `corte_gnc` · `abandono_caja`; y `migrados_gnc_a_nafta` (no es pérdida). **Todo cliente que llega termina en exactamente una de:** atendido · perdido (un motivo) · migrado→atendido/perdido · sigue adentro.
 
-### 7.7 Catálogo de escenarios (reemplaza Base/A/B/C; basado en CASO §7)
-| ID | Escenario | Qué varía | Pregunta que responde |
+### 7.7 Catálogo de escenarios (CASO §7 + datos nuevos)
+| ID | Escenario | Qué varía | Pregunta |
 |---|---|---|---|
-| S0 | **Hoy** | nada | línea base por estación |
-| S1 | Día típico por estación | estación del año | animación y comparativa |
-| S2 | **Dotación de playeros en el pico** | playeros −1 / base / +1 / +2 en el pico | ¿alcanza la dotación? |
-| S3 | **Ola de frío con corte de GNC** | ventana (a)/(b), migración | pérdida directa y adónde va la demanda |
-| S4 | **Corte de la ruta del camión** | E1 / E2 / E3, origen Dock Sud o Luján | plazo, quiebre |
+| S0 | Hoy | — | línea base por estación del año |
+| S1 | Día típico por estación | estación | animación y comparativa |
+| S2 | **Playeros en el pico** | −1 / base / +1 / +2 en (07–10, 16–18) | ¿alcanza la dotación? (con 2 playeros ρ_pico ≈ 0,86) |
+| S3 | **Ola de frío con corte de GNC** | forma del corte, episodios, migración, compresores | pérdida directa y adónde va |
+| S4 | **Corte de la ruta del camión** | E1/E2/E3 × origen Dock Sud / Luján | plazo y quiebre |
 | S5 | **Política de reposición** | barrido (s, Q) por producto, con red y cortes | ¿cuándo y cuánto pedir? |
 | S6 | **Decisión económica** | playero extra en pico vs. stock extra en invierno | ¿qué conviene en $/mes? |
-| S7 | Crisis de abastecimiento Shell | plazo 72–96 h durante 3–4 días | resiliencia |
-| S8 | Cola por grupo vs. fila por cara | `PER-05` | ¿cambia la espera? |
-Resultado de cada uno: promedio ± IC 95 % sobre réplicas con **números aleatorios comunes**, igual que hoy. Los "+1 surtidor / +1 cajero" siguen existiendo como variantes de S2/S6 (agregar una **cara** a un grupo, o un **cajero**).
+| S7 | Crisis de abastecimiento | plazo 72–96 h | resiliencia |
+| S8 | Cola por grupo vs. fila por cara | PER-06 | ¿cambia la espera? |
+| **S9** | **Autoservicio** (Decreto 46/2025) | −1 playero por turno | ¿se puede ahorrar personal? |
+| **S10** | **Cierre nocturno 22–06** (`DO`) | perfil = 0 de 22 a 06 | efecto del horario (C1) |
+| **S11** | **Estacionalidad turística** | preset "proxy" (jun = 55 … ene = 100) | ¿importa la estacionalidad? |
+| **S12** | **Quincena** | +100 % 3 días/mes | picos de cobro |
+Resultado de cada uno: promedio ± IC 95 % sobre réplicas con **números aleatorios comunes**. Los "+1 surtidor / +1 cajero" siguen como variantes de S2/S6. `Escenario` guarda **cambios declarativos** `tuple[tuple[str, object], …]` (no lambdas: `st.cache_data` los serializa con pickle).
 
-### 7.8 Estaciones del año
-`runner.correr_estaciones(p, replicas, semilla)` → 4 `ResultadoEscenario` (uno por estación) con su `EstacionDelAnio`. Sólo difieren parámetros con **base** (hoy: probabilidad de corte de GNC, probabilidad de corte de ruta, y los factores de demanda **si el usuario los carga**). **No inventar factores estacionales**: con 1,00 la comparativa será casi plana *excepto* en GNC/ruta, y eso es lo correcto y honesto hasta tener la serie de la SE.
+### 7.8 Estaciones del año y sensibilidad
+- `correr_estaciones(p, replicas, semilla)` → 4 corridas (**ene · abr · jul · oct** por defecto; `fecha_inicio` real). Con estacionalidad neutra, las diferencias vienen de **GNC y ruta**: es lo correcto hasta tener la serie de la SE.
+- `sim/sensibilidad.py`: para cada `Dato` con `bajo/alto` o `alternativas`, correr con cada extremo (resto en base, mismas semillas) y devolver el delta del **margen operativo mensual** (y de la espera pico). **Cada contradicción de §4.2 es un eje**. Detrás de un botón, cacheado.
 
-### 7.9 Sensibilidad (`sim/sensibilidad.py`)
-Para cada `Dato` con `tipo in {"supuesto","heredado","estimacion"}` y `bajo/alto` definidos: correr el modelo con `bajo` y con `alto` (resto en base; mismas semillas) y devolver el **delta del beneficio mensual** (o de la métrica elegida). Salida: tabla ordenada + datos para el **tornado**. Costo: ≈ 2 × N corridas; correr **detrás de un botón** y cachear. Objetivo del TP (CASO §9): *"si no hay dato, supuesto justificado + cuánto cambia el resultado"*.
-
-### 7.10 Economía (`sim/economia.py`)
-Margen **por producto** (ECO-01 en $/unidad, o % del precio), minimarket, flete `fijo + $/km × km`, almacenamiento por producto, costo de **playeros extra**, venta perdida por motivo. Mantener el criterio actual: *venta perdida = costo de oportunidad* (no se resta del margen: sería contarla dos veces). Reportar **mensual por estación** y **anual estimado** (ECO-09).
+### 7.9 Economía (`sim/economia.py`)
+Margen por producto (L o m³), minimarket, flete `fijo + $/km × km`, almacenamiento por producto, **costo de personal** (ECO-04), venta perdida por motivo. Criterio vigente: *venta perdida = costo de oportunidad* (no se resta del margen). Mensual por estación y **anual estimado** (ECO-09).
 
 ---
 
 ## 8. Especificación gráfica (`app.py`, `ui/`, `.streamlit/`)
 
 ### 8.1 Tema Shell — única fuente: `ui/tema.py`
-
-**Fuentes de color discrepantes** (verificado por búsqueda web el 5/10/2026): una paleta digital habitual da **amarillo `#FBCE07` / rojo `#DD1D21`**; otras fuentes dan **`#FFCD00` / `#DA291C`**. **Default: `#FBCE07` / `#DD1D21`.** Todo el proyecto lee los hex desde `ui/tema.py`; cambiar de variante = **una línea**. Contrastar con las fotos del grupo (surtidores amarillos y blancos, techo del playón) y con el manual de marca si el grupo lo consigue. No usar logo.
+**Los hex de Shell difieren entre fuentes** (búsqueda del 5/10/2026): amarillo `#FBCE07` / rojo `#DD1D21` en una paleta digital habitual; `#FFCD00` / `#DA291C` en otras. **Default `#FBCE07` / `#DD1D21`.** Todo lee de `ui/tema.py`; cambiar de variante = una línea. Contrastar con las fotos del grupo (surtidores amarillos y blancos, techo del playón). **No usar logo ni pecten** (marca registrada). Pie fijo: *"Proyecto académico de Investigación Operativa; no es oficial ni está afiliado a Shell."*
 
 ```python
-# ui/tema.py  (tokens; nombres en castellano)
-AMARILLO      = "#FBCE07"   # marca
-ROJO          = "#DD1D21"   # marca
-AMARILLO_SUAVE= "#FFF6C2"   # fondos tenues, hover
-TINTA         = "#1A1A1A"   # texto principal (sobre blanco y sobre amarillo)
-TINTA_TENUE   = "#5B5B5B"
-FONDO         = "#FFFFFF"
-FONDO_PANEL   = "#F6F4EC"   # gris cálido
-BORDE         = "#E2DED0"
-ASFALTO       = "#2B2F36"   # sólo en la animación (el playón)
-# Semánticos (los estados NO dependen sólo del color: siempre llevan texto/ícono)
-LIBRE         = "#1E9E5A"
-OCUPADO       = AMARILLO
-PERDIDO       = ROJO
-# Categóricos por producto (separables por daltonismo; ver 10.3)
-PRODUCTO = {"super": AMARILLO, "vpower": ROJO, "diesel": "#4B5563",
-            "vpower_diesel": "#0F766E", "gnc": "#1D6FB8"}
-ESCENARIO = (...)  # 4–9 colores propios, distintos de PRODUCTO
+AMARILLO="#FBCE07"; ROJO="#DD1D21"; AMARILLO_SUAVE="#FFF6C2"
+TINTA="#1A1A1A"; TINTA_TENUE="#5B5B5B"; FONDO="#FFFFFF"; FONDO_PANEL="#F6F4EC"; BORDE="#E2DED0"
+ASFALTO="#2B2F36"                      # sólo dentro de la animación
+LIBRE="#1E9E5A"; OCUPADO=AMARILLO; PERDIDO=ROJO     # estados: SIEMPRE con texto, no sólo color
+PRODUCTO={"super":AMARILLO,"vpower":ROJO,"diesel":"#4B5563","vpower_diesel":"#0F766E","gnc":"#1D6FB8"}
 ```
-**Reglas de uso (obligatorias):**
-1. **Amarillo = fondo/relleno/acento, nunca texto sobre blanco** (contraste ≈ 1,6:1). Texto sobre amarillo = `TINTA`. Texto amarillo sólo sobre `ASFALTO`/oscuro.
-2. **Rojo de marca** = barra superior, línea de acento, botón primario, pestaña activa. Como el rojo también significa "pérdida", **toda pérdida lleva rótulo** ("SIN COMBUSTIBLE", "GNC CORTADO") y los gráficos de pérdida usan además **trama o etiqueta de valor**, no sólo color.
-3. **Un solo tema (claro).** Quitar el diseño oscuro suelto de la animación; el *escenario* del playón (`ASFALTO`) es parte del dibujo, no del tema.
-4. Plotly: **un `template` propio** (`ui.tema.plantilla_plotly()`) con `colorway`, fuente, fondo `FONDO`, grilla `BORDE`; reemplazar los `template="plotly_white"` y los hex sueltos de `ui/graficos.py` (`COLOR_ESCENARIO`, `COLOR_SURTIDOR`, `VERDE`, `ROJO`, `NARANJA`, `GRIS`…).
-5. Streamlit `[theme]` en `.streamlit/config.toml` (**conservar `fileWatcherType = "poll"`**):
+**Reglas obligatorias:** (1) amarillo = fondo/relleno/acento, **nunca texto sobre blanco** (contraste ≈ 1,6:1); texto sobre amarillo = `TINTA`; (2) el **rojo de marca también es el rojo de "pérdida"** ⇒ toda pérdida lleva **rótulo** ("SIN COMBUSTIBLE", "GNC CORTADO") y los gráficos de pérdida llevan etiqueta de valor o trama; (3) **un solo tema claro**; (4) un `template` Plotly propio (`plantilla_plotly()`) que reemplaza `plotly_white` y los hex sueltos de `ui/graficos.py`; (5) `[theme]` en `.streamlit/config.toml` (**conservar `fileWatcherType = "poll"`**):
 ```toml
 [theme]
 base = "light"
@@ -479,205 +423,165 @@ secondaryBackgroundColor = "#FFF6C2"
 textColor = "#1A1A1A"
 font = "sans serif"
 ```
-6. `ui/tema.css_global()` inyecta CSS mínimo (`st.markdown(..., unsafe_allow_html=True)`): franja superior **amarilla con texto `TINTA` y filete rojo inferior**, métricas con borde `BORDE`, insignias (§8.4). `ui/tema.paleta_json()` se inyecta en el HTML de la animación (reemplaza las constantes `FONDO/PANEL/…` hoy hardcodeadas en JS). **Prohibido** repetir un hex fuera de `ui/tema.py` (control N15 lo busca con `grep`).
+(6) `css_global()` inyecta CSS mínimo (franja amarilla superior con filete rojo, insignias); `paleta_json()` alimenta el SVG (reemplaza las constantes hardcodeadas de `ui/animacion.py`). **Prohibido** repetir un hex fuera de `ui/tema.py` (N15).
 
-### 8.2 Estructura de la app (≤ 7 pestañas principales; sub-pestañas adentro)
+### 8.2 Estructura de la app (≤ 7 pestañas; sub-pestañas adentro)
 | Pestaña | Contiene |
 |---|---|
-| 🏪 **La estación** | ficha (EST-*), esquema de la estación (12 caras, 3 grupos, minimarket), mapa esquemático de la esquina (Balloffet/RN 143 × Los Sauces/RP 158), servicios, **advertencias de datos** (§5.3) |
-| 🎬 **Animación** | reproductor (§8.5) + selector de **estación del año, tipo de día y día**, gráficos de colas/ocupación por grupo |
-| 📊 **Resultados** | sub-pestañas: *Indicadores* · *Por hora (pico real)* · *Por grupo y producto* · *Comparar escenarios (S0–S8)* |
-| 🎲 **Demanda** | Monte Carlo de 5 pasos (**conservar** los pasos 1–5 y la tabla de números aleatorios) + mezcla de vehículos y de productos + perfil por tipo de día/estación + calibración (litros/día vs. banda D5) |
-| 🛢️ **Abastecimiento** | sub-pestañas: *Tanques* (4 dientes de sierra + política (s,Q) por producto) · *Red y rutas* · *GNC* · *Estaciones del año* |
-| 💰 **Economía y decisión** | *Economía* ($/mes por escenario y anual) · *Sensibilidad* (tornado) · *Conclusión* (las preguntas de §7 del caso, respondidas en $/mes) |
-| 📚 **Datos y método** | *Datos y fuentes* (Registro completo, filtros por tipo/confianza/nivel, **descarga CSV**) · *Modelo y método* · *Verificación* (botón que corre los controles y muestra el resultado) |
+| 🏪 **La estación** | ficha (EST-*), esquema (12 caras, 3 grupos, minimarket), esquina Balloffet/Los Sauces, **advertencias (§5.3) y contradicciones (§4.2)** |
+| 🎬 **Animación** | reproductor (§8.5) + selector de **fecha/estación**, tipo de día y día; colas y ocupación por grupo |
+| 📊 **Resultados** | *Indicadores* · *Por hora (pico descubierto)* · *Por grupo y producto* · *Comparar escenarios (S0–S12)* |
+| 🎲 **Demanda** | **litros/mes → clientes/día** (la cadena de §14.2, visible), Monte Carlo de 5 pasos (**producto** y **tipo de vehículo**), perfil por tipo de día/mes, calibración |
+| 🛢️ **Abastecimiento** | *Tanques* (4 dientes de sierra, (s,Q) por producto) · *Red y rutas* · *GNC* · *Estaciones del año* |
+| 💰 **Economía y decisión** | *Economía* ($/mes y anual) · *Sensibilidad* (tornado) · *Conclusión* (las preguntas del CASO §7 en $/mes) |
+| 📚 **Datos y método** | *Datos y fuentes* (Registro completo, filtros, alternativas, **CSV**) · *Modelo y método* · *Verificación* (botón que corre los controles) |
 
-### 8.3 Gráficos nuevos o modificados (`ui/graficos.py`)
-- **Tanques ×4**: dientes de sierra superpuestos o en *small multiples*, con su punto de pedido, color por producto, rótulo de quiebres.
-- **Perfil horario por tipo de día** y por estación (llegadas vs. espera, **hora pico descubierta**, no supuesta).
-- **Por grupo:** espera, cola y utilización de A/B/C; **playeros** ocupados vs. en turno por hora (aquí se ve el cuello de botella).
-- **Pérdidas por motivo** apiladas (6 motivos de §7.6) por escenario/estación.
-- **Red:** diagrama de nodos y arcos (Plotly `scatter` con coordenadas esquemáticas o SVG), **ruta óptima resaltada**, arcos cortados tachados, tabla km/min; **distribución del plazo de entrega con y sin cortes** (histograma doble) y su efecto en días con quiebre.
-- **GNC:** línea de tiempo del día con la ventana de corte sombreada; barras *atendidos GNC · migrados a nafta · perdidos*.
-- **Estaciones del año:** 4 columnas con KPI comparables.
-- **Tornado** de sensibilidad (barras horizontales ordenadas por impacto en $/mes).
-- Todos: etiquetas de valor, `separators=",."` (castellano), títulos que *dicen la conclusión* cuando se pueda, unidad en el eje.
+### 8.3 Gráficos
+Tanques ×4 (dientes de sierra, punto de pedido, quiebres) · perfil horario por tipo de día/mes · por grupo: espera, cola, utilización, **playeros ocupados vs. en turno por hora** (acá se ve el cuello) · pérdidas apiladas por **motivo** · red (nodos y arcos, ruta óptima, arcos cortados tachados, histograma del plazo con/sin cortes) · GNC (línea de tiempo con episodios sombreados; atendidos / migrados / perdidos) · 4 estaciones comparables · **tornado** · todos con etiquetas de valor, `separators=",."`, unidad en el eje, títulos que dicen la conclusión.
 
-### 8.4 Insignias de confianza y barra lateral (`ui/datos_ui.py`)
-Cada widget de la barra lateral y cada fila de tabla lleva la **insignia de su `Dato`**:
-`🟢 dato` · `🟡 estimación` · `🔵 observación propia` · `🟠 supuesto` · `⚪ heredado (sin fuente)`. Más: tooltip (`help=`) con **fuente, nivel, fecha y nota**. `etiqueta(dato_id)` devuelve el texto del widget; `valor_por_defecto(dato_id)` su default. La sidebar se organiza en expanders **por grupo del Registro** (Estación · Personal · Demanda · Vehículos · Tiempos · Abastecimiento · Red · GNC · Economía · Corrida) y se **genera recorriendo el Registro** donde sea posible.
-**Anulación por relevamiento:** un `st.data_editor` (o CSV importado) permite pisar cualquier `Dato`; al hacerlo su `tipo` pasa a `observacion` y la insignia cambia a 🔵. Lo cargado se **exporta** junto con el Registro.
+### 8.4 Insignias y barra lateral (`ui/datos_ui.py`)
+Cada widget y cada fila lleva la insignia de su `Dato`: `🟢 dato` · `🟡 estimación` · `🔵 observación propia` · `🟠 supuesto` · `⚪ heredado (sin fuente)`; tooltip con **fuente, nivel, fecha, nota y alternativas**. La barra lateral se arma por categoría del Registro. **Anulación por relevamiento:** `st.data_editor`/CSV pisa un `Dato` (⇒ `observacion`, 🔵) y se exporta junto con el Registro. **Los widgets de demanda piden LITROS/MES y muestran al lado los clientes/día resultantes** (no se vuelve a repetir B1).
 
 ### 8.5 Animación (`ui/animacion.py`) — rediseño
-Mantener la arquitectura (Python manda JSON, **el navegador dibuja SVG**; `st.components.v1.html`, **no** `st.html`). Lienzo 1200×680.
-**Composición** (derivada de las capturas del grupo: playón techado, surtidores amarillos y blancos, edificio con ventanales):
-1. **Barra superior**: reloj, *estación del año*, *tipo de día*, día N, estado de medición (calentamiento / midiendo), **contadores** (atendidos, compraron, perdidos por motivo, migrados GNC).
-2. **Avenida Balloffet (RN 143)** abajo/izquierda con tráfico de fondo y **entrada**; la **cola desborda a la avenida** cuando supera `capacidad_cola` (autos "no entran": efecto visual + contador).
-3. **Playón techado** con **techo amarillo y filete rojo**: **Zona A** (S1–S2: 4 caras = 2 surtidores de doble cara), **Zona B** (S3: 2 caras), **Zona C** (S4–S6: 6 caras). Cada **cara** es una posición de carga con **flecha de acceso** (V8), color de estado (libre/ocupado/sin combustible/cortado) **más texto**, y el auto cargando.
-4. **Playeros**: íconos de persona ("n en turno / m ocupados"); un playero aparece junto a la cara que atiende. Si faltan playeros se ve el auto **esperando con la cara ocupada**.
-5. **Colas** por grupo, con "+N más" y número.
-6. **Minimarket** (edificio con ventanales): cola, cajas, cobrando/libre.
-7. **Tanques por producto** (4 barras con color de producto, marca del punto de pedido, litros) y **GNC** con indicador **DISPONIBLE / CORTADO** (franja roja con rótulo).
-8. **Camión en ruta**: mini-mapa de la red con el camión avanzando por la **ruta activa**; si hay arco cortado se ve tachado y el camión toma el desvío; texto "llega en X h".
-9. Controles: play/pausa, reiniciar, velocidad, barra de tiempo, **saltar a hora pico**, **saltar a quiebre/corte**.
-**Contrato de datos del cuadro (v2): formato columnar** (`{"t":[...], "cola":{"A":[...],"B":[...],"C":[...]}, ...}`), **no** listas posicionales como hoy (los índices mágicos son una fuente de errores al ampliar). Campos mínimos por cuadro: `t`, por grupo `{ocupadas, cola, rechazados_cola_llena}`, `playeros {en_turno, ocupados}`, `cajas {ocupadas, cola}`, por producto `nivel` (y `en_camino`), `gnc_cortado`, `camion {en_viaje, progreso, ruta, arco_cortado}`, acumulados por motivo, `migrados`, `en_calentamiento`. Grabar **un solo día** (decisión 5 de `CLAUDE.md`, vigente); `dt_traza` por defecto 0,5 min → 2.880 cuadros; si el JSON pesa demasiado subir `dt` a 1 min.
-**Accesibilidad:** nada se comunica sólo por color; contraste de texto ≥ 4,5:1; respetar `prefers-reduced-motion` (arrancar en pausa).
+Se mantiene la arquitectura (Python manda JSON, **el navegador dibuja SVG**; `st.components.v1.html`, **no** `st.html`). Lienzo 1200×680. Composición (de las capturas del grupo):
+1. **Barra superior:** reloj, estación/mes, tipo de día, día N, estado de medición, contadores (atendidos, compraron, perdidos por motivo, migrados).
+2. **Avenida Balloffet (RN 143)** con entrada; la cola **desborda a la avenida** al superar `capacidad_cola` (efecto + contador).
+3. **Playón techado** (techo amarillo, filete rojo): **Zona A** (S1–S2: 4 caras), **Zona B** (S3: 2), **Zona C** (S4–S6: 6, con **compresores** ocupados/3). Cada **cara** tiene flecha de acceso (V8), estado con **texto** (libre/ocupado/sin combustible/cortado) y el auto cargando.
+4. **Playeros** (personas): "n en turno / m ocupados"; si faltan se ve el auto **esperando con la cara ocupada**.
+5. **Minimarket** ("Shell Select", ventanales): cola, caja, cobrando/libre.
+6. **Tanques por producto** (4 barras, punto de pedido, litros) + **GNC: DISPONIBLE / CORTADO**.
+7. **Camión en ruta**: mini-mapa de la red con la ruta activa; arco cortado tachado y desvío; "llega en X h".
+8. Controles: play/pausa, reiniciar, velocidad, barra, **saltar a hora pico / a quiebre / a corte**.
+**Cuadro v2 columnar** (`{"t":[…], "cola":{"A":[…],…}, …}`; **no** listas posicionales): por grupo `{ocupadas, cola, rechazados}`, `playeros{en_turno, ocupados}`, `cajas`, `compresores`, por producto `{nivel, en_camino}`, `gnc_cortado`, `camion{en_viaje, progreso, ruta, arco_cortado}`, acumulados por motivo, `migrados`, `en_calentamiento`. **Se graba un solo día**; `dt_traza` 0,5 min (2.880 cuadros; si el JSON supera ~3 MB, 1 min). **Accesibilidad:** nada sólo por color; contraste ≥ 4,5:1; respetar `prefers-reduced-motion`.
 
-### 8.6 `Cuadro` v2 (`sim/traza.py`)
-Reemplazar el `Cuadro` posicional por uno con los campos del contrato anterior; agregar `Traza.serie_tanque(producto)` y `serie_playeros()`; `DiaSimulado` suma: estación del año, tipo de día, ventana GNC activa, corte de ruta activo, litros/m³ por producto, pérdidas por motivo.
-
-### 8.7 Textos (`ui/textos.py`)
-Las métricas nuevas (`Metrica`) cubren: espera/cola/utilización **por grupo**, ocupación de **playeros**, pérdidas **por motivo**, nivel de servicio **por producto**, plazo de entrega **con cortes**, GNC atendido/migrado/perdido. `SUPUESTOS` se **genera** desde el Registro (`tipo in {supuesto, heredado}`), no se mantiene a mano. Actualizar `DESCRIPCION_MODELO` (ya no es "un solo producto").
+### 8.6 Textos y métricas (`ui/textos.py`)
+Métricas nuevas por grupo, playeros, motivo de pérdida, producto, plazo con cortes y GNC. **`SUPUESTOS` se genera desde el Registro** (`tipo ∈ {supuesto, heredado, estimacion}`). `DESCRIPCION_MODELO` ya no dice "un solo producto".
 
 ---
 
 ## 9. Plan por fases con compuertas
 
-> Cada compuerta lista comandos. **Todas** deben pasar para cerrar la fase. En cada fase: commit en castellano + reporte (§13).
+> Cada fase: commit en castellano + reporte (§13). **Todas** las compuertas deben pasar.
 
-### Fase 0 — Línea base y orden (½ h)
-- Instalar dependencias (`pip install -r requirements.txt`); correr `python verificar.py` (debe dar 22/22) y la app (`python -m streamlit run app.py --server.headless true --server.port 8501`).
-- **Capturar números dorados** con el script de §14.1 y guardarlos en `verificar.py` (control N1) o en `tests_dorados.json`. *Si no se hace antes de tocar el motor, no hay regresión posible.*
-- **Gate:** 22/22 OK + dorados guardados + app levanta.
+### Fase 0 — Auditoría y corrección de Fase 2 ★ (primero, ½ día)
+- Instalar (`pip install -r requirements.txt`), correr `python verificar.py` (22/22) y la app. **Guardar los números dorados** (§14.1) en `verificar.py` (control N1).
+- **Corregir B1, B2, B4, B5** en el código existente (parche mínimo, sin esperar al rediseño): `autos_por_dia` desde **litros ÷ litros medios por cliente**; `fecha_inicio` real; "determinista" → "demanda esperada"; `dias_calentamiento = 2` por defecto; **una** función `horizonte → (fecha_inicio, dias)`; el slider de demanda muestra **clientes/día** al lado.
+- Avisos de una línea al tope de `CLAUDE.md`, `FASE2_IMPLEMENTACION.md`, `DATOS_OPERACIONALES…md` y `ONBOARDING…md` remitiendo a este archivo (la corrección de fondo es Fase 10).
+- **Gate:** 22/22 · **N16** (270.000 L/mes ⇒ 270.000 ± 3 % simulados, 3 réplicas) · **N17** (horizonte "estación" de invierno ⇒ meses jun–ago; "mes" de julio ≠ "mes" de enero con el preset "proxy") · dorados intactos con `modo=monte_carlo` · la app corre con 270.000 L/mes **sin colapsar** (ρ_pico < 1 con 2 playeros: §14.2).
 
-### Fase 1 — Registro de datos + tema Shell (visible y sin riesgo) ★
-- Crear `sim/datos.py` (todas las filas de §5.2), `ui/tema.py`, `ui/datos_ui.py`; `[theme]` en `config.toml`.
-- Migrar `ui/graficos.py` al tema (sin cambiar lógica); sidebar con **insignias**; pestaña **📚 Datos y fuentes** con tabla filtrable y **CSV**; pestaña **🏪 La estación** (ficha + advertencias); pie "no afiliado".
-- Todavía **no** se toca el motor: los números de resultados no cambian.
-- **Gate:** `verificar.py` 22/22 · N14 (parámetros huérfanos) y N15 (hex fuera de `tema.py`, contraste) · captura de pantalla de la app con el tema Shell (§10.4) · el CSV descarga y tiene todas las filas.
+### Fase 1 — Registro de datos + tema Shell (visible, sin riesgo) ★
+- `sim/datos.py` (§5), `ui/tema.py`, `ui/datos_ui.py`, `[theme]`; migrar `ui/graficos.py`; barra lateral con **insignias**; pestañas **📚 Datos y fuentes** (con **contradicciones y alternativas**, CSV) y **🏪 La estación**; pie "no afiliado".
+- **Gate:** 22/22 · N14 · N15 · captura de pantalla con el tema Shell (§10.4) · el CSV tiene todas las filas (incluidas las alternativas de §4.2).
 
-### Fase 2 — Núcleo del motor nuevo (grupos, tipos de vehículo, playeros, cola finita)
-- `config.py` (§7.1), `distribuciones.py` (streams al final + `discreta`), `modelo.py` (§7.2), `estadisticas.py` (por grupo/motivo).
-- **Productos y tanques aún "de a uno"**: sólo se introduce la estructura. `clasico()` **debe reproducir los dorados exactamente**.
-- **Gate:** 22/22 · N1 (dorados exactos) · N2–N5, N9, N10 · tiempo de réplica ≤ 1,5 s.
+### Fase 2 — Núcleo del motor (grupos, producto primero, playeros, cola finita)
+`config.py` (§7.1–7.2), `distribuciones.py` (streams **al final**, `discreta`), `modelo.py`, `estadisticas.py` (por grupo/motivo). Productos y tanques "de a uno". **`clasico()` debe reproducir los dorados exactamente.**
+**Gate:** 22/22 · N1–N5, N9, N10, N16 · réplica ≤ 1,5 s.
 
 ### Fase 3 — Animación nueva
-- `Cuadro` v2, columnar; `ui/animacion.py` rediseñada (§8.5) leyendo `paleta_json()`.
-- **Gate:** captura de pantalla de cada zona (A/B/C), de la cola desbordada y del camión · sin errores de consola del navegador · controles de saltos funcionando · 22/22.
+`Cuadro` v2 columnar; `ui/animacion.py` (§8.5) con `paleta_json()`. **Gate:** capturas de cada zona, de la cola desbordada y del camión · sin errores de consola · saltos funcionando · 22/22.
 
 ### Fase 4 — Cinco productos, 4 tanques, política por producto, plazo real
-- `Producto`, tanque por producto, plazo INV-01, `grilla_sugerida` por producto, `barrer_politicas` por producto; camión **independiente por producto** (N2 etapa 1).
-- Pestaña **Abastecimiento › Tanques**; métricas por producto.
-- **Gate:** 22/22 + N3 (conservación **por producto**, y m³ del GNC) · el barrido encuentra una política mejor o igual que la inicial.
+Tanque por producto, plazo INV-01, `grilla_sugerida` y `barrer_politicas` por producto; camión **independiente** (N2 etapa 1). **Gate:** 22/22 + N3 (conservación **por producto**; m³ del GNC) · el barrido encuentra una política ≤ a la inicial.
 
 ### Fase 5 — Red de abastecimiento
-- `sim/red.py` (Dijkstra, §7.4), cortes E1/E2/E3, demora → plazo; pestaña **Red y rutas** con el diagrama y la distribución del plazo.
-- **Gate:** N6 (los kilómetros/minutos de §5.2-G **exactos**) · N11 (plazo con cortes ≥ sin cortes) · gráfico de la red capturado.
+`sim/red.py` (Dijkstra), cortes E1–E4, demora → plazo; pestaña **Red y rutas**. **Gate:** N6 (km y minutos de §5-G **exactos**) · N11 · captura de la red.
 
-### Fase 6 — GNC y corte invernal (6b opcional: flujo máximo)
-- `ParametrosGNC`, ventanas, migración (§7.5); pestaña **GNC**.
-- **Gate:** N7, N8 · captura de la ventana sombreada.
-- *6b (sólo si aparecen capacidades reales):* Edmonds-Karp en `sim/red.py` + control contra un ejemplo del TP 5. Si no, **omitir y dejarlo documentado**.
+### Fase 6 — GNC (episodios, compresores, migración)
+**Gate:** N7, N8 · captura de los episodios sombreados. *(6b, opcional: Edmonds-Karp sólo con capacidades reales; si no, omitir y dejarlo escrito.)*
 
-### Fase 7 — Estaciones del año y escenarios S0–S8
-- `EstacionDelAnio`, `correr_estaciones`, catálogo de §7.7; pestañas **Estaciones del año** y **Resultados › Comparar**.
-- **Gate:** N12 · tiempos: corrida de las 4 estaciones × 4 réplicas ≤ 90 s (detrás de botón y cacheada).
+### Fase 7 — Estaciones del año y escenarios S0–S12
+`correr_estaciones`, catálogo §7.7; pestañas **Estaciones del año** y **Comparar**. **Gate:** N12 · 4 estaciones × 4 réplicas ≤ 90 s (botón + caché).
 
 ### Fase 8 — Economía real
-- `economia.py` (§7.10); pestaña **Economía y decisión**; anualización rotulada; conclusión por pregunta del caso (§7 del `CASO`) con textos que **nombran los supuestos** que mueven el resultado.
-- **Gate:** el análisis económico reconcilia (ingresos − costos = margen; *venta perdida* **no** se resta) · textos pasan por `escapar_pesos` · 22/22.
+§7.9, anualización rotulada, conclusión por pregunta del CASO. **Gate:** el análisis reconcilia (ingresos − costos = margen; *venta perdida* no se resta) · textos por `escapar_pesos` · 22/22.
 
 ### Fase 9 — Sensibilidad
-- `sensibilidad.py` + tornado (§7.9).
-- **Gate:** el tornado lista **todos** los `supuesto`/`heredado` con `bajo/alto` y el ranking no es constante.
+Tornado con **cada C1–C19 como eje**. **Gate:** lista **todos** los `supuesto`/`heredado`/`estimacion` y las alternativas; el ranking no es constante.
 
 ### Fase 10 — Verificación final y documentación
-- Todos los controles (§10.2) · QA visual completo (§10.4) · pase de rendimiento.
-- Reescribir `CLAUDE.md` (alcance nuevo, §2.3), `TASK.md` (checklist por fases), `README.md` (guion de demo para el caso real; respuestas a preguntas del profesor: ¿por qué datos supuestos?, ¿cómo se validó?, ¿qué es "heredado"?).
-- Los `.docx` (`Anteproyecto…`, `Guia_teorica…`) **no se tocan** salvo que el usuario lo pida: están a nombre de un solo integrante y describen el modelo viejo (`CASO §11`).
-- **Gate:** checklist D1–D11 de §1 completa.
+Todos los controles · QA visual completo (§10.4) · rendimiento. Reescribir `CLAUDE.md` (alcance, §2.3), `TASK.md`, `README.md` (guion de demo del caso real y respuestas al profesor: *¿por qué datos supuestos? ¿cómo se validó? ¿qué es "heredado"? ¿por qué 270.000 L?*), **corregir** `FASE2_IMPLEMENTACION.md`, `DATOS_OPERACIONALES…md` y `ONBOARDING…md` con §3 y §4. Los `.docx` no se tocan salvo pedido (describen el modelo viejo). **Gate:** D0–D11 completos.
 
-**Orden recomendado si hay poco tiempo (cada hito deja algo mostrable):** F0 → **F1** → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10. Si hay que recortar, **mantener** F1, F2, F4, F5, F6 y **recortar** F9 (parcial) y 6b. (Prioridad del caso: 1 demanda y perfil horario, 2 abastecimiento y red, 3 GNC en invierno; personal y economía fina pueden quedar con supuestos marcados.)
+**Orden recomendado:** F0 → **F1** → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10. Si hay que recortar: **mantener F0, F1, F2, F4, F5, F6**; recortar F9 (parcial) y 6b. (Prioridad del CASO: demanda y perfil, abastecimiento y red, GNC; personal y economía fina pueden quedar con supuestos marcados.)
 
 ---
 
 ## 10. Verificación
 
-### 10.1 Caso degenerado y números dorados
-`ParametrosSimulacion.clasico()` = 1 grupo de 3 caras, 1 producto, tanque único 40.000 L con `(s=12.000, Q=20.000)`, plazo `Triangular(8,16,36)` h, playeros ilimitados, sin cola finita, sin red ni GNC, un solo tipo de vehículo con `litros = Triangular(15,30,60)`, `carga = Triangular(3,5,8)`. Con él, el nuevo motor **debe dar idénticos** (a 6 decimales) los valores de §14.1. Si no coinciden, **la fase no cierra**: se rompió el orden de sorteo de algún stream.
+### 10.1 Caso degenerado y dorados
+`ParametrosSimulacion.clasico()` = 1 grupo de 3 caras (1 por surtidor), 1 producto, tanque 40.000 L `(s=12.000, Q=20.000)`, plazo `Triangular(8,16,36)` h, playeros ilimitados, sin cola finita, sin red ni GNC, un tipo de vehículo `litros = Triangular(15,30,60)`, carga `Triangular(3,5,8)`, `modo = monte_carlo` con la tabla heredada, `dias_calentamiento = 1`. Debe dar **idénticos** (6 decimales) los valores de §14.1. Si no, se rompió el orden de sorteo de algún stream.
 
-### 10.2 Controles nuevos (agregar a `verificar.py`; los 22 originales se mantienen)
+### 10.2 Controles nuevos (se suman a los 22)
 | ID | Control |
 |---|---|
-| N1 | `clasico()` reproduce los dorados de §14.1 (semillas 1 y 2 + 4 escenarios × 4 réplicas) |
+| N1 | `clasico()` reproduce los dorados (semillas 1 y 2 + 4 escenarios × 4 réplicas) |
 | N2 | **Conservación por grupo y motivo:** llegadas = atendidos + Σ perdidos(motivo) + migrados no atendidos + los que quedaron adentro |
-| N3 | **Conservación de combustible por producto** (litros por tanque; **m³ del GNC** = Σ cargas) · ningún tanque negativo ni sobre capacidad |
-| N4 | **Ley de Little** por grupo (L = λ·W) |
-| N5 | Simultáneos en servicio en A/B ≤ playeros del turno y ≤ caras del grupo |
-| N6 | Red: Luján→estación = 221,8 km / ≈190 min; con RN 143 cortada = 399,8 km (+178 km, +153 min); Dock Sud vía Alvear 991,3 km < vía Luján 1.279,0 km |
-| N7 | Sin cortes (`p=0`) no hay pérdidas `corte_gnc`; con corte total sin migración, **todos** los GNC de la ventana se pierden |
+| N3 | **Conservación por producto:** litros por tanque; **m³ del GNC**; ningún tanque negativo ni sobre capacidad |
+| N4 | **Little** por grupo |
+| N5 | Simultáneos en servicio en A/B ≤ playeros del turno y ≤ caras |
+| N6 | Red: 221,8 km / ≈ 190 min; con RN 143 cortada 399,8 km (+178 km, +153 min); Dock Sud 991,3 km < 1.279,0 km |
+| N7 | Sin episodios ⇒ cero pérdidas `corte_gnc`; con corte total sin migración ⇒ **todos** los GNC del episodio se pierden |
 | N8 | Con migración: `migrados + perdidos_corte = afectados` |
-| N9 | La mezcla de productos y de vehículos simulada ≈ la configurada (diferencia < 1,5 pp con ≥ 30.000 llegadas) |
-| N10 | Media muestral de litros de un auto ≈ **23,5 L** (±2 %); de un pick-up ≈ 40 L |
-| N11 | Monotonía: el plazo medio con cortes ≥ sin cortes · más playeros ⇒ menos espera · más demanda ⇒ más espera |
-| N12 | Estaciones: duplicar `factor_demanda` empeora la espera; el invierno con cortes de GNC tiene más `migrados` que el verano |
-| N13 | *(opcional)* **M/M/c**: con servicio exponencial, λ constante y sin abandono, Lq/Wq/ρ ≈ Erlang C (cierra el pendiente de `TASK.md` Fase 5) |
-| N14 | **Cero huérfanos:** todo campo numérico de `ParametrosSimulacion` y sus componentes tiene un `Dato` en el Registro |
-| N15 | **Tema:** ningún hex de color fuera de `ui/tema.py` (`grep`); contraste WCAG ≥ 4,5:1 en los pares texto/fondo declarados; los 5 colores de `PRODUCTO` son distinguibles entre sí |
+| N9 | Mezcla de producto **en litros** simulada ≈ DEM-04 (< 1,5 pp con ≥ 30.000 llegadas) y **clientes GNC ≈ 3 %** |
+| N10 | Media muestral de litros: auto ≈ 23,5 L (±2 %); pick-up ≈ 40 L |
+| N11 | Monotonía: plazo con cortes ≥ sin cortes · más playeros ⇒ menos espera · más demanda ⇒ más espera |
+| N12 | Estaciones: invierno con episodios ⇒ más `migrados` que verano |
+| N13 | *(opcional)* **M/M/c** (Erlang C) con servicio exponencial, λ constante, sin abandono |
+| N14 | **Cero huérfanos:** todo campo de los parámetros tiene `Dato` en el Registro |
+| N15 | **Tema:** ningún hex fuera de `ui/tema.py`; contraste WCAG ≥ 4,5:1 en los pares declarados; los 5 `PRODUCTO` distinguibles |
+| **N16** | **Unidades de la demanda:** `litros_mes = 270.000` ⇒ litros vendidos + no vendidos simulados = **270.000 ± 3 %** por mes (**habría detectado B1**) |
+| **N17** | **Calendario:** el horizonte "estación" de invierno usa jun–ago; "mes" de julio usa el índice de julio; día de la semana correcto |
+| **N18** | **Normalización fin de semana:** los litros del mes no cambian al variar `factor_fin_de_semana` (§14.4) |
+| **N19** | **Cadena de demanda:** `clientes_día × litros_medios_por_cliente = litros_día` (±0,1 %) |
 
 ### 10.3 Color
-Implementar `contraste(hex1, hex2)` (luminancia relativa WCAG) en `ui/tema.py` o en `verificar.py`. Pares a verificar: `TINTA/AMARILLO`, `TINTA/FONDO`, `TINTA/FONDO_PANEL`, `AMARILLO/ASFALTO`, `FONDO/ROJO` (texto blanco sobre botón rojo). Si hay una skill de visualización de datos disponible (`dataviz`), usarla para validar la paleta categórica.
+`contraste(hex1, hex2)` (luminancia relativa WCAG). Pares: `TINTA/AMARILLO`, `TINTA/FONDO`, `TINTA/FONDO_PANEL`, `AMARILLO/ASFALTO`, `FONDO/ROJO`. Si está disponible la skill `dataviz`, usarla para validar la paleta categórica.
 
 ### 10.4 QA visual (no alcanza con "corre")
-Con Playwright/Chromium (en el entorno cloud está en `/opt/pw-browsers/chromium`; **no** ejecutar `playwright install`):
-1. Levantar `python -m streamlit run app.py --server.headless true --server.port 8501`.
-2. Capturar cada pestaña principal (y sub-pestaña) a 1440×900 y a 390×844 (móvil), y la **animación** en 3 instantes (madrugada, pico de la mañana, corte de GNC).
-3. Revisar a ojo: paleta Shell coherente, sin texto amarillo sobre blanco, sin desbordes, insignias presentes, sin errores en la consola del navegador ni en el log de Streamlit.
-Adjuntar las capturas al reporte. Si el entorno no permite navegador, decirlo explícitamente en el reporte (no declarar "verificado visualmente").
+Con Playwright/Chromium (cloud: `/opt/pw-browsers/chromium`; **no** ejecutar `playwright install`; si falta el paquete, `pip install playwright` con `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`):
+1. `python -m streamlit run app.py --server.headless true --server.port 8501`.
+2. Capturar cada pestaña y sub-pestaña a 1440×900 y 390×844, y la **animación** en 3 instantes (madrugada, pico, corte de GNC).
+3. Revisar: paleta coherente, sin texto amarillo sobre blanco, sin desbordes, insignias presentes, **sin errores en la consola ni en el log**. Adjuntar capturas. Si no hay navegador, **decirlo** (no declarar "verificado visualmente").
 
 ### 10.5 Rendimiento
-Réplica ≤ 1,5 s · barrido por producto detrás de botón con estimación de tiempo visible · todo con `st.cache_data` · **no multiprocessing**. Si hay que acelerar: bajar días/réplicas, no meter paralelismo.
+Réplica ≤ 1,5 s · barrido y sensibilidad detrás de botón con estimación de tiempo · todo con `st.cache_data` · **no multiprocessing** · año = 1 corrida por escenario (B7).
 
 ---
 
-## 11. Trampas conocidas (heredadas y nuevas)
+## 11. Trampas conocidas
 
-1. **`st.html` descarta el SVG** → usar `st.components.v1.html` (iframe).
-2. Dos `$` en la misma línea de Markdown se leen como LaTeX → **`escapar_pesos`** en todo texto con importes.
-3. No se puede escribir en `st.session_state` de un widget ya creado → patrón `politica_sugerida` en `leer_parametros()` (aplicar **antes** de crear los controles). Si se agregan más "usar esta sugerencia", repetir el patrón.
-4. La conclusión se arma **antes** de las pestañas → tras el barrido (o la sensibilidad) hay que `st.rerun()`.
-5. Si cambia la **firma** de un módulo hay que **reiniciar el servidor** (Streamlit recarga el script principal pero conserva el módulo importado viejo). Mantener `fileWatcherType = "poll"`.
-6. **Orden de los streams:** sólo agregar al final de `STREAMS`. No reutilizar un stream para dos fuentes de azar (rompe los números aleatorios comunes).
-7. **Atributos sorteados al llegar**, no al atender. El cliente migrado conserva su identidad (mismo auto).
-8. **Combustible se descuenta al empezar a cargar** (no al terminar), por producto.
-9. `st.cache_data` con parámetros: usar dataclasses con **tuplas** (hashables y comparables); un `dict` mutable dentro de `ParametrosSimulacion` rompe la comparación `p != p_corrida` de `app.py`.
-10. **Litros ≠ m³:** nunca sumar; el GNC tiene su propia unidad en tarjetas, ejes y tablas.
-11. El **JSON de la animación** crece con productos/grupos: usar columnar y `round()`; vigilar el peso (< ~3 MB).
-12. **Calentamiento:** con 4 tanques y plazo de 36 h, 1 día **no alcanza** para salir del transitorio; recomendar y fijar **2–3 días** de calentamiento por defecto cuando los tanques arrancan llenos.
-13. **Playeros + cajas por turno:** al cambiar de turno no se "expulsa" a quien está en servicio; la capacidad se ajusta cuando se libera (efecto realista, pero verificarlo en N5).
-14. **Fechas:** usar siempre la fecha **de la nota original** (los buscadores rotulan mal). Precios: fijar y mostrar la **fecha de valuación**.
-15. **Rojo de marca = rojo de pérdida:** ver §8.1 regla 2. Es el error de diseño más fácil de cometer acá.
+1. **`st.html` descarta el SVG** → `st.components.v1.html`. 2. Dos `$` en una línea de Markdown ⇒ LaTeX → **`escapar_pesos`**. 3. No se escribe en `st.session_state` de un widget ya creado → patrón `politica_sugerida` en `leer_parametros()`. 4. La conclusión se arma **antes** de las pestañas → `st.rerun()` tras barridos. 5. Cambió la **firma** de un módulo ⇒ **reiniciar el servidor**; mantener `fileWatcherType = "poll"`. 6. **Streams nuevos sólo al final** de `STREAMS`; un stream por fuente de azar. 7. Atributos sorteados **al llegar**; el migrado conserva su identidad. 8. Combustible se descuenta **al empezar a cargar**, por producto. 9. `Escenario` con **cambios declarativos**, no lambdas (pickle de `st.cache_data`). 10. **Litros ≠ m³ ≠ autos.** 11. JSON de la animación < ~3 MB (columnar + `round()`). 12. **Calentamiento ≥ 2 días** (tanques al 75 %, plazo de 36 h). 13. Cambio de turno: no se expulsa a quien está en servicio (la capacidad se ajusta al liberarse; verificar en N5). 14. Fechas: usar la **de la nota original**. 15. **Rojo de marca = rojo de pérdida** (§8.1-2). 16. **No repetir B1:** cualquier tasa "por día" se deriva de **litros**, nunca de dividir litros por 30 y llamarlo "autos". 17. Un valor "Alta" de un documento compilado **no es evidencia** (§0-5).
 
 ---
 
-## 12. Lo que NO se puede resolver desde el código: relevamiento y datos faltantes
+## 12. Relevamiento y datos que el código no puede inventar
 
-El código **no puede inventar** estos datos; la app debe tener lugar para cargarlos (§8.4) y avisar mientras falten:
+La app debe tener lugar para cargarlos (§8.4) y avisar mientras falten. **Orden de impacto** (cada fila cita el conflicto que cierra):
 
-| Prioridad | Falta | Cómo se obtiene | Dónde entra |
+| Prioridad | Falta | Cómo se obtiene | Cierra |
 |---|---|---|---|
-| 1 | **Demanda real** (autos por franja de 15 min, hábil vs. fin de semana; autos/día; litros/mes por producto) | **Relevamiento en la estación** (contar vehículos por tipo y producto, 3 franjas, un día hábil y uno de fin de semana) + encargado; datos abiertos de la SE (ventas por provincia) | `DEM-01..03`, `DEM-06` |
-| 2 | **Litros por carga y tiempos de servicio** reales (por producto y tipo) | Cronometrar en el lugar | `VEH-*`, `TIE-*` |
-| 3 | **Abastecimiento real**: de dónde sale, cada cuánto viene, cuántos litros, plazo, tamaño de cada tanque subterráneo | Preguntar al **encargado** (con permiso) | `INV-01..05` |
-| 4 | **GNC en invierno**: frecuencia/horario de cortes, compresores, tiempo de carga, migración a nafta | Encargado, AMENA, Ecogas, notas | `GNC-*`, `SUR-06` |
-| 5 | **Personal**: dotación por turno, convenio y escala salarial | Encargado, convenio vigente | `PER-*`, `ECO-06` |
-| 6 | **Estacionalidad** (índice mensual de ventas, turismo, temperatura) | SE, DEIE Mendoza, turismo San Rafael, SMN | `DEM-06`, `EstacionDelAnio` |
-| 7 | **Economía**: márgenes, flete, precios vigentes de octubre-2026 | CECHA/FECRA, transportistas, SE | `ECO-*` |
-| 8 | Confirmar: V3 (S3), V5 (diésel premium), V9/V10 (shop 24 h, cajas) | Ver la estación | §6 |
+| 1 | **Demanda real**: litros/mes por producto (última facturación), clientes por franja de 15 min, hábil vs. fin de semana | **Conteo en la estación** (un día hábil + uno de fin de semana) + encargado; serie mensual de la SE | **C2, C3, C7, C16, C17** |
+| 2 | **Litros por carga y tiempo en la cara**, por producto y tipo | Cronometrar 5–10 vehículos por producto | **C11, C12** |
+| 3 | **Dotación por turno** (playeros, cajeros, encargado), horario real de la playa **y del shop**, ¿autoservicio? | Encargado | **C1, C5, C15** |
+| 4 | **Abastecimiento**: origen, frecuencia, litros, plazo, tamaño de cada tanque | Encargado | INV-01..05 |
+| 5 | **GNC**: tipo de contrato (firme/interrumpible), compresores, tiempo de carga, cortes de los últimos inviernos, migración a nafta | Encargado, AMENA, Ecogas | **C8, C9** |
+| 6 | **Mix diésel G2/G3** y si S3 vende los dos | Ver el surtidor + encargado | **C6** |
+| 7 | **% de clientes que entran al shop** y nombre/horario del shop | Contar 50–100 clientes | **C4, C14** |
+| 8 | **Estacionalidad real** (ventas mensuales por provincia/localidad) | SE (datos abiertos), DEIE Mendoza | **C10** |
+| 9 | **Economía**: márgenes, flete por km, salarios vigentes (convenio SOESGyP) | CECHA/FECRA, transportistas, convenio | C18, ECO-* |
 
-Faltan además las notas de investigación `02`, `04`, `05` (y quizá `07+`): la carpeta sólo tiene `01`, `03` y `06`. **No asumir su contenido.** Cuando lleguen, **actualizar el Registro** (reemplazar `heredado/supuesto` por `dato` con fuente) y re-correr sensibilidad.
+**Checklist para el encargado (una sola visita):** litros/mes actual · playeros/cajeros/encargado por turno · horario de playa y shop · ¿hay G3/V-Power Diesel en S3? · % que entra al shop y nombre · ¿GNC firme o interrumpible?, ¿cuántos compresores?, ¿cortes el último invierno? · día/frecuencia/litros de las entregas y de dónde sale · tamaño de cada tanque. **Anotar siempre fecha, hora y clima.**
 
 ---
 
 ## 13. Formato de reporte al cerrar cada fase
-
 ```
 FASE N — <título>            [CERRADA | BLOQUEADA]
 Archivos tocados: ...
-Compuerta:  verificar.py → X/Y OK · N1 dorados → OK/FALLA · N14/N15 → ...
+Compuerta:  verificar.py → X/Y OK · N1 dorados → OK/FALLA · N14/N15/N16.. → ...
 Visual:     capturas adjuntas: <lista>  (o: "sin navegador disponible")
-Defaults usados de §6: V.., N..   (cada uno detrás de qué parámetro)
-Supuestos NUEVOS agregados al Registro: ID — valor — por qué
+Defaults usados de §6 y §4.2: V.., N.., C..   (detrás de qué parámetro)
+Supuestos NUEVOS al Registro: ID — valor — por qué
+Contradicciones nuevas halladas: ...
 Decisiones que necesitan al usuario: ...
 Riesgos / deuda: ...
 Commit: <hash> en claude/simulator-graphic-orchestrator-wu2xh4
@@ -687,13 +591,12 @@ Commit: <hash> en claude/simulator-graphic-orchestrator-wu2xh4
 
 ## 14. Apéndices
 
-### 14.1 Números dorados del motor actual (medidos el 5/10/2026 con `ParametrosSimulacion()` por defecto)
-Reproducir con:
+### 14.1 Números dorados (código original = código mergeado con `modo_determinista=False`; medidos el 5/10/2026)
 ```python
 from sim.config import ParametrosSimulacion
 from sim.runner import correr_replica, correr_escenarios
 p = ParametrosSimulacion()
-for s in (1, 2): r, _ = correr_replica(p, semilla=s)          # imprimir los campos de abajo
+for s in (1, 2): r, _ = correr_replica(p, semilla=s)
 res = correr_escenarios(p, replicas=4, semilla_base=1)
 ```
 | Campo (réplica) | semilla 1 | semilla 2 |
@@ -711,20 +614,34 @@ res = correr_escenarios(p, replicas=4, semilla_base=1)
 | `compras_dia` | 104.689655 | 104.689655 |
 | `hora_pico` | 19 | 19 |
 
-Escenarios (4 réplicas, semilla base 1): `espera_pico` / `atendidos_dia` / `litros_vendidos_dia` →
-Base **3.249536 / 346.465517 / 12140.09** · A **0.844787 / 348.327586 / 12207.652** · B (= Base en surtidores: números aleatorios comunes) **3.249536 / 346.465517 / 12140.09** · C (= A) **0.844787 / 348.327586 / 12207.652**.
-Analíticos: `rho_pico` = 0,8761 · `rho_pico_dia_malo` = 1,0708 · `rho_cajas` = 0,5175 · 360 autos/día · 12.600 L/día · cobertura del punto de pedido 22,86 h.
-*Observación útil para la narrativa:* el modelo hipotético **ya** pierde ≈ 12–14 autos/día por falta de combustible (con plazo 8–36 h y s = 12.000 L); con el plazo real de 24–48 h el quiebre será peor si no se corrige la política: es una de las conclusiones que el simulador nuevo debe poder mostrar.
+Escenarios (4 réplicas, semilla base 1): `espera_pico / atendidos_dia / litros_vendidos_dia` → Base **3.249536 / 346.465517 / 12140.09** · A **0.844787 / 348.327586 / 12207.652** · B (= Base: números aleatorios comunes) **3.249536 / 346.465517 / 12140.09** · C (= A) **0.844787 / 348.327586 / 12207.652**. Analíticos: `rho_pico` 0,8761 · `rho_pico_dia_malo` 1,0708 · `rho_cajas` 0,5175 · 360 autos/día · 12.600 L/día ⇒ **378.000 L/mes** (hipotético heredado).
 
-### 14.2 Perfil horario heredado (`PERFIL_TIPICO`, factores relativos; **sin fuente**)
-`00:0,30 · 01:0,20 · 02:0,15 · 03:0,15 · 04:0,25 · 05:0,60 · 06:1,10 · 07:1,80 · 08:2,00 · 09:1,50 · 10:1,10 · 11:1,00 · 12:1,20 · 13:1,10 · 14:0,90 · 15:0,90 · 16:1,00 · 17:1,40 · 18:1,90 · 19:2,00 · 20:1,60 · 21:1,10 · 22:0,70 · 23:0,40`
-Tabla de demanda heredada: `280/320/360/400/440` autos con frecuencias `10/20/40/20/10`.
+### 14.2 Cadena de demanda: litros/mes → clientes/día (calibración por defecto)
+Reproducible con `sim/` o con un script de 20 líneas; **N19 la verifica**.
+1. **Carga media por producto** (§5-D, matriz tipo-por-producto × media de cada tipo): Súper **21,4 L**, V-Power **26,0**, G2 **64,2**, G3 **81,5**.
+2. **Litros por producto** (DEM-04, normalizados a los 4 líquidos): 28,0 / 19,5 / 29,3 / 23,2 %.
+3. **Peso de llegada** = `% litros ÷ carga media` ⇒ clientes líquidos: Súper **46,8 %**, V-Power **26,8 %**, G2 **16,3 %**, G3 **10,1 %**.
+4. **Litros medios por cliente líquido** = **35,7 L**.
+5. **Clientes líquidos/día** = `litros_día ÷ 35,7`; **+ GNC** al 3 % de las llegadas (÷ 0,97).
 
-### 14.3 Fuentes principales (todas consultadas el 5/10/2026; detalle y URLs en las notas)
-- Shell, localizador oficial (API geoapp, id 10129175) · Secretaría de Energía, Precios en surtidor Res. 314/2016 (CKAN) · OpenStreetMap (nodo 3497437279; sólo orientativo).
-- Sitio Andino 27-oct-2023 (plazo 36 h, 27.000 L, Dock Sud) · Los Andes 31-jul-2023 · Sitio Andino 23/6/2022 (corte de GNC) · MDZ/El Sol/Los Andes 17-ago-2026 y Los Andes/Sitio Andino 1–2-jul-2026 (cortes por nieve) · Sitio Andino 27-jun-2026 (obra RN 143) · Sitio Andino 6-may-2026 (precios Mendoza).
-- El Economista 7-abr-2026 y Infonegocios 8-abr-2026 (flota nacional/provincial) · Autocosmos (tanques) · Ley 24.449 art. 51 · OSRM/OSM (distancias).
-- Material de la cátedra: TP 5 de redes (flujo máximo, camino más corto, árbol de expansión mínima, transbordo), TP de Monte Carlo, apuntes de colas.
-- Paleta: [brandpalettes.com](https://brandpalettes.com/shell-logo-colors/) y otras (los hex difieren entre fuentes; ver §8.1).
+| `litros_mes` | L/día | clientes líquidos/día | con GNC (3 %) |
+|---|---|---|---|
+| 150.000 | 5.000 | 140 | 144 |
+| **270.000** | **9.000** | **252** | **260** |
+| 400.000 | 13.333 | 374 | 385 |
 
-*Fin del orquestador. Si algo de acá no se puede cumplir, no lo recortes en silencio: dejalo escrito en el reporte de la fase.*
+Con el perfil de §14.3 (pico 3,5/43 = **8,1 %** de las llegadas en una hora) y 260 clientes/día: **λ_pico = 0,353 clientes/min (≈ 21/h)**. ρ_pico de los grupos A+B con tiempo medio 5 min y 97 % de las llegadas: **1 playero ⇒ 1,71 · 2 playeros ⇒ 0,86 · 3 playeros ⇒ 0,57**. *Con la mezcla y los defaults de C12 (carga ≈ 0,5·T), la dotación de 2 playeros en el pico queda **al límite**: esa es la conclusión que el simulador debe poder mostrar y defender, y depende de C5, C11 y C12.* (Con el preset **alto** —carga casi llena, media 0,8·T— los clientes bajan a ≈ 158/día y ρ_pico a ≈ 0,54; con el **bajo** —media 0,3·T— suben a ≈ 420/día y ρ_pico a ≈ 1,43: **C12 mueve la conclusión de "sobra" a "se satura"**.)
+
+### 14.3 Perfil horario adoptado (`DATOS §2`; 24 factores; suma 43)
+`00–05: 1,0 · 06: 1,5 · 07–09: 3,5 · 10–11: 2,0 · 12–13: 1,5 · 14–15: 1,5 · 16–17: 3,0 · 18–19: 2,0 · 20–21: 1,5 · 22–23: 1,0`. Picos 07–10 y 16–18 (los dos de `DO`, ≈ 3–4× el promedio). Perfil heredado (alternativa): `0,30 0,20 0,15 0,15 0,25 0,60 1,10 1,80 2,00 1,50 1,10 1,00 1,20 1,10 0,90 0,90 1,00 1,40 1,90 2,00 1,60 1,10 0,70 0,40`.
+
+### 14.4 Normalización del tipo de día
+Con `f` = factor de fin de semana y un mes de `n_h` días hábiles y `n_f` de fin de semana, el nivel diario hábil es `D_h = D·(n_h + n_f) / (n_h + f·n_f)` y el de fin de semana `D_f = f·D_h`, de modo que **la suma del mes = `D × días`** (con `D = litros_mes / días`). Ej.: 22 + 8 días y `f = 1,30` ⇒ `D_h = 0,926·D`, `D_f = 1,204·D`. Aplicar lo mismo con la estacionalidad (índice ÷ media de los 12 índices).
+
+### 14.5 Fuentes principales (consultadas el 5/10/2026; URLs y detalle en las notas y en `DATOS_OPERACIONALES`)
+- **Verificadas en el original** (notas 01/03/06): Shell (API oficial), Secretaría de Energía, Sitio Andino, Los Andes, MDZ, El Sol, El Economista, Infonegocios, Autocosmos, Ley 24.449, OSRM/OSM.
+- **Hoy:** ENARGAS abr-2026 (cortes de GNC a estaciones interrumpibles; Canal 26, Ámbito, La Gaceta, A24); punto de equilibrio 315.000–400.000 L/mes (resultado de búsqueda sobre CREEBBA/surtidores); paleta Shell ([brandpalettes.com](https://brandpalettes.com/shell-logo-colors/), los hex difieren).
+- **No verificadas por mí** (aparecen en `DATOS`/`ONBOARDING`): FECRA salarios (URL "enero-2026"), Decreto 46/2025 y Res. 147/2025, Mercuria 1/9/2026, CREEBBA 270k, YPF 300k clientes × 20 %, Res. ENARGAS 409/2026, tiempos UNLP/UTN/UNC, mix de Surtidores.com.ar ago-2026.
+- Material de cátedra: TP 5 de redes (flujo máximo, camino más corto, árbol de expansión mínima, transbordo), TP de Monte Carlo, apuntes de colas.
+
+*Fin del orquestador v2. Si algo de acá no se puede cumplir, no lo recortes en silencio: dejalo escrito en el reporte de la fase.*

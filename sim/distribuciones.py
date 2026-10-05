@@ -78,3 +78,17 @@ class Aleatorio:
         u = self._g(stream).random()
         numero = int(u * 100) + 1           # 01 a 100; el 100 se muestra como "00"
         return tabla.sortear(u), numero
+
+    def determinista(self, autos_por_dia: float) -> tuple[int, int]:
+        """Retorna una demanda determinista (sin azar).
+
+        En modo determinista no hay número aleatorio. El segundo valor es siempre 50
+        (representa que está en el "medio" del rango de valores posibles).
+
+        Args:
+            autos_por_dia: cantidad de autos esperados para el día
+
+        Returns:
+            Tupla (autos_redondeados, numero_pseudoaleatorio_50)
+        """
+        return int(round(autos_por_dia)), 50

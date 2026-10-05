@@ -49,24 +49,66 @@ Hito **FINAL** = entrega completa del TP.
 - [x] Pestaña Economía: cuadro de inversión, beneficio neto y payback
 - [x] Pestaña Conclusión: recomendación generada a partir de los números
 
-## Fase 3 — Cierre del TP  ⬜ FINAL
-- [ ] Fijar valores concretos definitivos (tasas, tiempos y costos reales/estimados)
-      y documentar de dónde salen — la propuesta lo pide como "próximo paso"
+## Fase 3 — Modelo determinista real (Oct 2026)  🚀 IMPLEMENTANDO
+Transición del modelo académico a caso real de Shell San Rafael con tres cambios:
+### 3.1 — Datos consolidados  ✅
+- [x] Investigación paralela: 8 agentes en 80+ fuentes (Secretaría Energía, FECRA, ENARGAS, etc.)
+- [x] Documento `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`: 40+ parámetros con confianza
+- [x] Tabla ejecutiva con rango, fuente y URL para cada parámetro
+
+### 3.2 — Determinismo en demanda (sin Monte Carlo)  ✅
+- [x] Nueva clase `Estacionalidad` en config.py con índices por mes
+- [x] `ParametrosSimulacion.modo_determinista` y `demanda_base_mensual`
+- [x] Método `autos_por_dia_fecha(dia)` que calcula demanda con estacionalidad
+- [x] `distribuciones.py`: método `.determinista()` retorna autos sin azar
+- [x] `modelo.py`: `correr_dias()` elige entre `.empirica()` y `.determinista()`
+- [x] CLAUDE.md § Fase 2 con arquitectura y fórmulas
+
+### 3.3 — Horizonte variable  ✅
+- [x] `ParametrosSimulacion.horizonte` enum: "dia", "semana", "mes", "estacion", "anio"
+- [x] Mapeo automático horizonte → días (1, 7, 30, 90, 365)
+- [x] `app.py`: Radio button para seleccionar horizonte (solo en determinista)
+- [x] Sección "Corrida" adapta días y deshabilita calentamiento en determinista
+
+### 3.4 — UI Fase 2  ✅
+- [x] Nuevo expander "Fase 2: Modelo determinista" en sidebar
+- [x] Toggle `modo_determinista` muestra/oculta tabla Monte Carlo
+- [x] En determinista: slider `demanda_base_mensual` + radio `horizonte`
+- [x] Deshabilita "días simulados" en determinista (se fija automáticamente)
+
+### 3.5 — Pendiente: Validación de campo
+- [ ] **CRÍTICO**: Contactar gerente de estación para validar:
+  - Demanda real (litros/mes actual)
+  - Personal por turno
+  - Horario exacto de operación
+  - Tipos de diésel específicos
+  - Tasa de entrada al minimarket (30% es supuesto)
+  - Capacidad GNC (restricción por compresor)
+- [ ] Realizar observación de un día completo si es posible (contar autos, medir tiempos)
+- [ ] Documentar las confirmaciones en anexo de DATOS_OPERACIONALES...
+
+### 3.6 — Análisis de sensibilidad (post-validación)
+- [ ] Variar demanda ±20% (impacto en colas, esperas, quiebres)
+- [ ] Variar personal ±1 (impacto en laborales vs. servicio)
+- [ ] Cortes RN-143/144 (invierno): simular con demanda reducida
+- [ ] Gráficos de tornado (pareto de sensibilidad)
+
+## Fase 4 — Cierre del TP  ⬜ FINAL
+- [ ] Resultado de validación de campo (si se realiza)
 - [ ] Boxplot de la dispersión entre réplicas por escenario
-- [ ] Análisis de sensibilidad: barrer la tasa de llegada y ver cuándo se cae cada escenario
 - [ ] Exportar resultados a CSV / Excel para pegar en el informe
 - [ ] Exportar la tabla comparativa y los gráficos como imagen
 - [ ] Redactar la conclusión económica final en el informe
 
-## Fase 4 — Presentación  ✅ DEMO (parcial)
+## Fase 5 — Presentación  ✅ DEMO (parcial)
 - [x] `README.md` con instrucciones de instalación y uso
 - [x] Guion de demo: qué mostrar y en qué orden (5 minutos) — está en el README
 - [x] Respuestas a las preguntas probables del profesor — están en el README
       (¿por qué exponencial? ¿por qué warm-up? ¿por qué réplicas? ¿por qué triangular?)
-- [ ] Hoja resumen con los supuestos del modelo
+- [ ] Hoja resumen con los supuestos del modelo (actualizada con Fase 2)
 
-## Fase 5 — Validación y verificación  ✅ DEMO (parcial)
-Todo esto corre con `.venv/Scripts/python verificar.py` — 12 controles, todos en OK.
+## Fase 6 — Validación y verificación  ✅ DEMO (parcial)
+Todo esto corre con `.venv/Scripts/python verificar.py` — 22 controles.
 - [x] Conservación: llegadas = atendidos + perdidos + los que quedaron adentro
 - [x] La misma semilla da exactamente el mismo resultado
 - [x] **Ley de Little (L = λ·W)**: la longitud de cola medida por área coincide con la que

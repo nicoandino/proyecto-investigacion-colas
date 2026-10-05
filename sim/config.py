@@ -242,6 +242,50 @@ class ParametrosTanque:
 
 
 # =============================================================================
+# Estacionalidad: índices de demanda por mes
+# =============================================================================
+@dataclass(frozen=True)
+class Estacionalidad:
+    """Multiplicadores de demanda por mes del año (índice base = 100 en enero)."""
+
+    indices: tuple[float, ...] = (
+        100.0,  # enero (vendimia + verano)
+        60.0,   # febrero (transición)
+        70.0,   # marzo
+        75.0,   # abril
+        80.0,   # mayo
+        55.0,   # junio (mínimo + cortes RN)
+        85.0,   # julio (Las Leñas)
+        90.0,   # agosto
+        95.0,   # septiembre
+        92.0,   # octubre
+        98.0,   # noviembre
+        105.0,  # diciembre (Navidad + verano)
+    )
+
+    def __post_init__(self) -> None:
+        if len(self.indices) != 12:
+            raise ValueError("Estacionalidad debe tener exactamente 12 índices (enero a diciembre).")
+        if any(i <= 0 for i in self.indices):
+            raise ValueError("Los índices de estacionalidad deben ser positivos.")
+
+    def indice_mes(self, mes: int) -> float:
+        """Índice de estacionalidad para un mes (1=enero, ..., 12=diciembre)."""
+        if not 1 <= mes <= 12:
+            raise ValueError(f"El mes debe estar entre 1 y 12, recibido {mes}.")
+        return self.indices[mes - 1]
+
+    @property
+    def promedio(self) -> float:
+        """Promedio de todos los índices (debería ser cercano a 100)."""
+        return sum(self.indices) / len(self.indices)
+
+
+#: Estacionalidad típica de una estación de servicio en Mendoza
+ESTACIONALIDAD_TIPICA = Estacionalidad()
+
+
+# =============================================================================
 # Parámetros de la simulación
 # =============================================================================
 @dataclass(frozen=True)
@@ -255,6 +299,11 @@ class ParametrosSimulacion:
     # --- Demanda --------------------------------------------------------------
     demanda: DemandaDiaria = DEMANDA_TIPICA
     perfil: PerfilHorario = PERFIL_TIPICO
+
+    # --- Modo determinista (Fase 2) -------------------------------------------
+    modo_determinista: bool = False        # Si True, usa demanda determinista en lugar de Monte Carlo
+    demanda_base_mensual: float = 120_000.0  # Litros/mes base (usada en modo determinista)
+    estacionalidad: Estacionalidad = ESTACIONALIDAD_TIPICA
 
     # --- Tiempos de servicio --------------------------------------------------
     carga: Triangular = Triangular(3.0, 5.0, 8.0)
@@ -277,6 +326,9 @@ class ParametrosSimulacion:
     dias_calentamiento: int = 1        # días descartados (el tanque arranca lleno)
     dia_animado: int = 2               # qué día se graba para la animación
     dt_traza: float = 0.5              # cada cuánto se captura un cuadro de animación
+
+    # --- Horizonte (Fase 2) --------- -----------------------------------------
+    horizonte: str = "mes"             # "dia", "semana", "mes", "estacion", "anio"
 
     def __post_init__(self) -> None:
         if self.surtidores < 1 or self.cajas < 1:
@@ -311,10 +363,46 @@ class ParametrosSimulacion:
         inicio = (self.dia_animado - 1) * MINUTOS_POR_DIA
         return inicio, inicio + MINUTOS_POR_DIA
 
+    def _dias_segun_horizonte(self) -> int:
+        """Calcula los días a simular según el horizonte seleccionado."""
+        horizonte_a_dias = {
+            "dia": 1,
+            "semana": 7,
+            "mes": 30,
+            "estacion": 90,
+            "anio": 365,
+        }
+        return horizonte_a_dias.get(self.horizonte, 30)
+
     @property
     def autos_por_dia(self) -> float:
-        """Autos por día promedio según la tabla empírica."""
-        return self.demanda.media
+        """Autos por día promedio.
+
+        En modo determinista: demanda_base_mensual / 30.
+        En modo Monte Carlo: media de la tabla empírica.
+        """
+        if self.modo_determinista:
+            return self.demanda_base_mensual / 30.0
+        else:
+            return self.demanda.media
+
+    def autos_por_dia_fecha(self, dia_del_anio: int) -> float:
+        """Autos por día para una fecha específica (considerando estacionalidad).
+
+        Args:
+            dia_del_anio: día del año (1-365)
+
+        Returns:
+            Autos por día ajustados por estacionalidad
+        """
+        if not self.modo_determinista:
+            return self.autos_por_dia
+
+        # Calcular mes (1-12) a partir del día del año
+        mes = min(12, ((dia_del_anio - 1) // 30) + 1)
+        indice = self.estacionalidad.indice_mes(mes)
+        autos_base = self.demanda_base_mensual / 30.0
+        return autos_base * (indice / self.estacionalidad.promedio)
 
     @property
     def litros_por_dia(self) -> float:

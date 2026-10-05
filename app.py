@@ -16,6 +16,7 @@ import streamlit.components.v1 as componentes
 
 from sim.config import (
     DemandaDiaria,
+    Estacionalidad,
     ParametrosEconomicos,
     ParametrosSimulacion,
     ParametrosTanque,
@@ -106,7 +107,41 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         surtidores = st.number_input("Surtidores instalados", 1, 8, 3, 1)
         cajas = st.number_input("Cajas en el minimarket", 1, 4, 1, 1)
 
-    with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)", expanded=True):
+    # --- FASE 2: Modo determinista y horizonte ---
+    with st.sidebar.expander("📊 Fase 2: Modelo determinista", expanded=True):
+        modo_determinista = st.checkbox(
+            "Usar modelo determinista (sin Monte Carlo)",
+            value=False,
+            help="Cuando está activado, la demanda se calcula de forma determinista basada en "
+                 "demanda base mensual y estacionalidad, sin sorteos aleatorios de demanda.",
+        )
+        if modo_determinista:
+            demanda_base_mensual = st.slider(
+                "Demanda base mensual (litros)", 30_000, 300_000, 120_000, 10_000,
+                help="Consumo total estimado de combustible por mes. Se ajusta con índices "
+                     "de estacionalidad según la época del año."
+            )
+            horizonte = st.radio(
+                "Horizonte de simulación",
+                options=["dia", "semana", "mes", "estacion", "anio"],
+                format_func=lambda x: {
+                    "dia": "📅 Un día",
+                    "semana": "📅 Una semana (7 días)",
+                    "mes": "📅 Un mes (30 días)",
+                    "estacion": "📅 Una estación (90 días)",
+                    "anio": "📅 Un año (365 días)",
+                }[x],
+                horizontal=False,
+            )
+            # Mapeo de horizonte a días
+            horizonte_a_dias = {"dia": 1, "semana": 7, "mes": 30, "estacion": 90, "anio": 365}
+            dias_por_horizonte = horizonte_a_dias[horizonte]
+        else:
+            demanda_base_mensual = 120_000.0  # valor por defecto, no se usa
+            horizonte = "mes"
+            dias_por_horizonte = 30
+
+    with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)", expanded=(not modo_determinista)):
         st.caption(
             "Tabla de frecuencias observada: en cuántos días se registró cada nivel de "
             "demanda. De acá se sortea la demanda de cada día simulado."
@@ -187,14 +222,21 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
 
     with st.sidebar.expander("🔬 Corrida"):
-        dias = st.slider("Días simulados", 7, 90, 30, 1,
-                         help="30 días = un mes de operación.")
-        dias_calentamiento = st.slider(
-            "Días de calentamiento", 0, 5, 1, 1,
-            help="Días que se simulan pero no se miden: la estación arranca vacía y con "
-                 "el tanque lleno, que no es su estado habitual.",
-        )
-        dia_animado = st.slider("Día a animar", 1, int(dias), min(2, int(dias)), 1)
+        if modo_determinista:
+            st.info(f"Horizonte seleccionado: **{dias_por_horizonte} días** ({horizonte})")
+            dias = dias_por_horizonte
+            dias_calentamiento = 0  # No necesario en modelo determinista
+            st.caption("(Calentamiento deshabilitado en modo determinista)")
+        else:
+            dias = st.slider("Días simulados", 7, 90, 30, 1,
+                             help="30 días = un mes de operación.")
+            dias_calentamiento = st.slider(
+                "Días de calentamiento", 0, 5, 1, 1,
+                help="Días que se simulan pero no se miden: la estación arranca vacía y con "
+                     "el tanque lleno, que no es su estado habitual.",
+            )
+
+        dia_animado = st.slider("Día a animar", 1, min(dias, 90), min(2, int(dias)), 1)
         replicas = st.slider(
             "Réplicas por escenario", 2, 15, 4, 1,
             help="Cada réplica es un mes completo con otra semilla. Más réplicas dan "
@@ -244,6 +286,9 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         dias=int(dias),
         dias_calentamiento=int(dias_calentamiento),
         dia_animado=int(dia_animado),
+        modo_determinista=bool(modo_determinista),
+        demanda_base_mensual=float(demanda_base_mensual),
+        horizonte=str(horizonte),
     )
     eco = ParametrosEconomicos(
         margen_por_litro=margen_por_litro,

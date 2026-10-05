@@ -18,7 +18,9 @@ import random
 
 from sim.config import DemandaDiaria, Triangular
 
-#: Cada fuente de azar del modelo.
+#: Cada fuente de azar del modelo. Los streams NUEVOS se agregan SIEMPRE AL FINAL:
+#: reordenar esta tupla cambia las semillas de los anteriores y rompe los números
+#: aleatorios comunes y los dorados (trampa 6 del orquestador).
 STREAMS = (
     "llegadas",   # instantes de llegada de los autos
     "carga",      # tiempo de carga de combustible
@@ -27,6 +29,8 @@ STREAMS = (
     "litros",     # cuántos litros carga cada auto
     "demanda",    # cuántos autos trae cada día (Monte Carlo, tabla empírica)
     "entrega",    # plazo de entrega del camión cisterna
+    "producto",   # qué producto carga cada cliente (Fase 2)
+    "tipo_vehiculo",  # qué tipo de vehículo es cada cliente (Fase 2)
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden
@@ -68,6 +72,31 @@ class Aleatorio:
     def bernoulli(self, p: float, stream: str) -> bool:
         """True con probabilidad p. Modela la decisión de entrar al minimarket."""
         return self._g(stream).random() < p
+
+    def discreta(self, pesos: tuple[float, ...], stream: str) -> int:
+        """Índice sorteado por pesos (se normalizan solos). Monte Carlo de 5 pasos:
+        frecuencia → probabilidad → acumulada → intervalo → sorteo."""
+        u = self._g(stream).random()
+        total = sum(pesos)
+        acumulado = 0.0
+        for i, peso in enumerate(pesos):
+            acumulado += peso / total
+            if u < acumulado:
+                return i
+        return len(pesos) - 1
+
+    def discreta_con_numero(self, pesos: tuple[float, ...], stream: str) -> tuple[int, int]:
+        """Como `discreta` pero devuelve además el número aleatorio de dos dígitos
+        (01 a 100) para poder mostrar la tabla de simulación igual que en el apunte."""
+        u = self._g(stream).random()
+        numero = int(u * 100) + 1           # 01 a 100; el 100 se muestra como "00"
+        total = sum(pesos)
+        acumulado = 0.0
+        for i, peso in enumerate(pesos):
+            acumulado += peso / total
+            if u < acumulado:
+                return i, numero
+        return len(pesos) - 1, numero
 
     def empirica(self, tabla: DemandaDiaria, stream: str) -> tuple[int, int]:
         """Sortea un valor de una tabla de frecuencias empírica (método Monte Carlo).

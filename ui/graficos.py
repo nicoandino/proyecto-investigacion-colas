@@ -219,24 +219,36 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
 def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
     """El clásico gráfico de dientes de sierra del nivel de inventario."""
     dias, litros = traza.serie_inventario()
+    # Estación real: se grafica la SUMA de los 4 tanques (el detalle por producto llega
+    # con la Fase 4), contra la suma de las capacidades y de los puntos de pedido.
+    if p.estacion_real:
+        capacidad = sum(i.capacidad for i in p.inventario)
+        punto_pedido = sum(i.punto_pedido for i in p.inventario)
+        rotulo_punto = "suma de los puntos de pedido"
+        nombre_nivel = "Nivel de los 4 tanques (suma)"
+    else:
+        capacidad = p.tanque.capacidad
+        punto_pedido = p.tanque.punto_pedido
+        rotulo_punto = "punto de pedido"
+        nombre_nivel = "Nivel del tanque"
 
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=dias, y=litros, name="Nivel del tanque", mode="lines",
+            x=dias, y=litros, name=nombre_nivel, mode="lines",
             line=dict(color=COLOR_TANQUE, width=2),
             fill="tozeroy", fillcolor=rgba(CELESTE, 0.18),
             hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
         )
     )
     fig.add_hline(
-        y=p.tanque.punto_pedido, line_dash="dash", line_color=NARANJA_,
-        annotation_text=f"punto de pedido ({_miles(p.tanque.punto_pedido)} L)",
+        y=punto_pedido, line_dash="dash", line_color=NARANJA_,
+        annotation_text=f"{rotulo_punto} ({_miles(punto_pedido)} L)",
         annotation_position="top left",
     )
     fig.add_hline(
-        y=p.tanque.capacidad, line_dash="dot", line_color=GRIS_,
-        annotation_text=f"capacidad ({_miles(p.tanque.capacidad)} L)",
+        y=capacidad, line_dash="dot", line_color=GRIS_,
+        annotation_text=f"capacidad ({_miles(capacidad)} L)",
         annotation_position="bottom left",
     )
     fig.add_hline(y=0, line_color=ROJO, line_width=1)
@@ -246,7 +258,8 @@ def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
         annotation_font_size=11,
     )
     fig.update_layout(
-        title="Nivel del tanque durante el mes",
+        title="Nivel de los tanques durante la corrida" if p.estacion_real
+        else "Nivel del tanque durante el mes",
         xaxis_title="Día",
         yaxis_title="Litros en el tanque",
         **_layout(hovermode="x", height=420),

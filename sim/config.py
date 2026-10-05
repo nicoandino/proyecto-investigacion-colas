@@ -210,6 +210,189 @@ DEMANDA_TIPICA = DemandaDiaria(
 
 
 # =============================================================================
+# La estación real: productos, grupos, vehículos e inventario por producto (§7)
+# =============================================================================
+@dataclass(frozen=True)
+class Producto:
+    """Un producto que se despacha en la estación (ORQUESTADOR §7.2)."""
+
+    id: str                    # "super" | "vpower" | "diesel_g2" | "diesel_g3" | "gnc"
+    nombre: str                # nombre para mostrar
+    grupo: str                 # "A" nafta · "B" diésel · "C" GNC
+    pct_litros: float          # participación en los LITROS de líquidos (DEM-04)
+    carga_media: float         # litros (o m³) medios por cliente (cadena §14.2)
+    es_gnc: bool = False
+
+
+@dataclass(frozen=True)
+class Grupo:
+    """Una zona de surtidores con sus caras (SUR-01..04)."""
+
+    id: str                    # "A" | "B" | "C"
+    nombre: str
+    caras: int                 # una cara = un vehículo a la vez
+    productos: tuple[str, ...]
+    requiere_playero: bool = True   # PER-04: el GNC sólo conecta la manguera
+
+
+@dataclass(frozen=True)
+class TipoVehiculo:
+    """Un tipo de vehículo con su tanque y su distribución de litros por carga (§5-D)."""
+
+    id: str                    # "moto" | "auto" | "pick_up" | "camion" | "auto_gnc"
+    nombre: str
+    tanque: float              # litros (o m³ del cilindro para el GNC)
+    litros: Triangular         # Triangular(0,20·T ; 0,30·T ; 1,00·T) — media 0,50·T
+    es_camion: bool = False    # TIE-03: suma litros ÷ 90 al tiempo de servicio
+    es_moto: bool = False
+    es_gnc: bool = False       # el cilindro se mide en m³, no en litros
+
+
+@dataclass(frozen=True)
+class InventarioProducto:
+    """Tanque y política (s, Q) de UN producto líquido (INV-03/INV-07/INV-01)."""
+
+    producto: str
+    capacidad: float
+    nivel_inicial: float
+    punto_pedido: float
+    cantidad_pedido: float
+    plazo_entrega: Triangular      # HORAS
+
+    @property
+    def plazo_entrega_minutos(self) -> Triangular:
+        return Triangular(
+            self.plazo_entrega.minimo * 60.0,
+            self.plazo_entrega.moda * 60.0,
+            self.plazo_entrega.maximo * 60.0,
+        )
+
+
+#: Orden de los tipos en la matriz tipo-por-producto (VEH-00 del Registro).
+_TIPOS_MATRIZ = ("moto", "auto", "pick_up", "camion")
+
+
+def _tipo_desde(id_tipo: str, dato_id: str, es_camion: bool = False,
+                es_moto: bool = False, es_gnc: bool = False) -> TipoVehiculo:
+    """TipoVehiculo desde un VEH-0x del Registro: (tanque, (mín, moda, máx))."""
+    tanque, _ = valor(dato_id)
+    if es_gnc:
+        _, carga = valor(dato_id)                       # m³ del cilindro
+        return TipoVehiculo(id_tipo, "", tanque, Triangular(*carga),
+                            es_camion=es_camion, es_moto=es_moto, es_gnc=True)
+    return TipoVehiculo(
+        id_tipo, "", tanque, Triangular(0.20 * tanque, 0.30 * tanque, 1.00 * tanque),
+        es_camion=es_camion, es_moto=es_moto,
+    )
+
+
+def tipos_vehiculo_desde_registro() -> tuple[TipoVehiculo, ...]:
+    """Los cinco tipos de vehículo (§5-D), con la regla de carga 0,20/0,30/1,00 × tanque."""
+    return (
+        _tipo_desde("moto", "VEH-03", es_moto=True),        # moto 110 cc, 3,7 L
+        _tipo_desde("auto", "VEH-01"),                      # auto, 47 L
+        _tipo_desde("pick_up", "VEH-02"),                   # pick-up / utilitario, 80 L
+        _tipo_desde("camion", "VEH-04", es_camion=True),    # camión, 300 L (supuesto)
+        _tipo_desde("auto_gnc", "VEH-05", es_gnc=True),     # auto GNC, cilindro 14 m³
+    )
+
+
+def matriz_tipo_por_producto() -> tuple[tuple[str, tuple[float, ...]], ...]:
+    """Matriz tipo de vehículo por producto (VEH-00), en orden (moto, auto, pick-up, camión)."""
+    return valor("VEH-00")
+
+
+def productos_desde_registro() -> tuple[Producto, ...]:
+    """Los cinco productos: mezcla en litros (DEM-04) + carga media derivada (§14.2).
+
+    La carga media de cada producto sale de la matriz tipo-por-producto × la media
+    de litros de cada tipo: Súper 21,4 · V-Power 26,0 · G2 64,2 · G3 81,5 · GNC 7 m³.
+    """
+    mezcla = dict(valor("DEM-04"))
+    tipos = {t.id: t for t in tipos_vehiculo_desde_registro()}
+    matriz = dict(matriz_tipo_por_producto())
+    salida = []
+    for id_, nombre, grupo in (
+        ("super", "Súper", "A"),
+        ("vpower", "V-Power", "A"),
+        ("diesel_g2", "Diésel G2", "B"),
+        ("diesel_g3", "Diésel G3", "B"),
+    ):
+        cargas = matriz[id_]
+        media = sum(
+            p * tipos[tipo].litros.media for tipo, p in zip(_TIPOS_MATRIZ, cargas)
+        )
+        salida.append(Producto(id_, nombre, grupo, mezcla[id_] / 100.0, media))
+    salida.append(Producto("gnc", "GNC", "C", 0.0, 7.0, es_gnc=True))
+    return tuple(salida)
+
+
+def turnos_de(playeros: tuple[int, int, int]) -> tuple[tuple[float, int], ...]:
+    """(hora de inicio, playeros) de los turnos a partir de (noche, mañana, tarde).
+
+    Noche 22–06, mañana 06–14, tarde 14–22 (PER-01): a las 22 vuelve a entrar la noche,
+    así que el día se parte en cuatro tramos.
+    """
+    noche, manana, tarde = playeros
+    return ((0.0, noche), (6.0, manana), (14.0, tarde), (22.0, noche))
+
+
+def grupos_desde_registro() -> tuple[Grupo, ...]:
+    """Las tres zonas: A nafta 4 caras · B diésel 2 · C GNC 6 (SUR-02..04)."""
+    return (
+        Grupo("A", "Nafta", 4, ("super", "vpower"), requiere_playero=True),
+        Grupo("B", "Diésel", 2, ("diesel_g2", "diesel_g3"), requiere_playero=True),
+        Grupo("C", "GNC", 6, ("gnc",), requiere_playero=False),
+    )
+
+
+def inventario_real(
+    litros_mes: float = 270_000.0,
+    capacidad: float | None = None,
+    plazo: Triangular | None = None,
+    nivel_inicial_pct: float | None = None,
+) -> tuple[InventarioProducto, ...]:
+    """Tanque y política (s, Q) por producto líquido (INV-03, INV-07, INV-01).
+
+    INV-07: s = 1,5 días de consumo del producto;
+    Q = min(capacidad − s, máx(2,5 × consumo/día, 0,5 × capacidad)); nivel inicial 75 %.
+    Los argumentos opcionales reemplazan al Registro (la interfaz los usa para que el
+    usuario pruebe otra capacidad, otro plazo o otro nivel inicial).
+    """
+    capacidad = valor("INV-03") if capacidad is None else capacidad
+    plazo = Triangular(*valor("INV-01")) if plazo is None else plazo
+    nivel_inicial_pct = valor("INV-10") if nivel_inicial_pct is None else nivel_inicial_pct
+    salida = []
+    for p in productos_desde_registro():
+        if p.es_gnc:
+            continue
+        consumo_dia = (litros_mes / 30.0) * p.pct_litros
+        s = min(1.5 * consumo_dia, capacidad)
+        q = min(capacidad - s, max(2.5 * consumo_dia, 0.5 * capacidad))
+        salida.append(
+            InventarioProducto(
+                producto=p.id,
+                capacidad=capacidad,
+                nivel_inicial=nivel_inicial_pct * capacidad,
+                punto_pedido=s,
+                cantidad_pedido=q,
+                plazo_entrega=plazo,
+            )
+        )
+    return tuple(salida)
+
+
+#: Los cinco productos de la estación real.
+PRODUCTOS_REALES = productos_desde_registro()
+#: Las tres zonas de surtidores.
+GRUPOS_REALES = grupos_desde_registro()
+#: Los cinco tipos de vehículo.
+TIPOS_REALES = tipos_vehiculo_desde_registro()
+#: Inventario por producto (para la demanda por defecto de 270.000 L/mes).
+INVENTARIO_REAL = inventario_real()
+
+
+# =============================================================================
 # Inventario: el tanque de combustible
 # =============================================================================
 @dataclass(frozen=True)
@@ -353,6 +536,7 @@ class ParametrosSimulacion:
 
     # --- Tiempos de servicio --------------------------------------------------
     carga: Triangular = Triangular(*valor("TIE-02"))
+    carga_gnc: Triangular = Triangular(*valor("TIE-04"))
     compra: Triangular = Triangular(*valor("TIE-05"))
     caja_exponencial: bool = False
 
@@ -364,7 +548,25 @@ class ParametrosSimulacion:
     paciencia_surtidor: float = valor("TIE-06")[0]   # umbral de abandono en la cola del surtidor
     paciencia_caja: float = valor("TIE-06")[1]       # umbral de abandono en la cola de la caja
 
-    # --- Inventario -----------------------------------------------------------
+    # --- Estación real (§7): grupos, productos, playeros y cola finita ---------
+    estacion_real: bool = True
+    grupos: tuple[Grupo, ...] = GRUPOS_REALES
+    productos: tuple[Producto, ...] = PRODUCTOS_REALES
+    tipos_vehiculo: tuple[TipoVehiculo, ...] = TIPOS_REALES
+    matriz_tipos: tuple[tuple[str, tuple[float, ...]], ...] = matriz_tipo_por_producto()
+    playeros_por_turno: tuple[int, int, int] = valor("PER-01")  # noche · mañana · tarde
+    turnos: tuple[tuple[float, int], ...] = turnos_de(valor("PER-01"))  # (hora, playeros)
+    pct_gnc: float = valor("DEM-05")
+    capacidad_cola: int | None = valor("PER-05")
+    disciplina_cola: str = valor("PER-06")       # "por_grupo" | "por_cara"
+    sorteo_producto_primero: bool = True         # clásico lo apaga para reproducir los dorados
+    tabla_demanda_relativa: bool = True          # DEM-07: factores relativos × litros del día
+    demanda_relativa: DemandaDiaria = DemandaDiaria(
+        valores=valor("DEM-07")[0], frecuencias=valor("DEM-07")[1]
+    )
+    inventario: tuple[InventarioProducto, ...] = INVENTARIO_REAL
+
+    # --- Inventario (clásico: un solo tanque) ---------------------------------
     tanque: ParametrosTanque = ParametrosTanque()
 
     # --- Control de la corrida ------------------------------------------------
@@ -398,6 +600,21 @@ class ParametrosSimulacion:
         mes_inicio, dia_inicio = self.fecha_inicio
         if not (1 <= mes_inicio <= 12 and 1 <= dia_inicio <= dias_del_mes(mes_inicio)):
             raise ValueError(f"fecha_inicio inválida: {self.fecha_inicio}.")
+        if self.estacion_real:
+            if not self.grupos or not self.productos:
+                raise ValueError("La estación real necesita grupos y productos.")
+            if self.disciplina_cola not in ("por_grupo", "por_cara"):
+                raise ValueError("disciplina_cola tiene que ser 'por_grupo' o 'por_cara'.")
+            if min(self.playeros_por_turno) < 1:
+                raise ValueError("Tiene que haber al menos 1 playero por turno.")
+            liquidos = {p.id for p in self.productos if not p.es_gnc}
+            inventariados = {i.producto for i in self.inventario}
+            if liquidos != inventariados:
+                raise ValueError(
+                    f"El inventario no cubre los productos líquidos: {liquidos} vs {inventariados}."
+                )
+            if not 0.0 <= self.pct_gnc < 1.0:
+                raise ValueError("pct_gnc tiene que estar entre 0 y 1.")
 
     # --- Valores derivados ----------------------------------------------------
     @property
@@ -436,6 +653,7 @@ class ParametrosSimulacion:
         real (que salen del Registro) no los pisen.
         """
         return cls(
+            estacion_real=False,
             modo_demanda="monte_carlo",
             dias=30,
             dias_calentamiento=1,
@@ -445,6 +663,9 @@ class ParametrosSimulacion:
             compra=Triangular(1.5, 3.0, 6.0),
             litros=Triangular(15.0, 30.0, 60.0),
             prob_compra=0.30,
+            sorteo_producto_primero=False,
+            tabla_demanda_relativa=False,
+            capacidad_cola=None,
             tanque=ParametrosTanque(
                 capacidad=40_000.0,
                 nivel_inicial=30_000.0,
@@ -456,17 +677,27 @@ class ParametrosSimulacion:
 
     @property
     def autos_por_dia(self) -> float:
-        """Clientes por día promedio.
+        """Clientes por día promedio (todos los productos, incluido el GNC).
 
         En modo 'esperada': litros del mes ÷ litros medios por cliente, repartidos en
         los días del mes de `fecha_inicio`. Nunca "litros ÷ 30 llamados autos" (B1).
-        En modo 'monte_carlo': media de la tabla empírica.
+        En modo 'monte_carlo': media de la tabla (absoluta en el clásico; la relativa
+        tiene media 1 y se aplica sobre el nivel derivado de los litros).
         """
         if self.modo_demanda == "esperada":
-            return (
-                self.litros_mes / dias_del_mes(self.fecha_inicio[0])
-            ) / self.litros_medios_por_cliente
+            return self._llegadas_base()
+        if self.tabla_demanda_relativa and self.estacion_real:
+            return self._llegadas_base()
         return self.demanda.media
+
+    def _llegadas_base(self) -> float:
+        """Clientes/día que se derivan de `litros_mes` (líquidos + GNC)."""
+        liquidos = (
+            self.litros_mes / dias_del_mes(self.fecha_inicio[0])
+        ) / self.litros_medios_por_cliente
+        if self.estacion_real:
+            return liquidos / (1.0 - self.pct_gnc)
+        return liquidos
 
     def _fecha_del_dia(self, dia: int) -> tuple[int, int]:
         """(mes, día de la semana) de la fecha del día `dia` de la corrida.
@@ -509,11 +740,51 @@ class ParametrosSimulacion:
         """Clientes del día `dia` de la corrida, con estacionalidad y tipo de día."""
         if self.modo_demanda != "esperada":
             return self.autos_por_dia
-        return self.litros_del_dia(dia) / self.litros_medios_por_cliente
+        liquidos = self.litros_del_dia(dia) / self.litros_medios_por_cliente
+        if self.estacion_real:
+            return liquidos / (1.0 - self.pct_gnc)
+        return liquidos
+
+    def pesos_llegada(self) -> tuple[float, ...]:
+        """Pesos de llegada por producto (líquidos + GNC al final, cadena §14.2).
+
+        peso = % de litros ÷ carga media del producto, normalizado; el GNC entra
+        como `pct_gnc` de las llegadas.
+        """
+        pesos = [
+            p.pct_litros / p.carga_media for p in self.productos if not p.es_gnc
+        ]
+        total = sum(pesos)
+        salida = [w / total * (1.0 - self.pct_gnc) for w in pesos]
+        salida.append(self.pct_gnc)
+        return tuple(salida)
+
+    def media_servicio_liquidos(self) -> float:
+        """Tiempo medio de servicio de un cliente de nafta/diésel.
+
+        TIE-02 (media 5 min) más el extra de camión (litros ÷ 90, TIE-03) ponderado
+        por la fracción de camiones de cada producto.
+        """
+        tipos = {t.id: t for t in self.tipos_vehiculo}
+        matriz = dict(self.matriz_tipos)
+        base = Triangular(*valor("TIE-02")).media
+        litros_camion = tipos["camion"].litros.media
+        pesos = self.pesos_llegada()[:-1]          # sin el GNC
+        total = sum(pesos)
+        extra = 0.0
+        for prod, w in zip(
+            (p for p in self.productos if not p.es_gnc), pesos
+        ):
+            extra += (w / total) * matriz[prod.id][_TIPOS_MATRIZ.index("camion")] \
+                * litros_camion / 90.0
+        return base + extra
 
     @property
     def litros_por_dia(self) -> float:
-        """Consumo diario esperado de combustible."""
+        """Consumo diario esperado de combustible (líquidos)."""
+        if self.estacion_real:
+            liquidos = self.autos_por_dia * (1.0 - self.pct_gnc)
+            return liquidos * self.litros_medios_por_cliente
         return self.autos_por_dia * self.litros.media
 
     @property
@@ -525,8 +796,14 @@ class ParametrosSimulacion:
         """Intensidad de tráfico en la hora pico de un día promedio: ρ = λ_pico·E[S] / c.
 
         Es el cálculo analítico previo. Si ρ ≥ 1 en el pico, durante esa hora la cola
-        crece sin parar y sólo la frena el abandono de clientes.
+        crece sin parar y sólo la frena el abandono de clientes. En la estación real
+        el cuello son los playeros (PER-01), no las caras.
         """
+        if self.estacion_real:
+            # Sólo los clientes de nafta y diésel usan playero (el GNC no, PER-04).
+            lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia) * (1.0 - self.pct_gnc)
+            playeros_pico = max(self.playeros_por_turno)
+            return (lambda_pico * self.media_servicio_liquidos()) / playeros_pico
         lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia)
         return (lambda_pico * self.carga.media) / self.surtidores
 

@@ -41,6 +41,8 @@ class Cuadro:
     perdidos_sin_combustible: int # los que se fueron porque no había nafta (acumulado)
     pedidos_en_camino: int        # camiones cisterna pedidos y todavía no llegados
     en_calentamiento: bool
+    playeros_ocupados: int = 0    # playeros atendiendo en este instante (estación real)
+    playeros_en_turno: int = 0    # playeros que corresponden al turno (estación real)
 
     @property
     def perdidos(self) -> int:

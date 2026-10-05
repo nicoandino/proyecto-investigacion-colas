@@ -135,7 +135,7 @@ INDICADORES_INVENTARIO: tuple[Metrica, ...] = (
               "inmovilizado: cuanto más alto, más cuesta mantenerlo.",
     ),
     Metrica(
-        "pedidos_dia", "Pedidos al camión por día", "pedidos/día", 3,
+        "pedidos_dia", "Pedidos al camión por día", "ped./día", 2,
         ayuda="Cuántos camiones cisterna se piden. Cada uno cuesta el flete.",
     ),
     Metrica(
@@ -156,6 +156,13 @@ INDICADORES_COMPLEMENTARIOS: tuple[Metrica, ...] = (
             ayuda="El peor momento del mes: sirve para dimensionar el espacio físico."),
     Metrica("max_espera_surtidor", "Espera máxima (surtidor)", "min", 1,
             ayuda="La peor espera que sufrió un cliente en todo el mes."),
+    Metrica("util_playeros", "Utilización de playeros", "", 1, porcentaje=True,
+            mejor_bajo=False,
+            ayuda="Playeros atendiendo ÷ playeros en turno, promedio en el tiempo. En la "
+                  "estación real el cuello de botella son los playeros, no las caras."),
+    Metrica("perdidos_cola_llena_dia", "Perdidos por cola llena", "autos/día", 2,
+            ayuda="Llegaron y la fila de su zona ya estaba completa: no entraron "
+                  "(capacidad de cola finita)."),
 )
 
 TODAS: tuple[Metrica, ...] = (
@@ -184,6 +191,44 @@ COMPARACION: tuple[Metrica, ...] = (
 # =============================================================================
 # Textos largos
 # =============================================================================
+DESCRIPCION_MODELO_REAL = """
+El modelo reproduce la **estación Shell de Av. Balloffet y Los Sauces** (San Rafael, Mendoza)
+durante el horizonte elegido. Cada día se simula con calendario real y hay dos subsistemas
+que se afectan entre sí.
+
+#### 1. Líneas de espera (el playón)
+
+1. **Llegadas**: **proceso de Poisson no homogéneo**; la tasa sigue el perfil horario de
+   `DEM-02`. Los clientes por día **se derivan de los litros por mes** (nunca al revés).
+2. **Cliente "producto primero"** (Monte Carlo de 5 pasos, tablas en la pestaña Demanda):
+   se sortea el **producto** (Súper, V-Power, Diésel G2, Diésel G3 o GNC) y, condicionado a
+   él, el **tipo de vehículo** (moto, auto, pick-up, camión). Los litros salen de una
+   triangular `(0,20 · T ; 0,30 · T ; 1,00 · T)` según el tanque del vehículo.
+3. **Tres zonas de caras**: A nafta (4), B diésel (2) y C GNC (6). Cada zona tiene su cola
+   FIFO (o una fila por cara) y una **capacidad de cola finita**: si está llena, el auto
+   no entra.
+4. **Playeros por turno** (noche · mañana · tarde): para cargar nafta o diésel hace falta
+   una **cara libre y un playero**, así que los servidores son `mín(caras libres,
+   playeros en turno)`. El GNC sólo conecta la manguera y no retiene playero.
+5. **Caja del minimarket**: los que cargaron entran con probabilidad p (Bernoulli); es la
+   segunda cola de la red. Quien se va sin cargar **no** pasa por la caja.
+6. **Abandono (reneging)**: si la espera hasta empezar a ser atendido supera la paciencia,
+   el cliente se va.
+
+#### 2. Inventario (un tanque por producto líquido)
+
+7. **Consumo**: cada carga descuenta litros **del tanque de su producto** al empezar a
+   cargar. El GNC no tiene tanque (se mide en m³).
+8. **Política (s, Q) por producto**: cuando la posición de inventario del producto cae por
+   debajo de `s` se pide un camión con `Q` litros; tarda un plazo aleatorio en llegar.
+9. **Quiebre de stock**: si el tanque de un producto se vacía, ese producto no se vende.
+
+#### Pérdidas por motivo
+`sin_combustible` · `abandono_espera` · `cola_llena` · `abandono_caja` (y `corte_gnc` y la
+migración del GNC a nafta, que llegan en la Fase 6). Todo cliente que llega termina en
+exactamente una categoría: atendido, perdido (un motivo) o todavía adentro.
+"""
+
 DESCRIPCION_MODELO = """
 El modelo reproduce un **mes completo** de una estación de servicio, con dos subsistemas
 que se afectan entre sí.
@@ -266,4 +311,21 @@ SUPUESTOS = [
     "No se modelan fallas de equipos, cortes de luz ni faltantes del proveedor.",
     "El precio y el margen por litro se consideran constantes.",
     "Los días son independientes entre sí: no hay efecto de día de semana ni de quincena.",
+]
+
+
+SUPUESTOS_REAL = [
+    "Los datos de la propia estación **todavía no existen**: la demanda, la dotación y el "
+    "resto son estimaciones o supuestos del Registro (pestaña Datos y fuentes).",
+    "Playa de 24 horas con servicio atendido; el GNC no retiene playero (PER-04).",
+    "Un vehículo por cara y una cola FIFO única por zona (PER-06); capacidad de cola finita "
+    "(PER-05, sin dato: hay que relevarla).",
+    "Playeros por turno 1 · 2 · 2 (noche · mañana · tarde) y una sola caja (PER-01/PER-02).",
+    "El tipo de vehículo por producto es un supuesto del orquestador (VEH-00).",
+    "Las cargas siguen `Triangular(0,2·T ; 0,3·T ; 1,0·T)`: carga media = 0,5 × tanque (C12).",
+    "Un tanque por producto líquido de 20.000 L con política (s, Q) derivada de la demanda "
+    "(INV-07); el GNC no tiene tanque y por ahora nunca se corta (Fase 6).",
+    "Márgenes, flete y almacenamiento son placeholders heredados del proyecto hipotético "
+    "(ECO-*): los pesos que se informan no son todavía una conclusión económica.",
+    "Un cliente que se va no vuelve más tarde: se cuenta como venta perdida.",
 ]

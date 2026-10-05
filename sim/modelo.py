@@ -4,24 +4,35 @@ El sistema tiene DOS SUBSISTEMAS ACOPLADOS:
 
 1. LÍNEAS DE ESPERA (el playón)
 
-       llega -> cola de surtidores -> carga -> con probabilidad p: cola de caja -> compra
+       llega -> cola de caras -> carga -> con probabilidad p: cola de caja -> compra
                      │                                                   │
                      └── abandona si espera > paciencia                  └── abandona
 
-2. INVENTARIO (el tanque)
+2. INVENTARIO (los tanques por producto)
 
-       cada carga descuenta litros del tanque. Cuando la posición de inventario
-       (lo que hay + lo que viene en camino) cae por debajo del PUNTO DE PEDIDO, se
-       pide un camión cisterna, que tarda un PLAZO DE ENTREGA aleatorio en llegar.
+       cada carga descuenta litros del tanque de su producto. Cuando la posición de
+       inventario (lo que hay + lo que viene en camino) cae por debajo del PUNTO DE
+       PEDIDO, se pide un camión cisterna, que tarda un PLAZO DE ENTREGA aleatorio.
 
-Los dos subsistemas están acoplados: si el tanque se vacía, no importa cuántos surtidores
-haya, la estación no vende. Y al revés, cuantos más autos se atienden, más rápido se
-consume el tanque. Por eso las dos decisiones (cuánta capacidad de atención y qué política
-de reposición) compiten por la misma plata y no se pueden analizar por separado.
+Los dos subsistemas están acoplados: si el tanque se vacía, no importa cuántas caras
+haya, la estación no vende ese producto. Y al revés, cuantos más autos se atienden,
+más rápido se consume el tanque. Por eso las dos decisiones (cuánta capacidad de
+atención y qué política de reposición) compiten por la misma plata.
 
-La demanda no es constante: cada día se sortea cuántos autos van a llegar con el método
-Monte Carlo (tabla de frecuencias empírica) y esos autos se reparten en el día según el
-perfil horario, mediante un proceso de Poisson no homogéneo.
+Desde la Fase 2 hay DOS montajes:
+
+  - Estación REAL (§7): 3 grupos (A nafta 4 caras, B diésel 2, C GNC 6), 5 productos,
+    cliente "producto primero" con Monte Carlo de 5 pasos, playeros por turno
+    (servidores = mín(caras libres, playeros en turno)), cola finita y un tanque con
+    política (s, Q) por producto líquido.
+  - Caso CLÁSICO (`ParametrosSimulacion.clasico()`): 1 grupo, 1 producto, sin playeros,
+    sin cola finita. Reproduce EXACTAMENTE los números dorados (§14.1): por eso su
+    rama conserva el orden original de sorteos y de eventos.
+
+La demanda no es constante: cada día se sortea cuántos autos van a llegar (Monte Carlo
+de la tabla empírica, o "demanda esperada" derivada de los litros por mes) y esos autos
+se reparten en el día según el perfil horario, mediante un proceso de Poisson no
+homogéneo.
 """
 
 from __future__ import annotations
@@ -35,6 +46,8 @@ from sim.distribuciones import Aleatorio
 from sim.estadisticas import Indicadores
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
+MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
+
 
 @dataclass
 class Auto:
@@ -43,14 +56,19 @@ class Auto:
     id: int
     t_llegada: float
     hora: int          # hora del día en que llegó (para los indicadores por franja)
+    producto: str      # "super" | "vpower" | "diesel_g2" | "diesel_g3" | "gnc"
+    tipo: str          # "moto" | "auto" | "pick_up" | "camion" | "auto_gnc"
+    litros: float      # litros (o m³ para el GNC)
     t_carga: float
-    litros: float
     compra: bool       # atributo "tipo de cliente": solo carga / carga + compra
     t_compra: float
+    grupo: str = ""    # "A" | "B" | "C" (en el clásico queda vacío)
+    numero_producto: int = 0   # número aleatorio (01-100) del sorteo de producto
+    numero_tipo: int = 0       # número aleatorio del sorteo de tipo de vehículo
 
 
 class EstacionDeServicio:
-    """Los recursos de la estación, el tanque y la lógica de los procesos."""
+    """Los recursos de la estación, los tanques y la lógica de los procesos."""
 
     def __init__(
         self,
@@ -66,22 +84,16 @@ class EstacionDeServicio:
         self.ind = indicadores
         self.traza = traza
 
-        # Recursos con cola FIFO: es lo que hace SimPy por defecto.
-        self.surtidores = simpy.Resource(env, capacity=p.surtidores)
-        self.cajas = simpy.Resource(env, capacity=p.cajas)
-
-        # Estado del inventario
-        self.nivel = p.tanque.nivel_inicial
-        self.litros_en_camino = 0.0
-        self.pedidos_en_camino = 0
         self.hubo_quiebre_hoy = False
-
-        # Demanda del día en curso (la fija el proceso de días). `tasas_hora` es la λ de
-        # cada hora, precalculada una vez por día en lugar de recalcularla en cada llegada.
         self.autos_del_dia = int(p.demanda.media)
         self.tasas_hora = p.perfil.tasas_por_hora(self.autos_del_dia)
         self.numero_aleatorio_dia = 0
         self.autos_llegados_hoy = 0
+
+        if p.estacion_real:
+            self._montar_real()
+        else:
+            self._montar_clasico()
 
         # Procesos
         env.process(self.correr_dias())
@@ -91,14 +103,127 @@ class EstacionDeServicio:
             env.process(self.registrar_inventario())
 
     # =========================================================================
+    # Montaje de los recursos
+    # =========================================================================
+    def _montar_clasico(self) -> None:
+        """El caso clásico: una cola FIFO única y N surtidores, sin playeros."""
+        self.es_real = False
+        self.surtidores = simpy.Resource(self.env, capacity=self.p.surtidores)
+        self.cajas = simpy.Resource(self.env, capacity=self.p.cajas)
+        self.playeros = None
+        self.gnc_cortado = False
+        self.nivel = self.p.tanque.nivel_inicial
+        self.litros_en_camino = 0.0
+        self.pedidos_en_camino = 0
+
+    def _montar_real(self) -> None:
+        """La estación real: grupos de caras, playeros por turno, cola finita."""
+        self.es_real = True
+        self.info_grupo = {g.id: g for g in self.p.grupos}
+        self.gnc_cortado = False            # los episodios llegan en la Fase 6
+
+        # Caras: un recurso por grupo (FIFO) o una fila por cara, según la disciplina.
+        self.cola_recurso: dict[str, simpy.Resource] = {}
+        self.caras: dict[str, tuple[simpy.Resource, ...]] = {}
+        for grupo in self.p.grupos:
+            if self.p.disciplina_cola == "por_grupo":
+                self.cola_recurso[grupo.id] = simpy.Resource(
+                    self.env, capacity=grupo.caras
+                )
+            else:
+                self.caras[grupo.id] = tuple(
+                    simpy.Resource(self.env, capacity=1) for _ in range(grupo.caras)
+                )
+
+        # Playeros por turno: reservas ficticias con prioridad -1 ajustan la capacidad.
+        self.max_playeros = max(self.p.playeros_por_turno)
+        self.playeros = simpy.PriorityResource(self.env, capacity=self.max_playeros)
+        self.reservas_playeros: list[simpy.events.Event] = []
+        self.env.process(self.controlar_turnos())
+
+        # Cajas del minimarket: 1 caja constante (PER-02 = 1·1·1).
+        self.cajas = simpy.Resource(self.env, capacity=self.p.cajas)
+
+        # Inventario por producto líquido.
+        self.niveles: dict[str, float] = {
+            i.producto: i.nivel_inicial for i in self.p.inventario
+        }
+        self.en_camino: dict[str, float] = {i.producto: 0.0 for i in self.p.inventario}
+        self.pedidos_en_camino: dict[str, int] = {i.producto: 0 for i in self.p.inventario}
+        self.hubo_quiebre_hoy = {i.producto: False for i in self.p.inventario}
+        self.info_inventario = {i.producto: i for i in self.p.inventario}
+
+        # Pesos de sorteo: producto (§14.2) y tipo de vehículo por producto (VEH-00).
+        self.pesos_producto = self.p.pesos_llegada()
+        self.productos_liquidos = [pr for pr in self.p.productos if not pr.es_gnc]
+        tipos = {t.id: t for t in self.p.tipos_vehiculo}
+        self.info_tipo = tipos
+        self.tipos_en_orden = tuple(t.id for t in self.p.tipos_vehiculo)
+        matriz = dict(self.p.matriz_tipos)
+        self.pesos_tipo = {
+            pr.id: matriz[pr.id] for pr in self.p.productos
+        }
+        self.tipo_gnc = "auto_gnc"
+
+        # Carga mínima de cada producto (para el indicador "sin combustible").
+        self.min_carga = {}
+        for pr in self.p.productos:
+            if pr.es_gnc:
+                continue
+            minimos = [
+                tipos[t].litros.minimo for t, w in zip(self.tipos_en_orden, matriz[pr.id])
+                if w > 0 and not tipos[t].es_gnc
+            ]
+            self.min_carga[pr.id] = min(minimos)
+
+        self._actualizar_sin_combustible()
+
+    # =========================================================================
+    # Playeros por turno (§7.2): capacidad - reservas = playeros del turno
+    # =========================================================================
+    def controlar_turnos(self):
+        """En cada borde de turno ajusta las reservas ficticias de playeros."""
+        turnos = list(self.p.turnos)
+        self._ajustar_playeros(turnos[0][1])
+        while True:                                  # los turnos se repiten todos los días
+            for i, (hora, _) in enumerate(turnos):
+                siguiente = turnos[(i + 1) % len(turnos)]
+                borde = ((siguiente[0] - hora) % 24) * 60.0
+                yield self.env.timeout(borde)
+                self._ajustar_playeros(siguiente[1])
+
+    def _ajustar_playeros(self, playeros_del_turno: int) -> None:
+        """Toma (prioridad -1) o libera reservas hasta `capacidad - reservas = turno`."""
+        objetivo = self.max_playeros - playeros_del_turno
+        actual = len(self.reservas_playeros)
+        if objetivo > actual:
+            for _ in range(objetivo - actual):
+                self.reservas_playeros.append(self.playeros.request(priority=-1))
+        elif objetivo < actual:
+            for _ in range(actual - objetivo):
+                pedido = self.reservas_playeros.pop()
+                if pedido.triggered:
+                    self.playeros.release(pedido)
+                else:
+                    pedido.cancel()
+        self.ind.playeros_en_turno.cambiar(self.env.now, float(playeros_del_turno))
+
+    # =========================================================================
     # Procesos de control
     # =========================================================================
     def correr_dias(self):
         """Un proceso por día: sortea la demanda (Monte Carlo) o deriva la esperada."""
         for dia in range(1, self.p.dias + 1):
-            # --- Demanda: esperada (litros/mes con calendario) o Monte Carlo ---
             if self.p.modo_demanda == "esperada":
                 autos, numero = self.az.esperada(self.p.autos_por_dia_fecha(dia))
+            elif self.p.tabla_demanda_relativa and self.es_real:
+                # Monte Carlo real: un factor relativo (DEM-07) multiplica el nivel
+                # del día derivado de los litros del mes.
+                factor, numero = self.az.empirica(self.p.demanda_relativa, "demanda")
+                liquidos = (
+                    self.p.litros_del_dia(dia) / self.p.litros_medios_por_cliente
+                )
+                autos = round(liquidos * factor / (1.0 - self.p.pct_gnc))
             else:
                 autos, numero = self.az.empirica(self.p.demanda, "demanda")
 
@@ -106,13 +231,21 @@ class EstacionDeServicio:
             self.tasas_hora = self.p.perfil.tasas_por_hora(autos)
             self.numero_aleatorio_dia = numero
             self.autos_llegados_hoy = 0
-            self.hubo_quiebre_hoy = False
+            self.hubo_quiebre_hoy = (
+                {i.producto: False for i in self.p.inventario} if self.es_real else False
+            )
 
             antes = _foto(self.ind.c_total)
             yield self.env.timeout(MINUTOS_POR_DIA)
             despues = _foto(self.ind.c_total)
 
-            if self.hubo_quiebre_hoy:
+            if self.es_real:
+                if any(self.hubo_quiebre_hoy.values()):
+                    self.ind.contar("dias_con_quiebre")
+                for producto, quiebre in self.hubo_quiebre_hoy.items():
+                    if quiebre:
+                        self.ind.contar_producto(producto, "dias_con_quiebre")
+            elif self.hubo_quiebre_hoy:
                 self.ind.contar("dias_con_quiebre")
 
             if self.traza is not None:
@@ -129,7 +262,10 @@ class EstacionDeServicio:
                             - antes["perdidos_sin_combustible"]
                         ),
                         litros_vendidos=despues["litros_vendidos"] - antes["litros_vendidos"],
-                        hubo_quiebre=self.hubo_quiebre_hoy,
+                        hubo_quiebre=(
+                            any(self.hubo_quiebre_hoy.values())
+                            if self.es_real else self.hubo_quiebre_hoy
+                        ),
                         en_calentamiento=dia <= self.p.dias_calentamiento,
                     )
                 )
@@ -173,20 +309,78 @@ class EstacionDeServicio:
             contador += 1
             self.autos_llegados_hoy += 1
             ahora = self.env.now
-            auto = Auto(
+            auto = self._crear_auto(contador, ahora)
+            self.env.process(self.atender(auto))
+
+    def _crear_auto(self, contador: int, ahora: float) -> Auto:
+        """Sorteo de todos los atributos del cliente AL LLEGAR (streams propios).
+
+        El orden de los sorteos es parte del contrato de reproducibilidad:
+          - clásico: t_carga, litros, compra, t_compra (el orden original, para los
+            dorados);
+          - real: producto (Monte Carlo), tipo de vehículo (Monte Carlo), litros,
+            t_carga, compra, t_compra.
+        """
+        hora = int((ahora % MINUTOS_POR_DIA) // 60)
+        if not self.es_real:
+            compra = self.az.bernoulli(self.p.prob_compra, "decision")
+            t_compra = (
+                self.az.exponencial(self.p.compra.media, "compra")
+                if self.p.caja_exponencial
+                else self.az.triangular(self.p.compra, "compra")
+            )
+            return Auto(
                 id=contador,
                 t_llegada=ahora,
-                hora=int((ahora % MINUTOS_POR_DIA) // 60),
+                hora=hora,
+                producto="super",
+                tipo="auto",
                 t_carga=self.az.triangular(self.p.carga, "carga"),
                 litros=self.az.triangular(self.p.litros, "litros"),
-                compra=self.az.bernoulli(self.p.prob_compra, "decision"),
-                t_compra=(
-                    self.az.exponencial(self.p.compra.media, "compra")
-                    if self.p.caja_exponencial
-                    else self.az.triangular(self.p.compra, "compra")
-                ),
+                compra=compra,
+                t_compra=t_compra,
             )
-            self.env.process(self.atender(auto))
+
+        # --- Producto (Monte Carlo de 5 pasos, tabla visible en la interfaz) ---
+        i_producto, n_producto = self.az.discreta_con_numero(
+            self.pesos_producto, "producto"
+        )
+        producto = self.p.productos[i_producto]
+        grupo = producto.grupo
+
+        # --- Tipo de vehículo condicionado al producto (segunda tabla) ---
+        pesos_tipo = self.pesos_tipo[producto.id]
+        i_tipo, n_tipo = self.az.discreta_con_numero(pesos_tipo, "tipo_vehiculo")
+        tipo = self.tipo_gnc if producto.es_gnc else self.tipos_en_orden[i_tipo]
+        info_tipo = self.info_tipo[tipo]
+
+        litros = self.az.triangular(info_tipo.litros, "litros")
+        if producto.id == "gnc":
+            t_carga = self.az.triangular(self.p.carga_gnc, "carga")   # TIE-04
+        else:
+            t_carga = self.az.triangular(self.p.carga, "carga")       # TIE-02
+        if info_tipo.es_camion:
+            t_carga += litros / 90.0                      # TIE-03: alto caudal
+        compra = self.az.bernoulli(self.p.prob_compra, "decision")
+        t_compra = (
+            self.az.exponencial(self.p.compra.media, "compra")
+            if self.p.caja_exponencial
+            else self.az.triangular(self.p.compra, "compra")
+        )
+        return Auto(
+            id=contador,
+            t_llegada=ahora,
+            hora=hora,
+            producto=producto.id,
+            tipo=tipo,
+            litros=litros,
+            t_carga=t_carga,
+            compra=compra,
+            t_compra=t_compra,
+            grupo=grupo,
+            numero_producto=n_producto,
+            numero_tipo=n_tipo,
+        )
 
     def registrar_animacion(self):
         """Graba los cuadros de la animación, sólo durante el día elegido."""
@@ -196,65 +390,111 @@ class EstacionDeServicio:
         while self.env.now < fin:
             self.traza.capturar(
                 t=self.env.now,
-                surtidores_ocupados=self.surtidores.count,
-                cola_surtidor=len(self.surtidores.queue),
+                surtidores_ocupados=self._caras_ocupadas(),
+                cola_surtidor=self._cola_total(),
                 cajas_ocupadas=self.cajas.count,
                 cola_caja=len(self.cajas.queue),
                 atendidos=self.ind.c_total.atendidos_surtidor,
                 perdidos_surtidor=self.ind.c_total.perdidos_surtidor,
                 compras=self.ind.c_total.compras_atendidas,
                 perdidos_caja=self.ind.c_total.perdidos_caja,
-                nivel_tanque=self.nivel,
+                nivel_tanque=self._nivel_total(),
                 perdidos_sin_combustible=self.ind.c_total.perdidos_sin_combustible,
-                pedidos_en_camino=self.pedidos_en_camino,
+                pedidos_en_camino=self._pedidos_en_camino_total(),
                 en_calentamiento=not self.ind.calentamiento_terminado,
+                playeros_ocupados=int(self.ind.playeros_ocupados.valor),
+                playeros_en_turno=int(self.ind.playeros_en_turno.valor),
             )
             yield self.env.timeout(self.p.dt_traza)
 
     def registrar_inventario(self):
-        """Muestrea el nivel del tanque durante toda la corrida (gráfico del mes)."""
+        """Muestrea el nivel de los tanques durante toda la corrida (gráfico del mes)."""
         while True:
-            self.traza.capturar_inventario(self.env.now, self.nivel, self.pedidos_en_camino)
+            self.traza.capturar_inventario(
+                self.env.now, self._nivel_total(), self._pedidos_en_camino_total()
+            )
             yield self.env.timeout(DT_INVENTARIO)
 
     # =========================================================================
     # Inventario
     # =========================================================================
-    def _actualizar_nivel(self, nuevo: float) -> None:
+    def _nivel_total(self) -> float:
+        if self.es_real:
+            return sum(self.niveles.values())
+        return self.nivel
+
+    def _pedidos_en_camino_total(self) -> int:
+        if self.es_real:
+            return sum(self.pedidos_en_camino.values())
+        return self.pedidos_en_camino
+
+    def _caras_ocupadas(self) -> int:
+        if not self.es_real:
+            return self.surtidores.count
+        if self.cola_recurso:
+            return sum(r.count for r in self.cola_recurso.values())
+        return sum(c.count for caras in self.caras.values() for c in caras)
+
+    def _cola_total(self) -> int:
+        if not self.es_real:
+            return len(self.surtidores.queue)
+        if self.cola_recurso:
+            return sum(len(r.queue) for r in self.cola_recurso.values())
+        return sum(len(c.queue) for caras in self.caras.values() for c in caras)
+
+    def _actualizar_nivel_clasico(self, nuevo: float) -> None:
         self.nivel = nuevo
         self.ind.nivel_tanque.cambiar(self.env.now, nuevo)
-        # Se considera que la estación está sin combustible cuando no alcanza ni para la
-        # carga más chica posible.
         sin_stock = 1.0 if nuevo < self.p.litros.minimo else 0.0
         if sin_stock != self.ind.sin_combustible.valor:
             self.ind.sin_combustible.cambiar(self.env.now, sin_stock)
 
-    def hay_combustible(self, litros: float) -> bool:
-        return self.nivel >= litros
+    def _actualizar_niveles(self, producto: str, nuevo: float) -> None:
+        self.niveles[producto] = nuevo
+        self.ind.niveles[producto].cambiar(self.env.now, nuevo)
+        self.ind.nivel_tanque.cambiar(self.env.now, self._nivel_total())
+        self._actualizar_sin_combustible()
 
-    def consumir(self, litros: float) -> None:
-        """Descuenta del tanque y revisa si hay que pedir.
+    def _actualizar_sin_combustible(self) -> None:
+        """La estación está 'sin combustible' cuando ningún líquido alcanza para su
+        carga mínima (el GNC no entra: en la Fase 2 nunca se corta)."""
+        sin_stock = 1.0 if all(
+            self.niveles[p] < self.min_carga[p] for p in self.niveles
+        ) else 0.0
+        if sin_stock != self.ind.sin_combustible.valor:
+            self.ind.sin_combustible.cambiar(self.env.now, sin_stock)
 
-        No se acota en cero a propósito: si alguna vez quedara negativo sería un error de
-        modelado, y el control de conservación de litros de `verificar.py` lo detectaría.
-        """
-        self._actualizar_nivel(self.nivel - litros)
-        self.ind.contar("litros_vendidos", litros)
-        self.revisar_punto_pedido()
+    def hay_combustible(self, auto: Auto) -> bool:
+        if not self.es_real:
+            return self.nivel >= auto.litros
+        if auto.producto == "gnc":
+            return not self.gnc_cortado          # los episodios llegan en la Fase 6
+        return self.niveles[auto.producto] >= auto.litros
 
-    def revisar_punto_pedido(self) -> None:
-        """Política (s, Q): si la posición de inventario cae bajo el punto de pedido, pide.
+    def consumir(self, auto: Auto) -> None:
+        """Descuenta del tanque del producto y revisa si hay que pedir."""
+        if not self.es_real:
+            self._actualizar_nivel_clasico(self.nivel - auto.litros)
+            self.ind.contar("litros_vendidos", auto.litros)
+            self.ind.contar_producto(auto.producto, "litros_vendidos", auto.litros)
+            self.revisar_punto_pedido_clasico()
+            return
+        if auto.producto == "gnc":
+            # Sin tanque: sólo se registran los m³ del producto (no se suman a los litros).
+            self.ind.contar_producto("gnc", "litros_vendidos", auto.litros)
+            return
+        nuevo = self.niveles[auto.producto] - auto.litros
+        self._actualizar_niveles(auto.producto, nuevo)
+        self.ind.contar("litros_vendidos", auto.litros)
+        self.ind.contar_producto(auto.producto, "litros_vendidos", auto.litros)
+        self.revisar_punto_pedido(auto.producto)
 
-        La POSICIÓN de inventario es lo que hay en el tanque más lo que ya viene en camino.
-        Usarla (en vez del nivel a secas) evita pedir dos veces lo mismo mientras el primer
-        camión todavía está viajando.
-        """
+    def revisar_punto_pedido_clasico(self) -> None:
         posicion = self.nivel + self.litros_en_camino
         if posicion <= self.p.tanque.punto_pedido:
-            self.env.process(self.pedir_camion())
+            self.env.process(self.pedir_camion_clasico())
 
-    def pedir_camion(self):
-        """Emite un pedido y espera el plazo de entrega del camión cisterna."""
+    def pedir_camion_clasico(self):
         cantidad = self.p.tanque.cantidad_pedido
         self.litros_en_camino += cantidad
         self.pedidos_en_camino += 1
@@ -266,21 +506,72 @@ class EstacionDeServicio:
 
         self.litros_en_camino -= cantidad
         self.pedidos_en_camino -= 1
-        # No se puede meter más de lo que entra en el tanque.
         recibido = min(cantidad, self.p.tanque.capacidad - self.nivel)
-        self._actualizar_nivel(self.nivel + recibido)
+        self._actualizar_nivel_clasico(self.nivel + recibido)
         self.ind.contar("litros_recibidos", recibido)
-        self.ind.contar("pedidos_recibidos")
 
-    def registrar_venta_perdida(self, auto: Auto, por_combustible: bool) -> None:
-        """Un cliente que se va sin cargar: se pierde el combustible que habría comprado."""
-        self.ind.contar("litros_no_vendidos", auto.litros)
-        if por_combustible:
+    def revisar_punto_pedido(self, producto: str) -> None:
+        """Política (s, Q) por producto: pide si la posición cae bajo el punto.
+
+        La POSICIÓN de inventario es lo que hay en el tanque más lo que ya viene en
+        camino. Usarla (en vez del nivel a secas) evita pedir dos veces lo mismo
+        mientras el primer camión todavía está viajando.
+        """
+        posicion = self.niveles[producto] + self.en_camino[producto]
+        if posicion <= self.info_inventario[producto].punto_pedido:
+            self.env.process(self.pedir_camion(producto))
+
+    def pedir_camion(self, producto: str):
+        """Emite un pedido por producto y espera el plazo de entrega del camión."""
+        info = self.info_inventario[producto]
+        cantidad = info.cantidad_pedido
+        self.en_camino[producto] += cantidad
+        self.pedidos_en_camino[producto] += 1
+        self.ind.contar("pedidos_emitidos")
+        self.ind.contar_producto(producto, "pedidos_emitidos")
+
+        plazo = self.az.triangular(info.plazo_entrega_minutos, "entrega")
+        self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
+        yield self.env.timeout(plazo)
+
+        self.en_camino[producto] -= cantidad
+        self.pedidos_en_camino[producto] -= 1
+        # No se puede meter más de lo que entra en el tanque.
+        recibido = min(cantidad, info.capacidad - self.niveles[producto])
+        self._actualizar_niveles(producto, self.niveles[producto] + recibido)
+        self.ind.contar("litros_recibidos", recibido)
+        self.ind.contar_producto(producto, "litros_recibidos", recibido)
+        self.ind.contar_producto(producto, "pedidos_recibidos")
+
+    # =========================================================================
+    # Pérdidas (§7.6)
+    # =========================================================================
+    def registrar_perdida(self, auto: Auto, motivo: str) -> None:
+        """Un cliente que se va sin cargar, con su motivo (taxonomía fija §7.6)."""
+        if auto.producto != "gnc":
+            self.ind.contar("litros_no_vendidos", auto.litros)
+        self.ind.contar_producto(auto.producto, "litros_no_vendidos", auto.litros)
+        if motivo == "sin_combustible":
             self.ind.contar("perdidos_sin_combustible")
-            self.hubo_quiebre_hoy = True
-        else:
+            self.ind.contar_producto(auto.producto, "perdidos_sin_combustible")
+            self._marcar_quiebre(auto.producto)
+            if self.es_real:
+                self.ind.contar_grupo(auto.grupo, "perdidos_sin_combustible")
+        elif motivo == "cola_llena":
+            self.ind.contar("perdidos_cola_llena")
+            if self.es_real:
+                self.ind.contar_grupo(auto.grupo, "perdidos_cola_llena")
+        else:  # abandono_espera
             self.ind.contar("perdidos_surtidor")
+            if self.es_real:
+                self.ind.contar_grupo(auto.grupo, "perdidos_espera")
         self.ind.por_hora.contar_perdido(auto.hora)
+
+    def _marcar_quiebre(self, producto: str) -> None:
+        if self.es_real:
+            self.hubo_quiebre_hoy[producto] = True
+        else:
+            self.hubo_quiebre_hoy = True
 
     # =========================================================================
     # Proceso principal: el recorrido de un auto
@@ -290,19 +581,40 @@ class EstacionDeServicio:
         ahora = self.env.now
         self.ind.contar("llegadas")
         self.ind.por_hora.contar_llegada(auto.hora)
+        self.ind.contar_producto(auto.producto, "llegadas")
+        if self.es_real:
+            self.ind.contar_grupo(auto.grupo, "llegadas")
+            self.ind.litros_por_tipo[auto.tipo].agregar(auto.litros)
 
         # ---------- ¿Hay combustible para atenderlo? ----------
-        if not self.hay_combustible(auto.litros):
+        if not self.hay_combustible(auto):
             # Cartel de "sin nafta": ni siquiera hace la cola.
-            self.registrar_venta_perdida(auto, por_combustible=True)
+            self.registrar_perdida(auto, motivo="sin_combustible")
             return
 
-        # ---------- Cola y servicio en el surtidor ----------
+        # ---------- Cola y servicio en las caras ----------
+        # Los subgeneradores devuelven False si el cliente se fue sin cargar: ese cliente
+        # NO pasa por la caja del minimarket.
+        if self.es_real:
+            cargo = yield from self._atender_real(auto)
+        else:
+            cargo = yield from self._atender_clasico(auto)
+        if not cargo:
+            return
+
+        # ---------- Cola y servicio en la caja del minimarket ----------
+        if not auto.compra:
+            self.ind.tiempo_sistema.agregar(self.env.now - auto.t_llegada)
+            return
+        self.ind.contar("entraron_minimarket")
+        yield from self._pasar_por_caja(auto)
+
+    def _atender_clasico(self, auto: Auto) -> bool:
+        """El flujo original del proyecto hipotético, sin cambios (dorados)."""
+        ahora = self.env.now
         self.ind.cola_surtidor.sumar(ahora, +1)
         with self.surtidores.request() as pedido:
             if pedido.triggered:
-                # Había un surtidor libre: entra directo. No se agenda el reloj de
-                # paciencia porque no va a hacer falta (esto además acelera la corrida).
                 yield pedido
                 atendido = True
             else:
@@ -311,36 +623,138 @@ class EstacionDeServicio:
             self.ind.cola_surtidor.sumar(self.env.now, -1)
 
             if not atendido:
-                # Se cansó de esperar: venta de combustible perdida.
-                self.registrar_venta_perdida(auto, por_combustible=False)
-                return
+                self.registrar_perdida(auto, motivo="abandono_espera")
+                return False
 
             # Pudo haberse acabado el combustible mientras hacía la cola.
-            if not self.hay_combustible(auto.litros):
-                self.registrar_venta_perdida(auto, por_combustible=True)
-                return
+            if not self.hay_combustible(auto):
+                self.registrar_perdida(auto, motivo="sin_combustible")
+                return False
 
             espera_real = self.env.now - auto.t_llegada
             self.ind.espera_surtidor.agregar(espera_real)
+            self.ind.espera_cara.agregar(espera_real)
             self.ind.por_hora.contar_espera(auto.hora, espera_real)
 
-            # El combustible se descuenta AL EMPEZAR a cargar, no al terminar. Si se
-            # descontara al final, varios autos cargando a la vez podrían pasar cada uno
-            # el control de stock y entre todos sacar más litros de los que hay.
-            self.consumir(auto.litros)
+            self.consumir(auto)
 
             self.ind.ocupados_surtidores.sumar(self.env.now, +1)
             yield self.env.timeout(auto.t_carga)
             self.ind.ocupados_surtidores.sumar(self.env.now, -1)
             self.ind.contar("atendidos_surtidor")
-        # Al salir del `with`, el surtidor queda libre para el siguiente de la cola.
+            self.ind.contar_producto(auto.producto, "atendidos")
+            self.ind.servicio_suma += auto.t_carga
+        return True
 
-        if not auto.compra:
-            self.ind.tiempo_sistema.agregar(self.env.now - auto.t_llegada)
-            return
+    def _largo_cola(self, grupo: str) -> int:
+        if self.cola_recurso:
+            return len(self.cola_recurso[grupo].queue)
+        return sum(len(c.queue) for c in self.caras[grupo])
 
-        # ---------- Cola y servicio en la caja del minimarket ----------
-        self.ind.contar("entraron_minimarket")
+    def _pedir_cara(self, grupo: str):
+        """Devuelve el pedido por una cara del grupo (según la disciplina)."""
+        if self.cola_recurso:
+            return self.cola_recurso[grupo].request()
+        caras = self.caras[grupo]
+        fila = min(
+            caras, key=lambda c: len(c.queue) + c.count
+        )
+        return fila.request()
+
+    def _atender_real(self, auto: Auto) -> bool:
+        """Grupos de caras + playeros por turno + cola finita (§7.2)."""
+        ahora = self.env.now
+        grupo = auto.grupo
+
+        # ¿Hay lugar en la cola? (capacidad finita, PER-05)
+        if self.p.capacidad_cola is not None and (
+            self._largo_cola(grupo) >= self.p.capacidad_cola
+        ):
+            self.registrar_perdida(auto, motivo="cola_llena")
+            return False
+
+        self.ind.colas_grupo[grupo].sumar(ahora, +1)
+        self.ind.cola_surtidor.sumar(ahora, +1)
+
+        with self._pedir_cara(grupo) as pedido_cara:
+            if pedido_cara.triggered:
+                yield pedido_cara
+                atendido = True
+            else:
+                resultado = yield pedido_cara | self.env.timeout(
+                    self.p.paciencia_surtidor
+                )
+                atendido = pedido_cara in resultado
+            self.ind.colas_grupo[grupo].sumar(self.env.now, -1)
+            self.ind.cola_surtidor.sumar(self.env.now, -1)
+
+            if not atendido:
+                self.registrar_perdida(auto, motivo="abandono_espera")
+                return False
+
+            espera_cara = self.env.now - auto.t_llegada
+            self.ind.espera_cara.agregar(espera_cara)
+            self.ind.esperas_cara_grupo[grupo].agregar(espera_cara)
+
+            # Playero: primero la cara, después el playero (sin deadlock).
+            info_grupo = self.info_grupo[grupo]
+            if info_grupo.requiere_playero:
+                restante = self.p.paciencia_surtidor - espera_cara
+                with self.playeros.request(priority=0) as pedido_playero:
+                    if pedido_playero.triggered:
+                        yield pedido_playero
+                    else:
+                        resultado = yield pedido_playero | self.env.timeout(
+                            max(restante, 0.0)
+                        )
+                        if pedido_playero not in resultado:
+                            # Se cansó esperando al playero: libera la cara y se va.
+                            self.registrar_perdida(auto, motivo="abandono_espera")
+                            self.ind.contar("abandonos_playero")
+                            self.ind.contar_grupo(grupo, "abandonos_playero")
+                            return False
+
+                    # Pudo haberse acabado el combustible mientras hacía la cola.
+                    if not self.hay_combustible(auto):
+                        self.registrar_perdida(auto, motivo="sin_combustible")
+                        return False
+                    self.ind.playeros_ocupados.sumar(self.env.now, +1)
+
+                    espera_real = self.env.now - auto.t_llegada
+                    self.ind.espera_surtidor.agregar(espera_real)
+                    self.ind.esperas_grupo[grupo].agregar(espera_real)
+                    self.ind.por_hora.contar_espera(auto.hora, espera_real)
+
+                    self.consumir(auto)
+                    yield from self._servir(auto, grupo)
+
+                    self.ind.playeros_ocupados.sumar(self.env.now, -1)
+            else:
+                # El GNC no retiene playero (PER-04): sólo conecta la manguera.
+                if not self.hay_combustible(auto):
+                    self.registrar_perdida(auto, motivo="sin_combustible")
+                    return False
+                espera_real = self.env.now - auto.t_llegada
+                self.ind.espera_surtidor.agregar(espera_real)
+                self.ind.esperas_grupo[grupo].agregar(espera_real)
+                self.ind.por_hora.contar_espera(auto.hora, espera_real)
+                self.consumir(auto)
+                yield from self._servir(auto, grupo)
+        return True
+
+    def _servir(self, auto: Auto, grupo: str) -> None:
+        """El tiempo de carga en la cara, contado para la utilización del grupo."""
+        self.ind.ocupados_grupo[grupo].sumar(self.env.now, +1)
+        self.ind.ocupados_surtidores.sumar(self.env.now, +1)
+        yield self.env.timeout(auto.t_carga)
+        self.ind.ocupados_grupo[grupo].sumar(self.env.now, -1)
+        self.ind.ocupados_surtidores.sumar(self.env.now, -1)
+        self.ind.contar("atendidos_surtidor")
+        self.ind.contar_grupo(grupo, "atendidos")
+        self.ind.contar_producto(auto.producto, "atendidos")
+        self.ind.servicio_suma += auto.t_carga
+
+    def _pasar_por_caja(self, auto: Auto) -> None:
         t_entrada_cola = self.env.now
         self.ind.cola_caja.sumar(t_entrada_cola, +1)
         with self.cajas.request() as pedido:
@@ -385,12 +799,7 @@ def simular(
     """Corre UNA réplica del modelo y devuelve los indicadores (y la traza, si se pidió)."""
     env = simpy.Environment()
     aleatorio = Aleatorio(semilla)
-    indicadores = Indicadores(
-        capacidad_surtidores=p.surtidores,
-        capacidad_cajas=p.cajas,
-        nivel_inicial_tanque=p.tanque.nivel_inicial,
-        capacidad_tanque=p.tanque.capacidad,
-    )
+    indicadores = Indicadores(p)
     traza = Traza() if con_traza else None
 
     EstacionDeServicio(env, p, aleatorio, indicadores, traza)

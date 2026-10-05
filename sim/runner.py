@@ -87,10 +87,31 @@ class ResultadoReplica:
     # --- Por hora (para el gráfico del perfil) -------------------------------
     hora_pico: int
 
+    # --- Estación real (Fase 2): por motivo, grupo y producto -----------------
+    perdidos_cola_llena_dia: float = 0.0
+    util_playeros: float = 0.0            # playeros ocupados ÷ playeros en turno (promedio temporal)
+    espera_por_grupo: tuple[float, ...] = ()
+    cola_por_grupo: tuple[float, ...] = ()
+    util_por_grupo: tuple[float, ...] = ()
+    atendidos_por_producto: tuple[tuple[str, float], ...] = ()
+    litros_vendidos_por_producto: tuple[tuple[str, float], ...] = ()
+    dias_quiebre_por_producto: tuple[tuple[str, float], ...] = ()
 
-#: Métricas que se promedian entre réplicas (todas menos la semilla).
+
+#: Campos que NO son métricas numéricas (no se promedian en `resumir`).
+NO_METRICAS = {
+    "semilla",
+    "espera_por_grupo",
+    "cola_por_grupo",
+    "util_por_grupo",
+    "atendidos_por_producto",
+    "litros_vendidos_por_producto",
+    "dias_quiebre_por_producto",
+}
+
+#: Métricas que se promedian entre réplicas (todas menos las no numéricas).
 METRICAS: tuple[str, ...] = tuple(
-    f.name for f in fields(ResultadoReplica) if f.name != "semilla"
+    f.name for f in fields(ResultadoReplica) if f.name not in NO_METRICAS
 )
 
 
@@ -178,7 +199,9 @@ def correr_replica(
         perdidos_caja_dia=c.perdidos_caja / dias,
         compras_dia=c.compras_atendidas / dias,
         tasa_abandono=(
-            100.0 * (c.perdidos_surtidor + c.perdidos_sin_combustible) / c.llegadas
+            100.0
+            * (c.perdidos_surtidor + c.perdidos_sin_combustible + c.perdidos_cola_llena)
+            / c.llegadas
             if c.llegadas
             else 0.0
         ),
@@ -192,6 +215,30 @@ def correr_replica(
         porcentaje_dias_quiebre=100.0 * c.dias_con_quiebre / dias,
         porcentaje_tiempo_sin_combustible=100.0 * ind.fraccion_sin_combustible,
         hora_pico=hora_pico,
+        # --- Estación real: por motivo, grupo y producto ---
+        perdidos_cola_llena_dia=c.perdidos_cola_llena / dias,
+        util_playeros=(
+            ind.playeros_ocupados.promedio / ind.playeros_en_turno.promedio
+            if ind.playeros_en_turno.promedio > 0
+            else 0.0
+        ),
+        espera_por_grupo=tuple(
+            ind.esperas_grupo[g.id].promedio for g in p.grupos
+        ),
+        cola_por_grupo=tuple(ind.colas_grupo[g.id].promedio for g in p.grupos),
+        util_por_grupo=tuple(
+            ind.ocupados_grupo[g.id].promedio / g.caras for g in p.grupos
+        ),
+        atendidos_por_producto=tuple(
+            (pr, ind.c_producto[pr].atendidos / dias) for pr in ind.c_producto
+        ),
+        litros_vendidos_por_producto=tuple(
+            (pr, ind.c_producto[pr].litros_vendidos / dias) for pr in ind.c_producto
+        ),
+        dias_quiebre_por_producto=tuple(
+            (pr, 100.0 * ind.c_producto[pr].dias_con_quiebre / dias)
+            for pr in ind.c_producto
+        ),
     )
     return resultado, traza
 
@@ -267,6 +314,33 @@ def buscar(resultados: list[ResultadoEscenario], nombre: str) -> ResultadoEscena
         if r.escenario.nombre == nombre:
             return r
     raise KeyError(f"No existe el escenario {nombre}")
+
+
+def correr_estacion_real(
+    p: ParametrosSimulacion,
+    replicas: int = 5,
+    semilla_base: int = 1,
+) -> ResultadoEscenario:
+    """Corre la estación real (3 grupos, 5 productos, playeros) y la envuelve en un
+    único "escenario Base" para que la interfaz clásica la muestre.
+
+    El catálogo de escenarios del caso real (S0–S12) llega en la Fase 7; por ahora
+    la comparación de capacidad es la del caso clásico.
+    """
+    total_caras = sum(g.caras for g in p.grupos)
+    escenario = Escenario(
+        nombre="Base",
+        descripcion=f"Estación real (Shell San Rafael, {total_caras} caras)",
+        surtidores=total_caras,
+        cajas=p.cajas,
+    )
+    replicas_corridas = correr_replicas(p, replicas=replicas, semilla_base=semilla_base)
+    return ResultadoEscenario(
+        escenario=escenario,
+        parametros=p,
+        replicas=replicas_corridas,
+        resumen=resumir(replicas_corridas),
+    )
 
 
 # --- Barrido de políticas de inventario ---------------------------------------

@@ -10,6 +10,8 @@ Para ejecutar:
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as componentes
@@ -24,7 +26,10 @@ from sim.config import (
     ParametrosSimulacion,
     ParametrosTanque,
     Triangular,
+    dias_del_mes,
     dias_y_fecha,
+    inventario_real,
+    turnos_de,
 )
 from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
 from sim.economia import (
@@ -40,6 +45,7 @@ from sim.runner import (
     buscar,
     con_politica,
     correr_escenarios,
+    correr_estacion_real,
     correr_replica,
     grilla_sugerida,
 )
@@ -60,7 +66,10 @@ from ui.textos import (
     INDICADORES_COLAS,
     INDICADORES_COMPLEMENTARIOS,
     INDICADORES_INVENTARIO,
+    POR_CLAVE,
     SUPUESTOS,
+    SUPUESTOS_REAL,
+    DESCRIPCION_MODELO_REAL,
     Metrica,
 )
 
@@ -79,6 +88,13 @@ def correr_escenarios_cacheado(
     p: ParametrosSimulacion, replicas: int, semilla: int
 ) -> list[ResultadoEscenario]:
     return correr_escenarios(p, replicas=replicas, semilla_base=semilla)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def correr_estacion_real_cacheado(
+    p: ParametrosSimulacion, replicas: int, semilla: int
+) -> ResultadoEscenario:
+    return correr_estacion_real(p, replicas=replicas, semilla_base=semilla)
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -104,26 +120,89 @@ def barrer_politicas_cacheado(
 # =============================================================================
 def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, int]:
     """Dibuja los controles de la barra lateral y devuelve la configuración elegida."""
-    # Si en la pestaña Inventario se apretó "Usar esta política", los valores se aplican
-    # ACÁ, antes de crear los controles: Streamlit no permite modificar un widget que ya
-    # fue instanciado en esta misma ejecución.
-    sugerida = st.session_state.pop("politica_sugerida", None)
-    if sugerida is not None:
-        st.session_state["w_punto_pedido"] = int(sugerida[0])
-        st.session_state["w_cantidad_pedido"] = int(sugerida[1])
-
     st.sidebar.title("⛽ Parámetros")
     st.sidebar.caption("Al cambiar algo hay que volver a correr la simulación.")
 
-    with st.sidebar.expander("🏪 Capacidad actual", expanded=True):
-        st.markdown(
-            f"El motor todavía usa la configuración clásica "
-            f"{insignia_html(por_id('REC-01'))}{insignia_html(por_id('REC-02'))} "
-            f"(el rediseño de 12 caras y grupos entra en la Fase 2 del orquestador).",
-            unsafe_allow_html=True,
-        )
-        surtidores = st.number_input("Surtidores instalados", 1, 8, 3, 1)
-        cajas = st.number_input("Cajas en el minimarket", 1, 4, 1, 1)
+    modelo = st.sidebar.radio(
+        "Modelo",
+        options=["real", "clasico"],
+        format_func=lambda x: (
+            "🏪 Estación real (12 caras · 5 productos · playeros)"
+            if x == "real"
+            else "📐 Caso clásico (3 surtidores · 1 producto)"
+        ),
+        help="La estación real es el caso del TP. El caso clásico es el proyecto "
+             "hipotético original: reproduce sus números de referencia y sirve para "
+             "comparar los escenarios de capacidad (+1 surtidor, +1 cajero).",
+    )
+    es_real = modelo == "real"
+    base = ParametrosSimulacion() if es_real else ParametrosSimulacion.clasico()
+    sfx = "_r" if es_real else "_c"     # las claves cambian con el modelo: cada uno con sus defaults
+
+    # Si en la pestaña Inventario se apretó "Usar esta política", los valores se aplican
+    # ACÁ, antes de crear los controles: Streamlit no permite modificar un widget que ya
+    # fue instanciado en esta misma ejecución. (Sólo existe en el caso clásico.)
+    sugerida = st.session_state.pop("politica_sugerida", None)
+    if sugerida is not None and not es_real:
+        st.session_state["w_punto_pedido"] = int(sugerida[0])
+        st.session_state["w_cantidad_pedido"] = int(sugerida[1])
+
+    if es_real:
+        with st.sidebar.expander("🏪 Estación y personal", expanded=True):
+            st.markdown(
+                f"12 caras en 3 zonas: **A nafta (4) · B diésel (2) · C GNC (6)** "
+                f"{insignia_html(por_id('SUR-00'))}. Servidores = mín(caras libres, "
+                f"playeros en turno).",
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                f"**Playeros por turno** {insignia_html(por_id('PER-01'))}",
+                unsafe_allow_html=True,
+            )
+            n1, n2, n3 = st.columns(3)
+            playeros = (
+                int(n1.number_input("Noche 22–06", 1, 6, base.playeros_por_turno[0], 1)),
+                int(n2.number_input("Mañana 06–14", 1, 6, base.playeros_por_turno[1], 1)),
+                int(n3.number_input("Tarde 14–22", 1, 6, base.playeros_por_turno[2], 1)),
+            )
+            cajas = st.number_input(
+                "Cajas en el minimarket", 1, 4, base.cajas, 1,
+                help="PER-02: una caja por turno.",
+            )
+            capacidad_cola = st.slider(
+                "Capacidad de cola por zona (autos)", 2, 20, int(base.capacidad_cola), 1,
+                help="PER-05 (sin dato: hay que relevarla). Si la cola de la zona está "
+                     "llena, el auto no entra y se pierde por 'cola llena'.",
+            )
+            disciplina_cola = st.radio(
+                "Disciplina de la cola",
+                ["por_grupo", "por_cara"],
+                index=0 if base.disciplina_cola == "por_grupo" else 1,
+                format_func=lambda x: {
+                    "por_grupo": "Una cola FIFO por zona",
+                    "por_cara": "Una fila por cara (elige la más corta)",
+                }[x],
+                horizontal=True,
+            )
+            pct_gnc = st.slider(
+                "Clientes GNC (% de las llegadas)", 0, 25, int(round(base.pct_gnc * 100)), 1,
+                help="DEM-05 (estimación): el GNC es ≈ 3 % de los clientes, aunque se le "
+                     "dedican 6 de las 12 caras (alerta de coherencia C8).",
+            ) / 100.0
+        surtidores = base.surtidores
+    else:
+        with st.sidebar.expander("🏪 Capacidad actual", expanded=True):
+            st.markdown(
+                f"Configuración clásica {insignia_html(por_id('REC-01'))}"
+                f"{insignia_html(por_id('REC-02'))}: cola única FIFO, sin playeros.",
+                unsafe_allow_html=True,
+            )
+            surtidores = st.number_input("Surtidores instalados", 1, 8, base.surtidores, 1)
+            cajas = st.number_input("Cajas en el minimarket", 1, 4, base.cajas, 1)
+        playeros = base.playeros_por_turno
+        capacidad_cola = base.capacidad_cola
+        disciplina_cola = base.disciplina_cola
+        pct_gnc = base.pct_gnc
 
     # --- Demanda: litros por mes → clientes por día (corrige B1/B2/B5) ---
     with st.sidebar.expander("📊 Demanda", expanded=True):
@@ -135,36 +214,53 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         modo_demanda = st.radio(
             "Modo de demanda",
             options=["esperada", "monte_carlo"],
+            index=0 if base.modo_demanda == "esperada" else 1,
+            key="modo_demanda" + sfx,
             format_func=lambda x: (
                 "Demanda esperada (litros por mes)"
                 if x == "esperada"
-                else "Monte Carlo (tabla empírica)"
+                else (
+                    "Monte Carlo (variación día a día)"
+                    if es_real
+                    else "Monte Carlo (tabla empírica)"
+                )
             ),
             horizontal=True,
             help="Con 'esperada' el total diario sale de los litros por mes y el "
-                 "calendario; con 'Monte Carlo' se sortea de la tabla de frecuencias. "
-                 "En ambos modos las llegadas son Poisson y los tiempos aleatorios, "
-                 "así que se mantienen las réplicas y el calentamiento.",
+                 "calendario; con 'Monte Carlo' se sortea cada día un factor de una tabla "
+                 "de frecuencias. En ambos modos las llegadas son Poisson y los tiempos "
+                 "aleatorios, así que se mantienen las réplicas y el calentamiento.",
         )
-        if modo_demanda == "esperada":
+        if modo_demanda == "esperada" or es_real:
             litros_mes = st.slider(
-                "Demanda mensual (litros/mes)", 50_000, 600_000, 270_000, 10_000,
+                "Demanda mensual (litros/mes)", 50_000, 600_000, int(base.litros_mes), 10_000,
                 help="Es la variable de entrada: los clientes por día se derivan de "
                      "acá, nunca al revés.",
             )
-            litros_medios_por_cliente = st.number_input(
-                "Litros medios por cliente (L)", 5.0, 200.0, 35.7, 0.1,
-                help="Litros que carga en promedio un cliente de combustible líquido "
-                     "(mezcla de productos y tipos de vehículo).",
-            )
-            clientes_dia = (litros_mes / 30.0) / litros_medios_por_cliente
+        else:
+            litros_mes = base.litros_mes
+        if es_real:
+            litros_medios_por_cliente = base.litros_medios_por_cliente
+            dias_ref = dias_del_mes(1)
+            clientes_dia = (litros_mes / dias_ref) / litros_medios_por_cliente
             st.caption(
-                f"≈ {litros_mes / 30.0:,.0f} L/día ⇒ **{clientes_dia:,.0f} "
-                f"clientes/día** (antes de sumar el GNC)."
+                f"Litros medios por cliente de nafta/diésel: **{litros_medios_por_cliente:.1f} L** "
+                f"(derivado de la mezcla de productos y vehículos). "
+                f"≈ {litros_mes / dias_ref:,.0f} L/día ⇒ **{clientes_dia:,.0f} clientes "
+                f"líquidos/día** (+ GNC)."
+            )
+        elif modo_demanda == "esperada":
+            litros_medios_por_cliente = st.number_input(
+                "Litros medios por cliente (L)", 5.0, 200.0, base.litros.media, 0.1,
+                help="Litros que carga en promedio un cliente de combustible líquido.",
+            )
+            clientes_dia = (litros_mes / dias_del_mes(1)) / litros_medios_por_cliente
+            st.caption(
+                f"≈ {litros_mes / dias_del_mes(1):,.0f} L/día ⇒ **{clientes_dia:,.0f} "
+                f"clientes/día**."
             )
         else:
-            litros_mes = 270_000.0
-            litros_medios_por_cliente = 35.7
+            litros_medios_por_cliente = base.litros_medios_por_cliente
 
         horizonte = st.radio(
             "Horizonte de simulación",
@@ -200,9 +296,17 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                     "primavera": "🌱 Primavera (sep–nov)",
                 }[x],
             )
-        fecha_inicio, dias_por_horizonte = dias_y_fecha(
-            horizonte, mes_elegido, dia_elegido, estacion_elegida
-        )
+        try:
+            fecha_inicio, dias_por_horizonte = dias_y_fecha(
+                horizonte, mes_elegido, dia_elegido, estacion_elegida
+            )
+            # El día de inicio tiene que existir en ese mes (p. ej. no hay 31/4).
+            ParametrosSimulacion(fecha_inicio=fecha_inicio)
+        except ValueError:
+            st.warning("Ese día no existe en el mes elegido: se usa el 1.")
+            fecha_inicio, dias_por_horizonte = dias_y_fecha(
+                horizonte, mes_elegido, 1, estacion_elegida
+            )
         if modo_demanda == "esperada":
             presets = {
                 "Neutra (default)": ESTACIONALIDAD_NEUTRA,
@@ -213,52 +317,80 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                 st.selectbox("Estacionalidad mensual", list(presets), index=0)
             ]
             factor_fin_de_semana = st.slider(
-                "Factor de fin de semana", 1.0, 2.0, 1.30, 0.01,
+                "Factor de fin de semana", 1.0, 2.0, float(base.factor_fin_de_semana), 0.01,
                 help="El finde vende más que un día hábil; el nivel diario se "
                      "normaliza para conservar los litros del mes.",
             )
         else:
             estacionalidad = ESTACIONALIDAD_NEUTRA
-            factor_fin_de_semana = 1.30
+            factor_fin_de_semana = base.factor_fin_de_semana
 
+    demanda = base.demanda
     if modo_demanda == "monte_carlo":
-        with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)"):
-            st.caption(
-                "Tabla de frecuencias observada: en cuántos días se registró cada nivel de "
-                "demanda. De acá se sortea la demanda de cada día simulado."
-            )
-            tabla = st.data_editor(
-                pd.DataFrame(
-                    {"Autos por día": [280, 320, 360, 400, 440],
-                     "Días observados": [10, 20, 40, 20, 10]}
-                ),
-                num_rows="dynamic",
-                hide_index=True,
-                key="tabla_demanda",
-            )
-            demanda = construir_demanda(tabla)
-            st.caption(f"Demanda media: **{demanda.media:.0f} autos por día**")
-    else:
-        demanda = DEMANDA_TIPICA
+        if es_real:
+            with st.sidebar.expander("🎲 Variación día a día (Monte Carlo)"):
+                rel = base.demanda_relativa
+                st.markdown(
+                    f"Fuente {insignia_html(por_id('DEM-07'))}: cada día se sortea un "
+                    f"**factor relativo** (media 1) que multiplica los litros del día.",
+                    unsafe_allow_html=True,
+                )
+                st.dataframe(
+                    pd.DataFrame(
+                        {"Factor": rel.valores, "Frecuencia": rel.frecuencias}
+                    ),
+                    hide_index=True,
+                )
+        else:
+            with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)"):
+                st.caption(
+                    "Tabla de frecuencias observada: en cuántos días se registró cada nivel "
+                    "de demanda. De acá se sortea la demanda de cada día simulado."
+                )
+                tabla = st.data_editor(
+                    pd.DataFrame(
+                        {"Autos por día": list(base.demanda.valores),
+                         "Días observados": list(base.demanda.frecuencias)}
+                    ),
+                    num_rows="dynamic",
+                    hide_index=True,
+                    key="tabla_demanda",
+                )
+                demanda = construir_demanda(tabla)
+                st.caption(f"Demanda media: **{demanda.media:.0f} autos por día**")
 
     with st.sidebar.expander("⏱️ Tiempos de servicio"):
         st.markdown(
-            f"Fuentes {insignia_html(por_id('TIE-02'))} {insignia_html(por_id('TIE-05'))}",
+            f"Fuentes {insignia_html(por_id('TIE-02'))} {insignia_html(por_id('TIE-05'))}"
+            + (f" {insignia_html(por_id('TIE-04'))}" if es_real else ""),
             unsafe_allow_html=True,
         )
-        st.markdown("**Carga de combustible** — Triangular (min)")
+        st.markdown(
+            "**Carga de nafta/diésel** — Triangular (min)" if es_real
+            else "**Carga de combustible** — Triangular (min)"
+        )
         c1, c2, c3 = st.columns(3)
         carga = Triangular(
-            c1.number_input("mín", 0.5, 30.0, 2.0, 0.5, key="carga_min"),
-            c2.number_input("moda", 0.5, 30.0, 5.0, 0.5, key="carga_moda"),
-            c3.number_input("máx", 0.5, 30.0, 8.0, 0.5, key="carga_max"),
+            c1.number_input("mín", 0.5, 30.0, base.carga.minimo, 0.5, key="carga_min" + sfx),
+            c2.number_input("moda", 0.5, 30.0, base.carga.moda, 0.5, key="carga_moda" + sfx),
+            c3.number_input("máx", 0.5, 30.0, base.carga.maximo, 0.5, key="carga_max" + sfx),
         )
+        if es_real:
+            st.markdown("**Carga de GNC** — Triangular (min)")
+            g1, g2, g3 = st.columns(3)
+            carga_gnc = Triangular(
+                g1.number_input("mín", 0.5, 60.0, base.carga_gnc.minimo, 0.5, key="gnc_min"),
+                g2.number_input("moda", 0.5, 60.0, base.carga_gnc.moda, 0.5, key="gnc_moda"),
+                g3.number_input("máx", 0.5, 60.0, base.carga_gnc.maximo, 0.5, key="gnc_max"),
+            )
+        else:
+            carga_gnc = base.carga_gnc
         st.markdown("**Compra en el minimarket** (min)")
         d1, d2, d3 = st.columns(3)
         compra = Triangular(
-            d1.number_input("mín", 0.2, 30.0, 2.0, 0.5, key="compra_min"),
-            d2.number_input("moda", 0.2, 30.0, 4.0, 0.5, key="compra_moda"),
-            d3.number_input("máx", 0.2, 30.0, 10.0, 0.5, key="compra_max"),
+            d1.number_input("mín", 0.2, 30.0, base.compra.minimo, 0.5, key="compra_min" + sfx),
+            d2.number_input("moda", 0.2, 30.0, base.compra.moda, 0.5, key="compra_moda" + sfx),
+            d3.number_input("máx", 0.2, 30.0, base.compra.maximo, 0.5, key="compra_max" + sfx),
         )
         caja_exponencial = st.checkbox(
             "Usar Exponencial en la caja", value=False,
@@ -266,19 +398,29 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                  "Con Exponencial se usa la misma media que la triangular cargada.",
         )
 
-    with st.sidebar.expander("⛽ Litros por carga"):
-        st.markdown(
-            f"Fuente {insignia_html(por_id('VEH-06'))} (el desglose por tipo de "
-            f"vehículo — VEH-01..05 — entra en la Fase 2).",
-            unsafe_allow_html=True,
-        )
-        st.caption("Cuánto carga cada auto. Es lo que consume el tanque.")
-        e1, e2, e3 = st.columns(3)
-        litros = Triangular(
-            e1.number_input("mín", 1.0, 200.0, 15.0, 5.0, key="litros_min"),
-            e2.number_input("moda", 1.0, 200.0, 30.0, 5.0, key="litros_moda"),
-            e3.number_input("máx", 1.0, 200.0, 60.0, 5.0, key="litros_max"),
-        )
+    if es_real:
+        litros = base.litros
+        with st.sidebar.expander("⛽ Litros por carga"):
+            st.markdown(
+                f"Fuentes {insignia_html(por_id('VEH-01'))} {insignia_html(por_id('VEH-00'))}: "
+                f"cada cliente sortea producto y tipo de vehículo, y carga "
+                f"`Triangular(0,2·T ; 0,3·T ; 1,0·T)` (tanque T del vehículo). Las tablas "
+                f"están en la pestaña **Demanda**.",
+                unsafe_allow_html=True,
+            )
+    else:
+        with st.sidebar.expander("⛽ Litros por carga"):
+            st.markdown(
+                f"Fuente {insignia_html(por_id('VEH-06'))}",
+                unsafe_allow_html=True,
+            )
+            st.caption("Cuánto carga cada auto. Es lo que consume el tanque.")
+            e1, e2, e3 = st.columns(3)
+            litros = Triangular(
+                e1.number_input("mín", 1.0, 200.0, base.litros.minimo, 5.0, key="litros_min"),
+                e2.number_input("moda", 1.0, 200.0, base.litros.moda, 5.0, key="litros_moda"),
+                e3.number_input("máx", 1.0, 200.0, base.litros.maximo, 5.0, key="litros_max"),
+            )
 
     with st.sidebar.expander("🧍 Comportamiento del cliente"):
         st.markdown(
@@ -286,41 +428,107 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
             unsafe_allow_html=True,
         )
         prob_compra = st.slider(
-            "Probabilidad de entrar al minimarket", 0.0, 1.0, 0.20, 0.05,
+            "Probabilidad de entrar al minimarket", 0.0, 1.0, float(base.prob_compra), 0.05,
+            key="prob_compra" + sfx,
             help="Ensayo de Bernoulli después de cargar combustible.",
         )
         paciencia_surtidor = st.slider(
-            "Paciencia en la cola del surtidor (min)", 1.0, 30.0, 10.0, 1.0,
+            "Paciencia en la cola del surtidor (min)", 1.0, 30.0,
+            float(base.paciencia_surtidor), 1.0,
             help="Si la espera supera este umbral, el cliente abandona y se pierde la venta.",
         )
-        paciencia_caja = st.slider("Paciencia en la cola de la caja (min)", 1.0, 30.0, 8.0, 1.0)
+        paciencia_caja = st.slider(
+            "Paciencia en la cola de la caja (min)", 1.0, 30.0, float(base.paciencia_caja), 1.0
+        )
 
-    with st.sidebar.expander("🛢️ Tanque y reposición", expanded=True):
-        st.markdown(
-            f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
-            f"{insignia_html(por_id('INV-01'))}",
-            unsafe_allow_html=True,
+    # --- Tanques y reposición ---
+    if es_real:
+        with st.sidebar.expander("🛢️ Tanques y reposición", expanded=True):
+            st.markdown(
+                f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
+                f"{insignia_html(por_id('INV-01'))}: un tanque por producto líquido; la "
+                f"política (s, Q) de cada uno se deriva de su consumo (INV-07).",
+                unsafe_allow_html=True,
+            )
+            capacidad_tanque = st.number_input(
+                "Capacidad de cada tanque (L)", 5_000, 100_000,
+                int(base.inventario[0].capacidad), 5_000,
+            )
+            nivel_inicial_pct = st.slider(
+                "Nivel inicial (% del tanque)", 10, 100,
+                int(round(base.inventario[0].nivel_inicial / base.inventario[0].capacidad * 100)),
+                5,
+            ) / 100.0
+            st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
+            plazo_base = base.inventario[0].plazo_entrega
+            f1, f2, f3 = st.columns(3)
+            plazo = Triangular(
+                f1.number_input("mín", 1.0, 200.0, plazo_base.minimo, 1.0, key="plazo_min"),
+                f2.number_input("moda", 1.0, 200.0, plazo_base.moda, 1.0, key="plazo_moda"),
+                f3.number_input("máx", 1.0, 200.0, plazo_base.maximo, 1.0, key="plazo_max"),
+            )
+            inventario = inventario_real(
+                float(litros_mes), float(capacidad_tanque), plazo, float(nivel_inicial_pct)
+            )
+            nombres = {x.id: x.nombre for x in base.productos}
+            st.dataframe(
+                pd.DataFrame(
+                    {
+                        "Tanque": [nombres[i.producto] for i in inventario],
+                        "s (L)": [round(i.punto_pedido) for i in inventario],
+                        "Q (L)": [round(i.cantidad_pedido) for i in inventario],
+                    }
+                ),
+                hide_index=True,
+            )
+            st.caption(
+                "Política inicial según INV-07 (s = 1,5 días de consumo del producto). "
+                "Buscar la óptima por producto llega en la Fase 4."
+            )
+        tanque = base.tanque
+    else:
+        with st.sidebar.expander("🛢️ Tanque y reposición", expanded=True):
+            st.markdown(
+                f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
+                f"{insignia_html(por_id('INV-01'))}",
+                unsafe_allow_html=True,
+            )
+            capacidad = st.number_input(
+                "Capacidad del tanque (L)", 5_000, 200_000, int(base.tanque.capacidad), 5_000
+            )
+            nivel_inicial = st.number_input(
+                "Nivel inicial (L)", 0, int(capacidad), int(base.tanque.nivel_inicial), 1_000
+            )
+            punto_pedido = st.number_input(
+                "Punto de pedido s (L)", 0, int(capacidad), int(base.tanque.punto_pedido), 1_000,
+                key="w_punto_pedido",
+                help="Cuando el combustible disponible (lo que hay más lo que viene en "
+                     "camino) baja de este valor, se pide un camión.",
+            )
+            cantidad_pedido = st.number_input(
+                "Cantidad a pedir Q (L)", 1_000, int(capacidad),
+                int(base.tanque.cantidad_pedido), 1_000,
+                key="w_cantidad_pedido",
+                help="Cuántos litros trae cada camión cisterna.",
+            )
+            st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
+            f1, f2, f3 = st.columns(3)
+            plazo = Triangular(
+                f1.number_input("mín", 1.0, 200.0, base.tanque.plazo_entrega.minimo, 1.0,
+                                key="plazo_min_c"),
+                f2.number_input("moda", 1.0, 200.0, base.tanque.plazo_entrega.moda, 1.0,
+                                key="plazo_moda_c"),
+                f3.number_input("máx", 1.0, 200.0, base.tanque.plazo_entrega.maximo, 1.0,
+                                key="plazo_max_c"),
+            )
+        tanque = ParametrosTanque(
+            capacidad=float(capacidad),
+            nivel_inicial=float(nivel_inicial),
+            punto_pedido=float(punto_pedido),
+            cantidad_pedido=float(cantidad_pedido),
+            plazo_entrega=plazo,
         )
-        capacidad = st.number_input("Capacidad del tanque (L)", 5_000, 200_000, 20_000, 5_000)
-        nivel_inicial = st.number_input("Nivel inicial (L)", 0, int(capacidad), 15_000, 1_000)
-        punto_pedido = st.number_input(
-            "Punto de pedido s (L)", 0, int(capacidad), 13_500, 1_000,
-            key="w_punto_pedido",
-            help="Cuando el combustible disponible (lo que hay más lo que viene en "
-                 "camino) baja de este valor, se pide un camión.",
-        )
-        cantidad_pedido = st.number_input(
-            "Cantidad a pedir Q (L)", 1_000, int(capacidad), 6_500, 1_000,
-            key="w_cantidad_pedido",
-            help="Cuántos litros trae cada camión cisterna.",
-        )
-        st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
-        f1, f2, f3 = st.columns(3)
-        plazo = Triangular(
-            f1.number_input("mín", 1.0, 200.0, 24.0, 1.0, key="plazo_min"),
-            f2.number_input("moda", 1.0, 200.0, 36.0, 1.0, key="plazo_moda"),
-            f3.number_input("máx", 1.0, 200.0, 48.0, 1.0, key="plazo_max"),
-        )
+        inventario = base.inventario
 
     with st.sidebar.expander("🔬 Corrida"):
         st.info(
@@ -335,15 +543,20 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
             st.caption("(Sin calentamiento: la corrida dura un solo día)")
         else:
             dias_calentamiento = st.slider(
-                "Días de calentamiento", 0, max_calentamiento, min(2, max_calentamiento), 1,
+                "Días de calentamiento", 0, max_calentamiento,
+                min(base.dias_calentamiento, max_calentamiento), 1,
+                key="calentamiento" + sfx,
                 help="Días que se simulan pero no se miden: la estación arranca con las colas "
                      "vacías y el tanque al 75 %, que no es su estado habitual.",
             )
 
-        dia_animado = st.slider("Día a animar", 1, min(dias, 90), min(2, int(dias)), 1)
+        if dias == 1:
+            dia_animado = 1      # un slider con un único valor posible no se puede dibujar
+        else:
+            dia_animado = st.slider("Día a animar", 1, min(dias, 90), min(2, int(dias)), 1)
         replicas = st.slider(
             "Réplicas por escenario", 2, 15, 4, 1,
-            help="Cada réplica es un mes completo con otra semilla. Más réplicas dan "
+            help="Cada réplica es una corrida completa con otra semilla. Más réplicas dan "
                  "intervalos de confianza más angostos, pero tardan más.",
         )
         semilla = st.number_input("Semilla", 1, 99_999, 1, 1)
@@ -375,24 +588,17 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
         sueldo_cajero = st.number_input("Sueldo de un cajero ($/mes)", 0.0, 1e8, 1_800_000.0, 50_000.0)
 
-    p = ParametrosSimulacion(
-        surtidores=int(surtidores),
+    comunes = dict(
         cajas=int(cajas),
         demanda=demanda,
         carga=carga,
+        carga_gnc=carga_gnc,
         compra=compra,
         caja_exponencial=bool(caja_exponencial),
         litros=litros,
         prob_compra=float(prob_compra),
         paciencia_surtidor=float(paciencia_surtidor),
         paciencia_caja=float(paciencia_caja),
-        tanque=ParametrosTanque(
-            capacidad=float(capacidad),
-            nivel_inicial=float(nivel_inicial),
-            punto_pedido=float(punto_pedido),
-            cantidad_pedido=float(cantidad_pedido),
-            plazo_entrega=plazo,
-        ),
         dias=int(dias),
         dias_calentamiento=int(dias_calentamiento),
         dia_animado=int(dia_animado),
@@ -404,6 +610,19 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         fecha_inicio=fecha_inicio,
         horizonte=str(horizonte),
     )
+    if es_real:
+        p = replace(
+            base,
+            playeros_por_turno=playeros,
+            turnos=turnos_de(playeros),
+            capacidad_cola=int(capacidad_cola),
+            disciplina_cola=str(disciplina_cola),
+            pct_gnc=float(pct_gnc),
+            inventario=inventario,
+            **comunes,
+        )
+    else:
+        p = replace(base, surtidores=int(surtidores), tanque=tanque, **comunes)
     eco = ParametrosEconomicos(
         margen_por_litro=margen_por_litro,
         margen_compra=margen_compra,
@@ -445,22 +664,40 @@ def pestania_animacion(p: ParametrosSimulacion) -> None:
     traza = st.session_state.traza
 
     st.subheader(f"Animación del día {p.dia_animado}")
-    st.caption(
-        f"Escenario Base ({p.surtidores} surtidores, {p.cajas} caja/s). Se anima un día "
-        f"completo, de 00:00 a 24:00. Abajo se ve el tanque: cuando el nivel cruza el "
-        f"punto de pedido se despacha un camión, y si llega a cero la estación deja de vender."
-    )
+    if p.estacion_real:
+        caras = sum(g.caras for g in p.grupos)
+        capacidad_animacion = sum(i.capacidad for i in p.inventario)
+        punto_animacion = sum(i.punto_pedido for i in p.inventario)
+        litros_minimos = min(
+            t.litros.minimo for t in p.tipos_vehiculo if not t.es_gnc
+        )
+        st.caption(
+            f"Estación real: vista **agregada** de las {caras} caras y de la suma de los "
+            f"4 tanques. Se anima un día completo, de 00:00 a 24:00. (La animación del "
+            f"playón por zonas, con playeros y tanques por producto, llega en la Fase 3.)"
+        )
+    else:
+        caras = p.surtidores
+        capacidad_animacion = p.tanque.capacidad
+        punto_animacion = p.tanque.punto_pedido
+        litros_minimos = p.litros.minimo
+        st.caption(
+            f"Escenario Base ({p.surtidores} surtidores, {p.cajas} caja/s). Se anima un día "
+            f"completo, de 00:00 a 24:00. Abajo se ve el tanque: cuando el nivel cruza el "
+            f"punto de pedido se despacha un camión, y si llega a cero la estación deja de "
+            f"vender."
+        )
 
     componentes.html(
         animacion.reproductor_html(
             cuadros=traza.cuadros,
-            surtidores=p.surtidores,
+            surtidores=caras,
             cajas=p.cajas,
             dt=p.dt_traza,
-            capacidad_tanque=p.tanque.capacidad,
-            punto_pedido=p.tanque.punto_pedido,
+            capacidad_tanque=capacidad_animacion,
+            punto_pedido=punto_animacion,
             dia=p.dia_animado,
-            litros_minimos=p.litros.minimo,
+            litros_minimos=litros_minimos,
         ),
         height=animacion.ALTO_COMPONENTE,
     )
@@ -469,7 +706,7 @@ def pestania_animacion(p: ParametrosSimulacion) -> None:
     g1, g2 = st.columns(2)
     g1.plotly_chart(graficos.grafico_evolucion_colas(traza, p.dia_animado), key="g_colas")
     g2.plotly_chart(
-        graficos.grafico_ocupacion(traza, p.surtidores, p.dia_animado), key="g_ocupacion"
+        graficos.grafico_ocupacion(traza, caras, p.dia_animado), key="g_ocupacion"
     )
 
 
@@ -511,10 +748,71 @@ def tabla_detalle(base: ResultadoEscenario, metricas) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+def promedio_tupla(resultado: ResultadoEscenario, campo: str) -> list[float]:
+    """Promedio entre réplicas de un campo que es una tupla (por grupo)."""
+    columnas = zip(*[getattr(r, campo) for r in resultado.replicas])
+    return [sum(c) / len(resultado.replicas) for c in columnas]
+
+
+def promedio_pares(resultado: ResultadoEscenario, campo: str) -> dict[str, float]:
+    """Promedio entre réplicas de un campo que es ((producto, valor), ...)."""
+    acumulado: dict[str, float] = {}
+    for r in resultado.replicas:
+        for clave, valor in getattr(r, campo):
+            acumulado[clave] = acumulado.get(clave, 0.0) + valor
+    return {k: v / len(resultado.replicas) for k, v in acumulado.items()}
+
+
+def tablas_real(p: ParametrosSimulacion, base: ResultadoEscenario) -> None:
+    """Indicadores por zona y por producto de la estación real."""
+    st.markdown("##### Por zona de surtidores")
+    esperas = promedio_tupla(base, "espera_por_grupo")
+    colas = promedio_tupla(base, "cola_por_grupo")
+    utils = promedio_tupla(base, "util_por_grupo")
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "Zona": [f"{g.id} · {g.nombre}" for g in p.grupos],
+                "Caras": [g.caras for g in p.grupos],
+                "Espera hasta ser atendido (min)": [round(x, 2) for x in esperas],
+                "Cola promedio (autos)": [round(x, 3) for x in colas],
+                "Utilización de las caras": [f"{x * 100:.1f} %" for x in utils],
+            }
+        ),
+        hide_index=True,
+    )
+    st.markdown("##### Por producto")
+    atendidos = promedio_pares(base, "atendidos_por_producto")
+    litros = promedio_pares(base, "litros_vendidos_por_producto")
+    quiebres = promedio_pares(base, "dias_quiebre_por_producto")
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "Producto": [pr.nombre for pr in p.productos],
+                "Clientes atendidos/día": [round(atendidos[pr.id], 1) for pr in p.productos],
+                "Vendido por día": [
+                    f"{litros[pr.id]:,.0f} {'m³' if pr.es_gnc else 'L'}" for pr in p.productos
+                ],
+                "Días con quiebre": [
+                    "—" if pr.es_gnc else f"{quiebres[pr.id]:.1f} %" for pr in p.productos
+                ],
+            }
+        ),
+        hide_index=True,
+    )
+    st.caption(
+        "El GNC se mide en **m³**, no en litros, y todavía no tiene cortes de invierno "
+        "(Fase 6). Los litros de la estación suman sólo los 4 combustibles líquidos."
+    )
+
+
 def pestania_indicadores(p: ParametrosSimulacion) -> None:
     base = buscar(st.session_state.resultados, "Base")
 
-    st.subheader("Indicadores del escenario Base (situación actual)")
+    if p.estacion_real:
+        st.subheader("Indicadores de la estación real")
+    else:
+        st.subheader("Indicadores del escenario Base (situación actual)")
     st.caption(
         f"Promedio de {st.session_state.replicas} réplicas de {p.dias} días, descartando "
         f"{p.dias_calentamiento} día/s de calentamiento."
@@ -534,6 +832,22 @@ def pestania_indicadores(p: ParametrosSimulacion) -> None:
     fila = st.columns(4)
     for columna, metrica in zip(fila, INDICADORES_CLIENTES[:4]):
         tarjeta(columna, metrica, base)
+
+    if p.estacion_real:
+        st.markdown("##### Playeros y cola")
+        fila = st.columns(4)
+        for columna, metrica in zip(
+            fila, (POR_CLAVE["util_playeros"], POR_CLAVE["perdidos_cola_llena_dia"])
+        ):
+            tarjeta(columna, metrica, base)
+        fila[2].metric(
+            "ρ analítico en la hora pico",
+            f"{p.rho_pico:.2f}",
+            help="ρ = λ_pico · E[servicio] ÷ playeros del turno más cargado "
+                 "(sólo nafta y diésel usan playero). ρ ≥ 1 ⇒ la cola crece sin parar.",
+            border=True,
+        )
+        tablas_real(p, base)
 
     # Diagnóstico automático
     utilizacion = base.prom("util_surtidores")
@@ -557,13 +871,23 @@ def pestania_indicadores(p: ParametrosSimulacion) -> None:
         )
 
     if utilizacion < 0.5 and espera_pico > 2.0:
-        st.info(
-            f"Ojo con el promedio: los surtidores están ocupados apenas el "
-            f"{utilizacion * 100:.0f} % del tiempo, pero en la hora pico se espera "
-            f"{espera_pico:.1f} min. El problema no es de capacidad total sino de "
-            f"concentración horaria.",
-            icon="⏰",
-        )
+        if p.estacion_real:
+            st.info(
+                f"Ojo con el promedio: las caras están ocupadas apenas el "
+                f"{utilizacion * 100:.0f} % del tiempo y los playeros el "
+                f"{base.prom('util_playeros') * 100:.0f} %, pero en la hora pico se espera "
+                f"{espera_pico:.1f} min. El cuello no son las caras sino los playeros en "
+                f"las horas pico.",
+                icon="⏰",
+            )
+        else:
+            st.info(
+                f"Ojo con el promedio: los surtidores están ocupados apenas el "
+                f"{utilizacion * 100:.0f} % del tiempo, pero en la hora pico se espera "
+                f"{espera_pico:.1f} min. El problema no es de capacidad total sino de "
+                f"concentración horaria.",
+                icon="⏰",
+            )
 
     st.divider()
     st.subheader("Detalle completo")
@@ -577,7 +901,145 @@ def pestania_indicadores(p: ParametrosSimulacion) -> None:
 # =============================================================================
 # Pestaña: demanda (Monte Carlo)
 # =============================================================================
+def tabla_monte_carlo(etiquetas: list[str], pesos_sorteo: tuple[float, ...],
+                      titulo_columna: str) -> pd.DataFrame:
+    """Los pasos 1 a 3 del Monte Carlo (probabilidad, acumulada, intervalo) de un sorteo."""
+    tabla = DemandaDiaria(
+        valores=tuple(range(len(etiquetas))),
+        frecuencias=tuple(max(1, int(round(w * 10_000))) for w in pesos_sorteo),
+    )
+    return pd.DataFrame(
+        {
+            titulo_columna: etiquetas,
+            "Probabilidad": [f"{x * 100:.1f} %" for x in tabla.probabilidades],
+            "Acumulada": [f"{x:.3f}" for x in tabla.acumuladas],
+            "Intervalo de números aleatorios": [
+                tabla.intervalo_texto(i) for i in range(len(etiquetas))
+            ],
+        }
+    )
+
+
+def pestania_demanda_real(p: ParametrosSimulacion) -> None:
+    """Litros/mes → clientes/día, y los dos Monte Carlo de 5 pasos de la estación real."""
+    traza = st.session_state.traza
+    mes_inicio = p.fecha_inicio[0]
+
+    st.subheader("De los litros por mes a los clientes por día")
+    st.markdown(
+        "La demanda de entrada son **litros por mes**; los clientes por día **se derivan** "
+        "(nunca al revés: dividir litros por 30 y llamarlo 'autos' fue el error B1)."
+    )
+    litros_dia = p.litros_mes / dias_del_mes(mes_inicio)
+    liquidos_dia = litros_dia / p.litros_medios_por_cliente
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Litros por mes", f"{p.litros_mes:,.0f} L", border=True)
+    c2.metric(f"Litros por día (mes {mes_inicio})", f"{litros_dia:,.0f} L", border=True)
+    c3.metric(
+        "Clientes de nafta/diésel por día", f"{liquidos_dia:,.0f}",
+        help=f"÷ {p.litros_medios_por_cliente:.1f} L medios por cliente líquido (§14.2).",
+        border=True,
+    )
+    c4.metric("Con GNC (llegadas totales)", f"{p.autos_por_dia:,.0f}", border=True)
+
+    pesos_llegada = p.pesos_llegada()
+    st.markdown("##### Monte Carlo 1: ¿qué producto carga cada cliente?")
+    st.caption(
+        "Pasos 1 a 3: la probabilidad de cada producto sale de **litros ÷ carga media** "
+        "(más litros por cliente ⇒ menos clientes), y el GNC entra como el "
+        f"{p.pct_gnc:.0%} de las llegadas."
+    )
+    tabla_producto = tabla_monte_carlo(
+        [pr.nombre for pr in p.productos], pesos_llegada, "Producto"
+    )
+    tabla_producto.insert(
+        1, "% de los litros",
+        [("—" if pr.es_gnc else f"{pr.pct_litros * 100:.1f} %") for pr in p.productos],
+    )
+    tabla_producto.insert(
+        2, "Carga media",
+        [f"{pr.carga_media:.1f} {'m³' if pr.es_gnc else 'L'}" for pr in p.productos],
+    )
+    st.dataframe(tabla_producto, hide_index=True)
+
+    st.markdown("##### Monte Carlo 2: ¿qué vehículo es, dado el producto?")
+    st.caption(
+        "Segunda tabla, condicionada al producto (supuesto VEH-00). El tipo fija el "
+        "tanque T, y los litros salen de `Triangular(0,2·T ; 0,3·T ; 1,0·T)`."
+    )
+    nombres_tipo = ("moto", "auto", "pick-up", "camión")
+    filas = []
+    for producto, pesos_tipo in p.matriz_tipos:
+        nombre = next(pr.nombre for pr in p.productos if pr.id == producto)
+        tabla = DemandaDiaria(
+            valores=tuple(range(len(pesos_tipo))),
+            frecuencias=tuple(int(round(w * 10_000)) for w in pesos_tipo),
+        )
+        fila = {"Producto": nombre}
+        for i, tipo in enumerate(nombres_tipo):
+            fila[tipo] = (
+                f"{pesos_tipo[i] * 100:.0f} % ({tabla.intervalo_texto(i)})"
+                if pesos_tipo[i] > 0 else "—"
+            )
+        filas.append(fila)
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    st.dataframe(
+        pd.DataFrame(
+            {
+                "Tipo": [t.id.replace("_", " ") for t in p.tipos_vehiculo],
+                "Tanque": [f"{t.tanque:g} {'m³' if t.es_gnc else 'L'}" for t in p.tipos_vehiculo],
+                "Carga (mín · moda · máx)": [
+                    f"{t.litros.minimo:.1f} · {t.litros.moda:.1f} · {t.litros.maximo:.1f}"
+                    for t in p.tipos_vehiculo
+                ],
+                "Carga media": [
+                    f"{t.litros.media:.1f} {'m³' if t.es_gnc else 'L'}" for t in p.tipos_vehiculo
+                ],
+            }
+        ),
+        hide_index=True,
+    )
+
+    st.markdown("##### Día a día de la corrida")
+    dias = pd.DataFrame(
+        {
+            "Día": [x.dia for x in traza.dias],
+            "Número aleatorio": [x.numero_texto for x in traza.dias],
+            "Clientes del día": [x.autos_sorteados for x in traza.dias],
+            "Llegaron": [x.autos_llegados for x in traza.dias],
+            "Atendidos": [x.atendidos for x in traza.dias],
+            "Perdidos por espera": [x.perdidos_cola for x in traza.dias],
+            "Perdidos sin combustible": [x.perdidos_sin_combustible for x in traza.dias],
+            "Litros vendidos": [round(x.litros_vendidos) for x in traza.dias],
+            "Quiebre": ["sí" if x.hubo_quiebre else "" for x in traza.dias],
+            "Calentamiento": ["sí" if x.en_calentamiento else "" for x in traza.dias],
+        }
+    )
+    st.dataframe(dias, hide_index=True, height=300)
+    if p.modo_demanda == "esperada":
+        st.caption(
+            "Modo **demanda esperada**: los clientes del día salen de los litros del mes, "
+            "el calendario (estacionalidad y fin de semana) y la cadena de arriba; no hay "
+            "sorteo diario (la columna 'Número aleatorio' no se usa). Las llegadas dentro "
+            "del día siguen siendo Poisson."
+        )
+    else:
+        st.caption(
+            "Modo **Monte Carlo**: cada día se sortea un factor relativo de DEM-07 "
+            "(0,78 · 0,89 · 1,00 · 1,11 · 1,22) que multiplica los clientes del día."
+        )
+
+    st.divider()
+    st.plotly_chart(
+        graficos.grafico_perfil_horario(traza, p.dias_medidos), key="g_perfil"
+    )
+    st.plotly_chart(graficos.grafico_demanda_diaria(traza), key="g_dia_a_dia")
+
+
 def pestania_demanda(p: ParametrosSimulacion) -> None:
+    if p.estacion_real:
+        pestania_demanda_real(p)
+        return
     traza = st.session_state.traza
 
     st.subheader("La demanda se sortea con el método Monte Carlo")
@@ -635,7 +1097,77 @@ def pestania_demanda(p: ParametrosSimulacion) -> None:
 # =============================================================================
 # Pestaña: inventario
 # =============================================================================
+def pestania_inventario_real(p: ParametrosSimulacion) -> None:
+    """Los 4 tanques (uno por producto líquido) y su política (s, Q) inicial."""
+    traza = st.session_state.traza
+    base = buscar(st.session_state.resultados, "Base")
+
+    st.subheader("Inventario: un tanque por producto líquido")
+    plazo = p.inventario[0].plazo_entrega
+    st.caption(
+        f"Cada producto tiene su tanque y su política (s, Q) (INV-07). El camión tarda entre "
+        f"{plazo.minimo:.0f} y {plazo.maximo:.0f} horas (más probable {plazo.moda:.0f} h, "
+        f"INV-01). El GNC no tiene tanque: se mide en m³ y no aparece acá."
+    )
+
+    fila = st.columns(4)
+    for columna, metrica in zip(
+        fila,
+        (
+            INDICADORES_INVENTARIO[0],   # nivel de servicio
+            INDICADORES_INVENTARIO[1],   # días con quiebre
+            INDICADORES_INVENTARIO[5],   # nivel promedio (suma de los 4 tanques)
+            INDICADORES_INVENTARIO[6],   # pedidos por día
+        ),
+    ):
+        tarjeta(columna, metrica, base)
+
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    litros_dia = promedio_pares(base, "litros_vendidos_por_producto")
+    quiebres = promedio_pares(base, "dias_quiebre_por_producto")
+    filas = []
+    for inv in p.inventario:
+        consumo_dia = litros_dia[inv.producto]
+        consumo_en_plazo = consumo_dia / 24.0 * inv.plazo_entrega.media
+        filas.append(
+            {
+                "Tanque": nombres[inv.producto],
+                "Capacidad": f"{inv.capacidad:,.0f} L",
+                "Nivel inicial": f"{inv.nivel_inicial:,.0f} L",
+                "Punto de pedido (s)": f"{inv.punto_pedido:,.0f} L",
+                "Cantidad (Q)": f"{inv.cantidad_pedido:,.0f} L",
+                "Venta diaria": f"{consumo_dia:,.0f} L",
+                "s cubre": f"{inv.punto_pedido / consumo_dia:.1f} días" if consumo_dia else "—",
+                "Vendido durante el plazo": f"{consumo_en_plazo:,.0f} L",
+                "Días con quiebre": f"{quiebres[inv.producto]:.1f} %",
+            }
+        )
+        if inv.punto_pedido < consumo_en_plazo:
+            st.warning(
+                f"{nombres[inv.producto]}: el punto de pedido ({inv.punto_pedido:,.0f} L) "
+                f"es menor que lo que se vende mientras viaja el camión "
+                f"({consumo_en_plazo:,.0f} L): el quiebre de ese tanque es probable.",
+                icon="⚠️",
+            )
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+    st.plotly_chart(graficos.grafico_tanque(traza, p), key="g_tanque")
+    st.caption(
+        "Se grafica la **suma** de los 4 tanques (cada uno tiene su propio diente de "
+        "sierra). Los saltos son las descargas de los camiones; si un tanque llega a cero, "
+        "ese producto deja de venderse aunque los otros sigan."
+    )
+    st.info(
+        "La búsqueda de la mejor política (s, Q) **por producto** y el camión consolidado "
+        "llegan en la Fase 4: por ahora se usa la política inicial de INV-07.",
+        icon="🛢️",
+    )
+
+
 def pestania_inventario(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
+    if p.estacion_real:
+        pestania_inventario_real(p)
+        return
     traza = st.session_state.traza
     base = buscar(st.session_state.resultados, "Base")
 
@@ -791,6 +1323,31 @@ def tabla_escenarios(resultados: list[ResultadoEscenario]) -> pd.DataFrame:
 
 def pestania_escenarios() -> None:
     resultados = st.session_state.resultados
+    p = st.session_state.parametros
+
+    if p.estacion_real:
+        st.subheader("Escenario Base de la estación real")
+        st.info(
+            "Por ahora hay un único escenario: la estación **como está** (12 caras, "
+            "playeros 1 · 2 · 2, una caja). El catálogo de escenarios del caso real "
+            "(playeros en el pico, corte de GNC, corte de ruta, autoservicio, etc.) llega "
+            "en la Fase 7. Para ver la comparación de capacidad del proyecto original "
+            "(+1 surtidor, +1 cajero), elegí el **caso clásico** en la barra lateral.",
+            icon="⚖️",
+        )
+        st.dataframe(tabla_escenarios(resultados), hide_index=True)
+        st.caption(
+            "Cada celda es el promedio de las réplicas ± la semiamplitud del intervalo de "
+            "confianza del 95 %."
+        )
+        opciones = {m.etiqueta: m for m in COMPARACION}
+        elegida = st.selectbox("Indicador a mirar", list(opciones), index=0)
+        metrica = opciones[elegida]
+        st.plotly_chart(
+            graficos.grafico_dispersion_replicas(resultados, metrica), key="g_caja"
+        )
+        st.plotly_chart(graficos.grafico_atendidos_vs_perdidos(resultados), key="g_atend")
+        return
 
     st.subheader("Comparación de escenarios de capacidad")
     st.caption(
@@ -850,10 +1407,22 @@ def pestania_economia(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> Non
         )
     st.dataframe(pd.DataFrame(filas), hide_index=True)
 
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(graficos.grafico_beneficio(economia), key="g_benef")
-    c2.plotly_chart(graficos.grafico_ingresos_costos(economia), key="g_ing_costos")
-    st.plotly_chart(graficos.grafico_venta_perdida(economia), key="g_perdida")
+    if p.estacion_real:
+        st.warning(
+            "Los márgenes por litro, por compra y el flete son **placeholders heredados** "
+            "del proyecto hipotético (ECO-01/02/06, sin fuente): estos pesos muestran cómo "
+            "se calcula, no son todavía una conclusión económica del caso. El GNC (m³) no "
+            "entra al ingreso hasta la Fase 8.",
+            icon="💰",
+        )
+        c1, c2 = st.columns(2)
+        c1.plotly_chart(graficos.grafico_ingresos_costos(economia), key="g_ing_costos")
+        c2.plotly_chart(graficos.grafico_venta_perdida(economia), key="g_perdida")
+    else:
+        c1, c2 = st.columns(2)
+        c1.plotly_chart(graficos.grafico_beneficio(economia), key="g_benef")
+        c2.plotly_chart(graficos.grafico_ingresos_costos(economia), key="g_ing_costos")
+        st.plotly_chart(graficos.grafico_venta_perdida(economia), key="g_perdida")
 
     with st.expander("Cómo se calcula"):
         st.markdown(
@@ -886,7 +1455,69 @@ def escapar_pesos(texto: str) -> str:
     return texto.replace("$", r"\$")
 
 
+def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
+    """Diagnóstico de la estación real, sin el veredicto de capacidad (llega en la Fase 7)."""
+    base = buscar(st.session_state.resultados, "Base")
+    economia = st.session_state.economia[0]
+
+    st.subheader("Diagnóstico de la estación real")
+    st.info(
+        "Todavía no hay veredicto de inversión: los escenarios del caso real (S0–S12) y la "
+        "economía con datos propios llegan en las fases 7 y 8. Esto es el diagnóstico de "
+        "la situación actual, con los datos y supuestos del Registro.",
+        icon="🧭",
+    )
+    perdidos_espera = base.prom("perdidos_cola_dia")
+    perdidos_cola_llena = base.prom("perdidos_cola_llena_dia")
+    perdidos_nafta = base.prom("perdidos_sin_combustible_dia")
+    perdidos_total = perdidos_espera + perdidos_cola_llena + perdidos_nafta
+    lineas = [
+        f"La estación recibe **{base.prom('llegadas_dia'):,.0f} clientes por día** "
+        f"({base.prom('litros_vendidos_dia'):,.0f} L de combustible líquido vendidos por día) "
+        f"con 12 caras y playeros {p.playeros_por_turno[0]} · {p.playeros_por_turno[1]} · "
+        f"{p.playeros_por_turno[2]} (noche · mañana · tarde).",
+        f"La espera promedio es de {base.prom('espera_surtidor'):.1f} min, pero en la hora "
+        f"pico trepa a {base.prom('espera_pico'):.1f} min "
+        f"(± {base.resumen['espera_pico'].semiamplitud:.1f}, IC 95 %). Las caras están "
+        f"ocupadas el {base.prom('util_surtidores') * 100:.0f} % del tiempo y los playeros "
+        f"el {base.prom('util_playeros') * 100:.0f} %.",
+        f"ρ analítico en la hora pico: **{p.rho_pico:.2f}** con "
+        f"{max(p.playeros_por_turno)} playeros. Con ρ cerca de 1 la dotación está al límite: "
+        f"depende de C5 (dotación), C11 (tiempo de servicio) y C12 (litros por carga).",
+        f"Se pierden {perdidos_total:.1f} clientes por día: {perdidos_espera:.1f} por "
+        f"esperar demasiado, {perdidos_cola_llena:.1f} por cola llena y "
+        f"{perdidos_nafta:.1f} por falta de combustible. Son "
+        f"{pesos(economia.venta_perdida)} por mes de venta no realizada (con márgenes "
+        f"placeholder).",
+        f"Nivel de servicio de combustible: {base.prom('nivel_servicio') * 100:.1f} %.",
+    ]
+    for linea in lineas:
+        st.markdown(f"- {escapar_pesos(linea)}")
+
+    if perdidos_nafta > (perdidos_espera + perdidos_cola_llena) * 1.5:
+        st.error(
+            "Se pierden más clientes por falta de combustible que por espera: el cuello "
+            "de botella es el abastecimiento, no la dotación.",
+            icon="🛢️",
+        )
+    elif (perdidos_espera + perdidos_cola_llena) > perdidos_nafta * 1.5:
+        st.warning(
+            "Se pierden más clientes por espera que por falta de combustible: el cuello "
+            "de botella es la capacidad de atención (playeros en el pico).",
+            icon="🚗",
+        )
+
+    st.divider()
+    st.markdown("**Supuestos del modelo** (lo que hay que aclarar al presentarlo)")
+    for supuesto in SUPUESTOS_REAL:
+        st.markdown(f"- {escapar_pesos(supuesto)}")
+
+
 def pestania_conclusion() -> None:
+    p = st.session_state.parametros
+    if p.estacion_real:
+        pestania_conclusion_real(p)
+        return
     recom = st.session_state.recomendacion
 
     st.subheader("Conclusión y recomendación")
@@ -938,7 +1569,91 @@ def pestania_conclusion() -> None:
 # =============================================================================
 # Pestaña: modelo y método
 # =============================================================================
+def pestania_modelo_real(p: ParametrosSimulacion) -> None:
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("El modelo")
+        st.markdown(DESCRIPCION_MODELO_REAL)
+    with c2:
+        st.subheader("El método")
+        st.markdown(DESCRIPCION_METODO)
+
+        st.markdown("**Intensidad de tráfico teórica (ρ) en la hora pico**")
+        st.caption(
+            "ρ = λ_pico · E[servicio] ÷ playeros, sólo con los clientes de nafta y diésel "
+            "(el GNC no usa playero). Si ρ ≥ 1 la cola crece sin límite mientras dure el pico."
+        )
+        columnas = st.columns(3)
+        for columna, n in zip(columnas, (1, 2, 3)):
+            rho = p.rho_pico * max(p.playeros_por_turno) / n
+            columna.metric(
+                f"{n} playero{'s' if n > 1 else ''}", f"{rho:.2f}", border=True,
+                help="Misma demanda y mismo servicio; sólo cambia la dotación del pico.",
+            )
+        if p.rho_pico >= 1:
+            st.warning(
+                "Con la dotación actual ρ supera 1 en la hora pico: la zona se satura y "
+                "sólo la frena el abandono de clientes.",
+                icon="⚠️",
+            )
+
+    st.divider()
+    st.subheader("Configuración de esta corrida")
+    if p.modo_demanda == "esperada":
+        demanda_txt = (
+            f"esperada: {p.litros_mes:,.0f} L/mes ⇒ {p.autos_por_dia:.0f} clientes/día"
+        )
+    else:
+        demanda_txt = (
+            f"Monte Carlo (factor relativo DEM-07) sobre {p.litros_mes:,.0f} L/mes ⇒ "
+            f"{p.autos_por_dia:.0f} clientes/día en promedio"
+        )
+    caras_txt = " · ".join(str(g.caras) for g in p.grupos)
+    playeros_txt = " · ".join(str(x) for x in p.playeros_por_turno)
+    disciplina_txt = p.disciplina_cola.replace("_", " ")
+    caja_txt = "Exponencial" if p.caja_exponencial else "Triangular"
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown(
+            f"""
+| Parámetro | Valor |
+|---|---|
+| Caras (A · B · C) | {caras_txt} |
+| Playeros (noche · mañana · tarde) | {playeros_txt} |
+| Cajas | {p.cajas} |
+| Cola por zona | {p.capacidad_cola} autos ({disciplina_txt}) |
+| Demanda | {demanda_txt} |
+| Clientes GNC | {p.pct_gnc:.0%} de las llegadas |
+| Inicio (mes, día) | {p.fecha_inicio} |
+| Perfil horario | pico a las {p.perfil.hora_pico()}:00 |
+| Carga nafta/diésel | Triangular({p.carga.minimo:g}, {p.carga.moda:g}, {p.carga.maximo:g}) min |
+| Carga GNC | Triangular({p.carga_gnc.minimo:g}, {p.carga_gnc.moda:g}, {p.carga_gnc.maximo:g}) min |
+| Compra | {caja_txt} — media {p.media_caja:.2f} min |
+| Probabilidad de compra | {p.prob_compra:.0%} (Bernoulli) |
+| Paciencia surtidor / caja | {p.paciencia_surtidor:.0f} / {p.paciencia_caja:.0f} min |
+"""
+        )
+    with c2:
+        plazo = p.inventario[0].plazo_entrega
+        st.markdown(
+            f"""
+| Parámetro | Valor |
+|---|---|
+| Tanques | {len(p.inventario)} × {p.inventario[0].capacidad:,.0f} L |
+| Política (s, Q) por producto | INV-07 (ver pestaña Inventario) |
+| Plazo de entrega | Triangular({plazo.minimo:g}, {plazo.moda:g}, {plazo.maximo:g}) h |
+| Consumo esperado (líquidos) | {p.litros_por_dia:,.0f} L/día |
+| Días simulados | {p.dias} ({p.dias_calentamiento} de calentamiento) |
+| Réplicas | {st.session_state.replicas} |
+| Semilla | {st.session_state.semilla_usada} |
+"""
+        )
+
+
 def pestania_modelo(p: ParametrosSimulacion) -> None:
+    if p.estacion_real:
+        pestania_modelo_real(p)
+        return
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("El modelo")
@@ -1121,8 +1836,12 @@ def politica_configurada(costos, p: ParametrosSimulacion):
 def correr_todo(
     p: ParametrosSimulacion, eco: ParametrosEconomicos, replicas: int, semilla: int
 ) -> None:
-    """Corre los 4 escenarios y la réplica con traza, y guarda todo en la sesión."""
-    resultados = correr_escenarios_cacheado(p, replicas, semilla)
+    """Corre los escenarios (o la estación real) y la réplica con traza; guarda todo en la sesión."""
+    if p.estacion_real:
+        # Un único "escenario Base" real; el catálogo S0–S12 llega en la Fase 7.
+        resultados = [correr_estacion_real_cacheado(p, replicas, semilla)]
+    else:
+        resultados = correr_escenarios_cacheado(p, replicas, semilla)
     traza = correr_traza_cacheada(p, semilla)
 
     st.session_state.resultados = resultados
@@ -1151,9 +1870,16 @@ def main() -> None:
         "Caso real: Av. Balloffet 1810 esq. Los Sauces."
     )
 
-    if correr or "resultados" not in st.session_state:
+    # Al cambiar de modelo (real <-> clásico) los resultados anteriores no sirven para nada:
+    # se vuelve a correr sin esperar el botón.
+    cambio_de_modelo = (
+        "parametros" in st.session_state
+        and st.session_state.parametros.estacion_real != p.estacion_real
+    )
+    if correr or "resultados" not in st.session_state or cambio_de_modelo:
         with st.spinner(
-            f"Simulando {replicas} réplicas de {p.dias} días en 4 escenarios…"
+            f"Simulando {replicas} réplicas de {p.dias} días "
+            f"{'de la estación real' if p.estacion_real else 'en 4 escenarios'}…"
         ):
             correr_todo(p, eco, replicas, semilla)
 

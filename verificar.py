@@ -34,6 +34,17 @@ Los controles cubren las dos partes del modelo:
    14. N14: cero parámetros huérfanos (todo campo tiene su Dato en el Registro).
    15. N15: tema Shell (ningún hex fuera de ui/tema.py, contraste WCAG ≥ 4,5,
        los 5 colores de PRODUCTO distinguibles).
+
+  FASE 2 DEL ORQUESTADOR (estación real: grupos, producto primero, playeros)
+   (N3, la conservación por producto, está dentro del control 8.)
+   El modelo REAL es el default de `ParametrosSimulacion()`. Los controles 1–4, 7 y 8
+   corren sobre él; los 5, 6 y 9 (monotonía, tabla Monte Carlo absoluta y política de
+   tanque único) corren sobre `clasico()`, el caso degenerado de §10.1.
+   16. N2: conservación por grupo y por motivo de pérdida (dentro del control 2).
+   17. N4: Little por grupo (control 3b).
+   18. N5: playeros ≤ turno y ≤ caras (control 4b, con traza).
+   19. N9: mezcla de producto en litros ≈ DEM-04 y clientes GNC ≈ 3 %.
+   20. N10: media muestral de litros por tipo de vehículo.
 """
 
 from __future__ import annotations
@@ -46,6 +57,7 @@ from sim.config import (
     ParametrosSimulacion,
     dias_y_fecha,
 )
+from sim.estadisticas import capacidad_total, nivel_inicial_total
 from sim.modelo import simular
 from sim.runner import con_politica, correr_escenarios, correr_replica
 
@@ -88,36 +100,68 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 2
-    separador("2. Conservación de clientes")
+    separador("2. Conservación de clientes (por estación, por grupo y por motivo: N2)")
     ind, _ = simular(p, semilla=11)
     t = ind.c_total
-    salidas = t.atendidos_surtidor + t.perdidos_surtidor + t.perdidos_sin_combustible
+    perdidos = (
+        t.perdidos_surtidor + t.perdidos_sin_combustible + t.perdidos_cola_llena
+    )
+    salidas = t.atendidos_surtidor + perdidos
     en_sistema = t.llegadas - salidas
+    caras_total = sum(g.caras for g in p.grupos)
+    holgura = caras_total + len(p.grupos) * (p.capacidad_cola or 0)
     controlar(
-        0 <= en_sistema <= p.surtidores + 30,
-        "Llegadas = atendidos + abandonos + sin combustible + los que quedaron adentro",
-        f"{t.llegadas} = {t.atendidos_surtidor} + {t.perdidos_surtidor} + "
-        f"{t.perdidos_sin_combustible} + {en_sistema}",
+        0 <= en_sistema <= holgura,
+        "Llegadas = atendidos + Σ perdidos (por motivo) + los que quedaron adentro",
+        f"{t.llegadas} = {t.atendidos_surtidor} + {t.perdidos_surtidor} (espera) + "
+        f"{t.perdidos_sin_combustible} (sin combustible) + {t.perdidos_cola_llena} "
+        f"(cola llena) + {en_sistema} adentro",
+    )
+    peor_grupo = ""
+    grupos_bien = True
+    suma_llegadas = 0
+    for g in p.grupos:
+        cg = ind.c_grupo_total[g.id]
+        suma_llegadas += cg.llegadas
+        adentro = cg.llegadas - (
+            cg.atendidos + cg.perdidos_espera + cg.perdidos_cola_llena
+            + cg.perdidos_sin_combustible
+        )
+        if not 0 <= adentro <= g.caras + (p.capacidad_cola or 0):
+            grupos_bien = False
+            peor_grupo = f"{g.id}: {adentro} adentro"
+    controlar(
+        grupos_bien and suma_llegadas == t.llegadas,
+        "N2: en cada grupo (A, B, C) llegadas = atendidos + perdidos por motivo + adentro",
+        "los tres grupos cierran y suman las llegadas de la estación"
+        + (f" | falla {peor_grupo}" if peor_grupo else ""),
+    )
+    suma_producto = sum(ind.c_producto_total[pr].llegadas for pr in ind.c_producto_total)
+    controlar(
+        suma_producto == t.llegadas,
+        "N2: cada cliente que llega tiene exactamente un producto",
+        f"Σ llegadas por producto = {suma_producto} | llegadas = {t.llegadas}",
     )
     controlar(
-        t.compras_atendidas + t.perdidos_caja <= t.entraron_minimarket,
+        t.compras_atendidas + t.perdidos_caja <= t.entraron_minimarket <= t.atendidos_surtidor,
         "Al minimarket no entra nadie que no haya cargado",
-        f"entraron {t.entraron_minimarket}, cobrados {t.compras_atendidas}, "
-        f"abandonos {t.perdidos_caja}",
+        f"atendidos {t.atendidos_surtidor}, entraron {t.entraron_minimarket}, "
+        f"cobrados {t.compras_atendidas}, abandonos {t.perdidos_caja}",
     )
 
     # ------------------------------------------------------------------ 3
-    separador("3. Ley de Little (L = lambda * W) en la cola del surtidor")
+    separador("3. Ley de Little (L = lambda * W) en la cola de las caras (N4: por grupo)")
     p_largo = replace(p, dias=60, dias_calentamiento=2)
     ind, _ = simular(p_largo, semilla=13)
     periodo = (p_largo.dias - p_largo.dias_calentamiento) * MINUTOS_POR_DIA
 
-    # Tiempo total de espera acumulado por todos los que hicieron cola: los atendidos
-    # esperaron lo que registró el colector y los que abandonaron esperaron exactamente
-    # su paciencia. Los que se fueron por falta de combustible nunca hicieron cola.
-    espera_total = (
-        ind.espera_surtidor.suma + ind.c.perdidos_surtidor * p_largo.paciencia_surtidor
-    )
+    # Tiempo total de espera acumulado por todos los que hicieron cola por una cara: los
+    # que llegaron a la cara esperaron lo que registró el colector (`espera_cara`) y los
+    # que abandonaron en la cola esperaron exactamente su paciencia. Los que se fueron
+    # esperando al playero ya habían tenido cara (están en `espera_cara`), y los que se
+    # fueron por falta de combustible o cola llena nunca hicieron cola.
+    abandonos_en_cola = ind.c.perdidos_surtidor - ind.c.abandonos_playero
+    espera_total = ind.espera_cara.suma + abandonos_en_cola * p_largo.paciencia_surtidor
     lq_por_little = espera_total / periodo
     lq_medido = ind.cola_surtidor.promedio
     error = abs(lq_medido - lq_por_little) / max(lq_por_little, 1e-9)
@@ -127,27 +171,82 @@ def main() -> int:
         f"medida {lq_medido:.4f} autos | Little {lq_por_little:.4f} autos | "
         f"diferencia {error * 100:.2f} %",
     )
+    for g in p_largo.grupos:
+        cg = ind.c_grupo[g.id]
+        espera_g = ind.esperas_cara_grupo[g.id].suma + (
+            cg.perdidos_espera - cg.abandonos_playero
+        ) * p_largo.paciencia_surtidor
+        lq_little = espera_g / periodo
+        lq_med = ind.colas_grupo[g.id].promedio
+        tolerancia = max(0.05 * lq_little, 0.005)
+        controlar(
+            abs(lq_med - lq_little) <= tolerancia,
+            f"N4: Little en el grupo {g.id} ({g.nombre})",
+            f"medida {lq_med:.4f} autos | Little {lq_little:.4f} autos",
+        )
 
     # ------------------------------------------------------------------ 4
-    separador("4. Utilización")
+    separador("4. Utilización y playeros (N5)")
     controlar(
         0.0 <= ind.utilizacion_surtidores <= 1.0,
-        "La utilización de los surtidores está entre 0 % y 100 %",
+        "La utilización de las caras está entre 0 % y 100 %",
         f"{ind.utilizacion_surtidores * 100:.2f} %",
     )
-    trabajo_esperado = ind.c.atendidos_surtidor * p_largo.carga.media
+    trabajo_esperado = ind.servicio_suma
     trabajo_medido = ind.ocupados_surtidores.promedio * periodo
     error_trabajo = abs(trabajo_medido - trabajo_esperado) / trabajo_esperado
     controlar(
         error_trabajo < 0.05,
-        "El tiempo de surtidor ocupado coincide con atendidos x tiempo medio de carga",
+        "El tiempo de cara ocupada coincide con la suma de los tiempos de carga atendidos",
         f"medido {trabajo_medido:,.0f} min | esperado {trabajo_esperado:,.0f} min | "
         f"diferencia {error_trabajo * 100:.2f} %",
     )
 
+    # N5: simultáneos en servicio ≤ playeros del turno y ≤ caras. Se muestrea con la
+    # traza (un día entero, un cuadro cada 0,5 min). Cuando baja la dotación, quien ya
+    # está en servicio no se expulsa (trampa 13): la capacidad se ajusta al liberarse,
+    # así que los primeros minutos después de un borde de turno no cuentan.
+    p_traza = replace(p, dias=4, dias_calentamiento=2, dia_animado=3)
+    ind_t, traza = simular(p_traza, semilla=19, con_traza=True)
+    bordes = [hora * 60.0 for hora, _ in p_traza.turnos]
+    margen_borde = 30.0
+
+    def lejos_de_un_borde(minuto: float) -> bool:
+        return all(((minuto - b) % MINUTOS_POR_DIA) >= margen_borde for b in bordes)
+
+    sobrepasa = [
+        c for c in traza.cuadros
+        if lejos_de_un_borde(c.minuto_del_dia) and c.playeros_ocupados > c.playeros_en_turno
+    ]
+    maximo_playeros = max(c.playeros_ocupados for c in traza.cuadros)
+    controlar(
+        not sobrepasa and maximo_playeros <= max(p.playeros_por_turno),
+        "N5: los playeros en servicio nunca superan los del turno (ni la dotación máxima)",
+        f"{len(traza.cuadros):,} cuadros muestreados | máximo simultáneo {maximo_playeros} | "
+        f"cuadros en falta: {len(sobrepasa)}",
+    )
+    caras_ok = all(
+        ind_t.ocupados_grupo[g.id].maximo <= g.caras + 1e-9 for g in p.grupos
+    )
+    controlar(
+        caras_ok,
+        "N5: nunca hay más autos cargando que caras en cada grupo",
+        " · ".join(
+            f"{g.id}: máx {ind_t.ocupados_grupo[g.id].maximo:.0f} de {g.caras}"
+            for g in p.grupos
+        ),
+    )
+    en_turno = [c.playeros_en_turno for c in traza.cuadros]
+    controlar(
+        min(en_turno) == min(p.playeros_por_turno) and max(en_turno) == max(p.playeros_por_turno),
+        "Los turnos se repiten todos los días (la dotación sube y baja con el reloj)",
+        f"playeros en turno observados en el día graficado: {sorted(set(en_turno))}",
+    )
+
     # ------------------------------------------------------------------ 5
-    separador("5. Monotonía (el modelo reacciona como corresponde)")
-    escenarios = correr_escenarios(p, replicas=3, semilla_base=1)
+    separador("5. Monotonía (el modelo reacciona como corresponde) — caso clásico")
+    clasico = ParametrosSimulacion.clasico()
+    escenarios = correr_escenarios(clasico, replicas=3, semilla_base=1)
     base, con_surtidor, con_cajero = escenarios[0], escenarios[1], escenarios[2]
     controlar(
         con_surtidor.prom("espera_pico") < base.prom("espera_pico"),
@@ -172,28 +271,46 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 6
-    separador("6. Monte Carlo: la demanda sorteada respeta la tabla empírica")
-    p_muchos = replace(
-        p, dias=400, dias_calentamiento=1, modo_demanda="monte_carlo"
-    )
+    separador("6. Monte Carlo: la demanda sorteada respeta la tabla empírica — caso clásico")
+    p_muchos = replace(clasico, dias=400, dias_calentamiento=1)
     _, traza = correr_replica(p_muchos, semilla=5, con_traza=True)
     sorteos = [d.autos_sorteados for d in traza.dias]
     media_simulada = sum(sorteos) / len(sorteos)
-    error_media = abs(media_simulada - p.demanda.media) / p.demanda.media
+    error_media = abs(media_simulada - clasico.demanda.media) / clasico.demanda.media
     controlar(
         error_media < 0.03,
         "La media de la demanda sorteada coincide con la de la tabla",
-        f"simulada {media_simulada:.1f} autos/día | tabla {p.demanda.media:.1f} | "
+        f"simulada {media_simulada:.1f} autos/día | tabla {clasico.demanda.media:.1f} | "
         f"diferencia {error_media * 100:.2f} % ({len(sorteos)} días)",
     )
     peor = 0.0
-    for valor, probabilidad in zip(p.demanda.valores, p.demanda.probabilidades):
+    for valor, probabilidad in zip(clasico.demanda.valores, clasico.demanda.probabilidades):
         observada = sorteos.count(valor) / len(sorteos)
         peor = max(peor, abs(observada - probabilidad))
     controlar(
         peor < 0.05,
         "Cada valor de la tabla sale con la frecuencia que le corresponde",
         f"la mayor diferencia entre probabilidad observada y teórica es {peor * 100:.2f} puntos",
+    )
+
+    # En la estación real el Monte Carlo sortea un FACTOR RELATIVO (DEM-07) que multiplica
+    # los litros del día derivados de los litros/mes: su media es 1, así que el mes sigue
+    # sumando litros_mes.
+    p_mc = replace(
+        p, modo_demanda="monte_carlo", dias=150, dias_calentamiento=2, fecha_inicio=(1, 1)
+    )
+    _, traza_mc = correr_replica(p_mc, semilla=5, con_traza=True)
+    cocientes = []
+    for d in traza_mc.dias:
+        esperado = p_mc.litros_del_dia(d.dia) / p_mc.litros_medios_por_cliente / (
+            1.0 - p_mc.pct_gnc
+        )
+        cocientes.append(d.autos_sorteados / esperado)
+    media_factor = sum(cocientes) / len(cocientes)
+    controlar(
+        abs(media_factor - 1.0) < 0.03,
+        "Monte Carlo real: el factor relativo sorteado tiene media 1 (conserva los litros)",
+        f"media de autos sorteados / autos esperados = {media_factor:.3f} ({len(cocientes)} días)",
     )
 
     # ------------------------------------------------------------------ 7
@@ -220,27 +337,57 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 8
-    separador("8. Inventario: conservación de litros")
+    separador("8. Inventario: conservación de litros (N3: un tanque por producto líquido)")
     ind_inv, _ = simular(p, semilla=23)
     t = ind_inv.c_total
-    esperado = p.tanque.nivel_inicial + t.litros_recibidos - t.litros_vendidos
+    inicial = nivel_inicial_total(p)
+    capacidad = capacidad_total(p)
+    esperado = inicial + t.litros_recibidos - t.litros_vendidos
     diferencia = abs(ind_inv.nivel_tanque.valor - esperado)
     controlar(
         diferencia < 1.0,
-        "Nivel final = nivel inicial + litros recibidos - litros vendidos",
+        "Nivel final = nivel inicial + litros recibidos - litros vendidos (toda la estación)",
         f"{ind_inv.nivel_tanque.valor:,.1f} L medidos vs {esperado:,.1f} L calculados "
         f"(recibidos {t.litros_recibidos:,.0f} L, vendidos {t.litros_vendidos:,.0f} L)",
     )
+    peor_tanque = 0.0
+    for inv in p.inventario:
+        cp = ind_inv.c_producto_total[inv.producto]
+        esperado_p = inv.nivel_inicial + cp.litros_recibidos - cp.litros_vendidos
+        peor_tanque = max(peor_tanque, abs(ind_inv.niveles[inv.producto].valor - esperado_p))
     controlar(
-        ind_inv.nivel_tanque.minimo >= -1e-6,
-        "El tanque nunca queda en negativo",
-        f"nivel mínimo alcanzado: {ind_inv.nivel_tanque.minimo:,.1f} L",
+        peor_tanque < 1.0,
+        "La conservación también cierra en cada tanque por separado",
+        f"peor diferencia entre los {len(p.inventario)} tanques: {peor_tanque:.2e} L",
+    )
+    liquidos_por_producto = sum(
+        ind_inv.c_producto_total[inv.producto].litros_vendidos for inv in p.inventario
+    )
+    gnc = ind_inv.c_producto_total["gnc"]
+    m3_por_cliente = gnc.litros_vendidos / max(gnc.atendidos, 1)
+    controlar(
+        abs(liquidos_por_producto - t.litros_vendidos) < 1e-6
+        and abs(m3_por_cliente - 7.0) / 7.0 < 0.05,
+        "N3: los m³ del GNC no se mezclan con los litros (≈ 7 m³ por cliente GNC)",
+        f"Σ litros de los 4 líquidos = {liquidos_por_producto:,.0f} L = litros vendidos "
+        f"de la estación | GNC: {gnc.litros_vendidos:,.0f} m³ en {gnc.atendidos} cargas "
+        f"({m3_por_cliente:.2f} m³ c/u)",
     )
     controlar(
-        ind_inv.nivel_tanque.maximo <= p.tanque.capacidad + 1e-6,
-        "El tanque nunca supera su capacidad",
-        f"nivel máximo alcanzado: {ind_inv.nivel_tanque.maximo:,.1f} L de "
-        f"{p.tanque.capacidad:,.0f} L",
+        ind_inv.nivel_tanque.minimo >= -1e-6
+        and all(s.minimo >= -1e-6 for s in ind_inv.niveles.values()),
+        "Ningún tanque queda en negativo",
+        f"nivel mínimo de la estación: {ind_inv.nivel_tanque.minimo:,.1f} L",
+    )
+    controlar(
+        ind_inv.nivel_tanque.maximo <= capacidad + 1e-6
+        and all(
+            ind_inv.niveles[inv.producto].maximo <= inv.capacidad + 1e-6
+            for inv in p.inventario
+        ),
+        "Ningún tanque supera su capacidad",
+        f"nivel máximo de la estación: {ind_inv.nivel_tanque.maximo:,.1f} L de "
+        f"{capacidad:,.0f} L",
     )
     controlar(
         0.0 <= ind_inv.nivel_servicio <= 1.0,
@@ -249,9 +396,9 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 9
-    separador("9. Inventario: la política hace lo que tiene que hacer")
-    tacaña, _ = correr_replica(con_politica(p, 4_000, 20_000), semilla=29)
-    generosa, _ = correr_replica(con_politica(p, 20_000, 20_000), semilla=29)
+    separador("9. Inventario: la política hace lo que tiene que hacer — caso clásico")
+    tacaña, _ = correr_replica(con_politica(clasico, 4_000, 20_000), semilla=29)
+    generosa, _ = correr_replica(con_politica(clasico, 20_000, 20_000), semilla=29)
     controlar(
         tacaña.porcentaje_dias_quiebre > generosa.porcentaje_dias_quiebre,
         "Con un punto de pedido más alto hay menos días con quiebre de stock",
@@ -264,8 +411,8 @@ def main() -> int:
         f"punto 4.000 L: {tacaña.nivel_tanque_promedio:,.0f} L promedio | "
         f"punto 20.000 L: {generosa.nivel_tanque_promedio:,.0f} L",
     )
-    chico, _ = correr_replica(con_politica(p, 12_000, 10_000), semilla=29)
-    grande, _ = correr_replica(con_politica(p, 12_000, 30_000), semilla=29)
+    chico, _ = correr_replica(con_politica(clasico, 12_000, 10_000), semilla=29)
+    grande, _ = correr_replica(con_politica(clasico, 12_000, 30_000), semilla=29)
     controlar(
         chico.pedidos_dia > grande.pedidos_dia,
         "Pedir de a poco obliga a pedir más seguido (más fletes)",
@@ -275,7 +422,6 @@ def main() -> int:
 
     # ------------------------------------------------------------------ 10
     separador("10. N1: el caso clásico reproduce los números dorados (§14.1)")
-    clasico = ParametrosSimulacion.clasico()
     # Los dorados se midieron sobre la rama mergeada (5/10/2026) y están en
     # ORQUESTADOR_SIMULADOR.md §14.1. Deben salir idénticos hasta 6 decimales.
     DORADOS_REPLICA = {
@@ -509,6 +655,68 @@ def main() -> int:
         peor >= 60,
         "Los 5 colores de PRODUCTO son distinguibles entre sí",
         f"menor distancia RGB entre productos: {peor:.0f}",
+    )
+
+    # ------------------------------------------------------------------ 15
+    separador("15. N9: mezcla de producto (en litros) y clientes GNC")
+    p_mix = replace(p, dias=130, dias_calentamiento=2)
+    ind_mix, _ = simular(p_mix, semilla=31)
+    llegadas_mix = ind_mix.c.llegadas
+    # Litros que cada producto PIDIÓ (vendidos + los que pidió quien se fue): así el
+    # abandono o el quiebre no sesgan la mezcla que se sortea al llegar.
+    pedidos = {
+        pr.id: ind_mix.c_producto[pr.id].litros_vendidos
+        + ind_mix.c_producto[pr.id].litros_no_vendidos
+        for pr in p_mix.productos
+        if not pr.es_gnc
+    }
+    total_pedido = sum(pedidos.values())
+    peor_pp = max(
+        abs(100.0 * pedidos[pr.id] / total_pedido - 100.0 * pr.pct_litros)
+        for pr in p_mix.productos
+        if not pr.es_gnc
+    )
+    controlar(
+        llegadas_mix >= 30_000 and peor_pp < 1.5,
+        "La mezcla en LITROS simulada coincide con DEM-04 (< 1,5 puntos)",
+        f"{llegadas_mix:,} llegadas | "
+        + " · ".join(
+            f"{pr.nombre} {100.0 * pedidos[pr.id] / total_pedido:.1f} % (DEM-04 {100.0 * pr.pct_litros:.1f})"
+            for pr in p_mix.productos
+            if not pr.es_gnc
+        )
+        + f" | peor diferencia {peor_pp:.2f} pp",
+    )
+    pct_gnc_sim = ind_mix.c_producto["gnc"].llegadas / llegadas_mix
+    controlar(
+        abs(pct_gnc_sim - p_mix.pct_gnc) < 0.005,
+        "Los clientes GNC son ≈ 3 % de las llegadas (DEM-05)",
+        f"{100.0 * pct_gnc_sim:.2f} % simulado | {100.0 * p_mix.pct_gnc:.1f} % cargado",
+    )
+
+    # ------------------------------------------------------------------ 16
+    separador("16. N10: litros por carga según el tipo de vehículo")
+    esperados_tipo = {t.id: t.litros.media for t in p_mix.tipos_vehiculo}
+    tolerancia_tipo = {"auto": 0.02, "pick_up": 0.02, "moto": 0.04, "camion": 0.04, "auto_gnc": 0.04}
+    peor_tipo = 0.0
+    detalle_tipo = []
+    for tipo, muestras in ind_mix.litros_por_tipo.items():
+        error_t = abs(muestras.promedio - esperados_tipo[tipo]) / esperados_tipo[tipo]
+        detalle_tipo.append(
+            f"{tipo} {muestras.promedio:.2f} (teórica {esperados_tipo[tipo]:.2f}, n={muestras.n:,})"
+        )
+        peor_tipo = max(peor_tipo, error_t - tolerancia_tipo[tipo])
+    controlar(
+        peor_tipo <= 0,
+        "La media muestral de litros de cada tipo de vehículo coincide con su Triangular",
+        " | ".join(detalle_tipo),
+    )
+    auto_media = ind_mix.litros_por_tipo["auto"].promedio
+    pick_media = ind_mix.litros_por_tipo["pick_up"].promedio
+    controlar(
+        abs(auto_media - 23.5) / 23.5 < 0.02 and abs(pick_media - 40.0) / 40.0 < 0.02,
+        "N10: auto ≈ 23,5 L (± 2 %) y pick-up ≈ 40 L (± 2 %)",
+        f"auto {auto_media:.2f} L | pick-up {pick_media:.2f} L",
     )
 
     # ------------------------------------------------------------------

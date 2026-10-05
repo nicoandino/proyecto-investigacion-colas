@@ -107,7 +107,9 @@ def _economia_de(
     litros_dia = r.prom("litros_vendidos_dia")
     compras_dia = r.prom("compras_dia")
     perdidos_dia = (
-        r.prom("perdidos_cola_dia") + r.prom("perdidos_sin_combustible_dia")
+        r.prom("perdidos_cola_dia")
+        + r.prom("perdidos_sin_combustible_dia")
+        + r.prom("perdidos_cola_llena_dia")
     )
 
     ingreso_combustible = litros_dia * eco.margen_por_litro * DIAS_DEL_MES
@@ -242,7 +244,9 @@ def analizar_politicas(
 
         litros_no_vendidos_mes = pol.prom("litros_no_vendidos_dia") * DIAS_DEL_MES
         perdidos_mes = (
-            pol.prom("perdidos_cola_dia") + pol.prom("perdidos_sin_combustible_dia")
+            pol.prom("perdidos_cola_dia")
+            + pol.prom("perdidos_sin_combustible_dia")
+            + pol.prom("perdidos_cola_llena_dia")
         ) * DIAS_DEL_MES
         costo_faltante = (
             litros_no_vendidos_mes * eco.margen_por_litro

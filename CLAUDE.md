@@ -9,6 +9,20 @@ La propuesta original (`docs/propuesta_simulacion_estacion_servicio.docx`) plant
 usar **Simul8**. Decisión tomada: **no usamos Simul8**, construimos nuestro propio
 simulador.
 
+### Versión actual: Fase 2 (Octubre 2026)
+
+**Transición a caso real:** El modelo pasó de ser una simulación académica hipotética a un
+**estudio de caso real de la estación Shell de San Rafael, Mendoza** con tres cambios
+arquitectónicos:
+
+1. **Modelo determinista** (sin Monte Carlo on-the-fly): La demanda se calcula a partir de
+   una demanda base mensual y índices de estacionalidad, sin sorteos de demanda por día.
+2. **Datos únicamente de fuentes** (no campo): Todos los parámetros provienen de
+   `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`, consolidado desde 80+ fuentes
+   verificadas (Secretaría de Energía, FECRA, ENARGAS, papers académicos, etc.).
+3. **Horizonte variable** (día/semana/mes/estación/año): Se puede simular desde un solo
+   día hasta un año completo, con ajustes de estacionalidad según la época.
+
 ### Consigna del profesor
 
 > "Puede ser sobre el tema que deseen, que corra en algún software (Simul8, flexsim,
@@ -20,8 +34,11 @@ El proyecto usa **las tres unidades** que se dieron en clase:
 | Unidad de la materia | Dónde aparece |
 |---|---|
 | **Modelos de colas** | Red de dos colas (surtidores y caja), disciplina FIFO, Wq, Lq, W, L, ρ, utilización, abandono |
-| **Simulación Monte Carlo** | La demanda de cada día se sortea de una tabla de frecuencias empírica, con los 5 pasos del apunte |
+| **Simulación Monte Carlo** | (Opcional, Fase 1) La demanda de cada día se sortea de una tabla de frecuencias empírica, con los 5 pasos del apunte |
 | **Transporte / inventario** | Tanque de combustible con política (s, Q) y camión cisterna con plazo de entrega aleatorio |
+
+**Fase 2 (actual):** Determinismo en demanda (no Monte Carlo), datos verificados de fuente,
+horizonte variable. El azar sigue presente en tiempos de servicio y plazos de entrega.
 
 ### Las dos preguntas que responde
 
@@ -150,6 +167,69 @@ Se barre una grilla de (punto de pedido s, cantidad a pedir Q) y se elige la de 
   promedios por cliente son otra cosa y se calculan aparte.
 - `verificar.py`: 22 controles, incluidas la **ley de Little** y la **conservación de
   litros**, que dan exactos.
+
+## Fase 2: Determinismo, fuentes verificadas, horizonte variable
+
+### Cambios arquitectónicos (octubre 2026)
+
+**1. Modelo determinista (sin Monte Carlo en demanda)**
+
+Fase 1 sorteaba la demanda de cada día de una tabla empírica. Fase 2 calcula la demanda
+de forma determinista a partir de:
+
+- `demanda_base_mensual`: Litros/mes (ej., 120.000 L base)
+- `estacionalidad`: Índices por mes (enero=100, julio=85, junio=55, etc.)
+- Día del año: Se calcula autos_por_día = base/30 × índice(mes)/promedio_índices
+
+La fórmula es exacta (sin azar en demanda). Los autos llegan según el perfil horario
+(Poisson no homogéneo), así que hay variabilidad dentro del día, solo no día-a-día.
+
+Ventaja: No se necesitan réplicas para convergencia; cada horizonte tiene un comportamiento
+predecible. Se pueden correr períodos más largos sin incertidumbre de Monte Carlo.
+
+**2. Datos únicamente de fuentes verificadas**
+
+Todos los parámetros de operación están en `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`:
+
+- Demanda: Extrapolada desde datos nacionales Shell (600k L/mes/estación) × participación local
+- Perfil horario: De datos YPF micropricing (7:30–10:30 pico mañana, 16–18 pico tarde)
+- Tiempos: Papers académicos (UTN, UNLP), observaciones de sector
+- Personal: FECRA convenio SOESGyP (oct 2026), salarios validados
+- Estacionalidad: Ocupación hotelera (proxy), cortes RN-143/144 (invierno)
+- Mix combustible: Surtidores.com.ar datos de sector
+- Parque automotor: AFAC, ENARGAS
+
+Cada parámetro tiene **confianza** (Alta/Media/Baja) y **URL de fuente**. Valores
+anotados como "SUPUESTO" requieren validación con la estación real.
+
+**3. Horizonte variable**
+
+El usuario elige simular:
+- **Día (1)**: Un día representativo, para ver patrones horarios finos
+- **Semana (7)**: Una semana, para capturar variación fin de semana vs. hábil
+- **Mes (30)**: Un mes de operación, acumulación de eventos, política (s, Q)
+- **Estación (90)**: Trimestre, rango de estacionalidad (ej., invierno junio–agosto)
+- **Año (365)**: Ciclo completo, máxima estacionalidad, decisiones anuales
+
+Los `dias` de simulación se fijan automáticamente según el horizonte; no hay menú de
+"días simulados" en determinista. El calentamiento es innecesario (no hay transiente
+de Monte Carlo).
+
+### Implementación
+
+- **config.py**: Nueva clase `Estacionalidad` con índices [1..12]
+- **config.py**: `ParametrosSimulacion` nuevos campos:
+  - `modo_determinista: bool`
+  - `demanda_base_mensual: float`
+  - `horizonte: str` ("dia", "semana", "mes", "estacion", "anio")
+  - Métodos `.autos_por_dia()` y `.autos_por_dia_fecha(dia)` adaptativos
+- **distribuciones.py**: Nuevo método `.determinista(autos_por_dia)` → tupla (autos, 50)
+- **modelo.py**: `correr_dias()` elige entre `.empirica()` y `.determinista()`
+- **app.py**: Nuevo expander "Fase 2: Modelo determinista"
+  - Toggle `modo_determinista`
+  - Si activo: radio button `horizonte` + slider `demanda_base_mensual`
+  - Si no: muestra tabla de demanda Monte Carlo (Fase 1)
+  - Sección "Corrida" desactiva "días simulados" en determinista (se fija por horizonte)
 
 ## Decisiones de arquitectura (y por qué)
 

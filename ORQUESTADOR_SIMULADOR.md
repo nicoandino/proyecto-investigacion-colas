@@ -516,7 +516,17 @@ Métricas nuevas por grupo, playeros, motivo de pérdida, producto, plazo con co
 
 
 ### Fase 3 — Animación nueva
-`Cuadro` v2 columnar; `ui/animacion.py` (§8.5) con `paleta_json()`. **Gate:** capturas de cada zona, de la cola desbordada y del camión · sin errores de consola · saltos funcionando · 22/22.
+`Cuadro` v2 (carriles, cola por producto, tanques y camión) y `ui/animacion.py` (§8.5) con `paleta_json()`. **Gate:** capturas de cada zona, de la cola desbordada y del camión · sin errores de consola · saltos funcionando · 22/22.
+
+> **FASE 3 CERRADA (5/10/2026).**
+> - `sim/traza.py`: `Cuadro` suma `grupos` (por zona: carriles por cara, cola por producto, largo, rechazados), `tanques` (nivel, litros en camino, progreso del camión, horas que faltan), `perdidos_cola_llena` y `gnc_cortado`.
+> - `sim/modelo.py`: carriles (qué auto ocupa cada cara), cola visible por zona y pedidos abiertos por producto; `_cargar_en_cara` separado de `_atender_real` para liberar el carril en un `finally`. Sirve para dibujar: el motor no consulta nada de eso (los dorados siguen exactos).
+> - `ui/animacion.py`: reproductor nuevo, columnar, SVG dibujado en el navegador. Avenida con autos que pasan de largo, techo amarillo con filete rojo, zonas A/B/C con 12 caras y surtidores de a dos, cola con lugares numerados, playeros (en turno / atendiendo / autos con la cara ocupada esperando), minimarket, un tanque por producto, camión en viaje por producto, estado del GNC. Cada auto lleva el color de su producto y cada estado lleva texto. Saltos: hora pico, primer quiebre, próxima descarga, corte de GNC (deshabilitado hasta la Fase 6). Sirve también para el caso clásico (una zona, un tanque).
+> - `ui/tema.py`: paleta clara de la animación (se eliminó la oscura); `COLOR_PRODUCTO`.
+> - `app.py`: el día a animar se elige en la pestaña, con fecha y tipo de día.
+> - `verificar.py`: control 17 (cuadros = motor en los 2.880 cuadros, cola ≤ capacidad, JSON < 3 MB; 0,5 MB reales).
+> - **Compuerta:** `verificar.py` 54/54 · N1 dorados exactos · N15 (0 hex fuera de `ui/tema.py`) · 0 errores de consola en el reproductor suelto y dentro de Streamlit (real y clásico) · saltos y reproducción verificados con Playwright. Capturas en `reports/qa/fase3/` (`reports/qa_animacion.py`, `reports/qa_fase3_app.py`).
+> - **Deuda:** compresores y corte de GNC (Fase 6); ruta y cortes del camión (Fase 5, hoy una línea fija "Dock Sud → estación" sin cortes); el texto del SVG es chico al escalarlo en pantallas angostas.
 
 ### Fase 4 — Cinco productos, 4 tanques, política por producto, plazo real
 Tanque por producto, plazo INV-01, `grilla_sugerida` y `barrer_politicas` por producto; camión **independiente** (N2 etapa 1). **Gate:** 22/22 + N3 (conservación **por producto**; m³ del GNC) · el barrido encuentra una política ≤ a la inicial.

@@ -550,10 +550,8 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                      "vacías y el tanque al 75 %, que no es su estado habitual.",
             )
 
-        if dias == 1:
-            dia_animado = 1      # un slider con un único valor posible no se puede dibujar
-        else:
-            dia_animado = st.slider("Día a animar", 1, min(dias, 90), min(2, int(dias)), 1)
+        # El día se elige en la pestaña Animación; por defecto, el primero que se mide.
+        dia_animado = min(int(dias_calentamiento) + 1, int(dias))
         replicas = st.slider(
             "Réplicas por escenario", 2, 15, 4, 1,
             help="Cada réplica es una corrida completa con otra semilla. Más réplicas dan "
@@ -661,53 +659,42 @@ def construir_demanda(tabla: pd.DataFrame) -> DemandaDiaria:
 # Pestaña: animación
 # =============================================================================
 def pestania_animacion(p: ParametrosSimulacion) -> None:
-    traza = st.session_state.traza
-
-    st.subheader(f"Animación del día {p.dia_animado}")
-    if p.estacion_real:
-        caras = sum(g.caras for g in p.grupos)
-        capacidad_animacion = sum(i.capacidad for i in p.inventario)
-        punto_animacion = sum(i.punto_pedido for i in p.inventario)
-        litros_minimos = min(
-            t.litros.minimo for t in p.tipos_vehiculo if not t.es_gnc
-        )
-        st.caption(
-            f"Estación real: vista **agregada** de las {caras} caras y de la suma de los "
-            f"4 tanques. Se anima un día completo, de 00:00 a 24:00. (La animación del "
-            f"playón por zonas, con playeros y tanques por producto, llega en la Fase 3.)"
+    c1, c2 = st.columns([2, 3])
+    if p.dias > 1:
+        dia = c1.slider(
+            "Día a animar", 1, min(p.dias, 90), min(p.dia_animado, p.dias), 1,
+            help="Se anima un día completo. Los primeros días son de calentamiento "
+                 "(se simulan pero no se miden).",
         )
     else:
-        caras = p.surtidores
-        capacidad_animacion = p.tanque.capacidad
-        punto_animacion = p.tanque.punto_pedido
-        litros_minimos = p.litros.minimo
+        dia = 1
+    traza = correr_traza_cacheada(replace(p, dia_animado=int(dia)), st.session_state.semilla_usada)
+    c2.markdown(f"**{animacion.fecha_texto(p, int(dia))}**")
+    if dia <= p.dias_calentamiento:
+        c2.caption("Este día es de calentamiento: el sistema todavía no está en régimen.")
+
+    if p.estacion_real:
         st.caption(
-            f"Escenario Base ({p.surtidores} surtidores, {p.cajas} caja/s). Se anima un día "
-            f"completo, de 00:00 a 24:00. Abajo se ve el tanque: cuando el nivel cruza el "
-            f"punto de pedido se despacha un camión, y si llega a cero la estación deja de "
-            f"vender."
+            "Estación real: avenida Balloffet, playón techado con las zonas A (nafta), B "
+            "(diésel) y C (GNC), playeros, minimarket, un tanque por producto y el camión "
+            "en viaje. Cada auto tiene el color de su producto."
+        )
+    else:
+        st.caption(
+            f"Caso clásico ({p.surtidores} surtidores, {p.cajas} caja/s, un solo tanque). "
+            f"Se anima un día completo, de 00:00 a 24:00."
         )
 
     componentes.html(
-        animacion.reproductor_html(
-            cuadros=traza.cuadros,
-            surtidores=caras,
-            cajas=p.cajas,
-            dt=p.dt_traza,
-            capacidad_tanque=capacidad_animacion,
-            punto_pedido=punto_animacion,
-            dia=p.dia_animado,
-            litros_minimos=litros_minimos,
-        ),
+        animacion.reproductor_html(traza, p, int(dia), animacion.fecha_texto(p, int(dia))),
         height=animacion.ALTO_COMPONENTE,
     )
 
     st.divider()
+    caras = sum(g.caras for g in p.grupos) if p.estacion_real else p.surtidores
     g1, g2 = st.columns(2)
-    g1.plotly_chart(graficos.grafico_evolucion_colas(traza, p.dia_animado), key="g_colas")
-    g2.plotly_chart(
-        graficos.grafico_ocupacion(traza, caras, p.dia_animado), key="g_ocupacion"
-    )
+    g1.plotly_chart(graficos.grafico_evolucion_colas(traza, int(dia)), key="g_colas")
+    g2.plotly_chart(graficos.grafico_ocupacion(traza, caras, int(dia)), key="g_ocupacion")
 
 
 # =============================================================================

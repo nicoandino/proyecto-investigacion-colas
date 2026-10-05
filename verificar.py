@@ -45,6 +45,10 @@ Los controles cubren las dos partes del modelo:
    18. N5: playeros ≤ turno y ≤ caras (control 4b, con traza).
    19. N9: mezcla de producto en litros ≈ DEM-04 y clientes GNC ≈ 3 %.
    20. N10: media muestral de litros por tipo de vehículo.
+
+  FASE 3 DEL ORQUESTADOR (animación)
+   21. Los cuadros de la animación (carriles, cola, camión) coinciden con el motor y el
+       HTML del reproductor pesa menos de 3 MB.
 """
 
 from __future__ import annotations
@@ -717,6 +721,44 @@ def main() -> int:
         abs(auto_media - 23.5) / 23.5 < 0.02 and abs(pick_media - 40.0) / 40.0 < 0.02,
         "N10: auto ≈ 23,5 L (± 2 %) y pick-up ≈ 40 L (± 2 %)",
         f"auto {auto_media:.2f} L | pick-up {pick_media:.2f} L",
+    )
+
+    # ------------------------------------------------------------------ 17
+    separador("17. Fase 3: los cuadros de la animación coinciden con el motor")
+    p_anim = replace(p, dias=4, dias_calentamiento=2, dia_animado=3)
+    _, traza_anim = correr_replica(p_anim, semilla=41, con_traza=True)
+    cuadros = traza_anim.cuadros
+    incoherentes = 0
+    for c in cuadros:
+        ocupadas = sum(1 for g in c.grupos for k in g[1] if k >= 0)
+        en_cola = sum(g[3] for g in c.grupos)
+        esperando_ok = all(
+            (k & 1) == 0 or p_anim.grupos[i].requiere_playero
+            for i, g in enumerate(c.grupos) for k in g[1] if k >= 0
+        )
+        cabe = all(len(g[1]) == p_anim.grupos[i].caras for i, g in enumerate(c.grupos))
+        if ocupadas != c.surtidores_ocupados or en_cola != c.cola_surtidor or not (esperando_ok and cabe):
+            incoherentes += 1
+    controlar(
+        incoherentes == 0,
+        "Caras ocupadas y autos en cola de la foto = los del motor (todos los cuadros)",
+        f"{len(cuadros):,} cuadros revisados | incoherentes: {incoherentes}",
+    )
+    limite_cola = all(
+        g[3] <= p_anim.capacidad_cola for c in cuadros for g in c.grupos
+    )
+    progresos = [t[3] for c in cuadros for t in c.tanques]
+    controlar(
+        limite_cola and all(-1.0 <= x <= 1.0 for x in progresos),
+        "La cola visible respeta la capacidad y el progreso del camión está entre 0 y 1",
+        f"cola máxima {max(g[3] for c in cuadros for g in c.grupos)} de {p_anim.capacidad_cola}",
+    )
+    from ui.animacion import reproductor_html
+    peso_mb = len(reproductor_html(traza_anim, p_anim, 3, "").encode("utf-8")) / 1e6
+    controlar(
+        peso_mb < 3.0,
+        "El HTML del reproductor pesa menos de 3 MB (un día, un cuadro cada 0,5 min)",
+        f"{peso_mb:.2f} MB para {len(cuadros):,} cuadros",
     )
 
     # ------------------------------------------------------------------

@@ -65,6 +65,7 @@ class Auto:
     grupo: str = ""    # "A" | "B" | "C" (en el clásico queda vacío)
     numero_producto: int = 0   # número aleatorio (01-100) del sorteo de producto
     numero_tipo: int = 0       # número aleatorio del sorteo de tipo de vehículo
+    espera_playero: bool = False   # tiene la cara pero todavía no un playero (animación)
 
 
 class EstacionDeServicio:
@@ -85,6 +86,9 @@ class EstacionDeServicio:
         self.traza = traza
 
         self.hubo_quiebre_hoy = False
+        # Pedidos en camino por producto: [(minuto del pedido, plazo en minutos), ...]
+        # (la animación dibuja el camión según cuánto del plazo ya transcurrió).
+        self.pedidos_abiertos: dict[str, list[tuple[float, float]]] = {}
         self.autos_del_dia = int(p.demanda.media)
         self.tasas_hora = p.perfil.tasas_por_hora(self.autos_del_dia)
         self.numero_aleatorio_dia = 0
@@ -121,6 +125,13 @@ class EstacionDeServicio:
         self.es_real = True
         self.info_grupo = {g.id: g for g in self.p.grupos}
         self.gnc_cortado = False            # los episodios llegan en la Fase 6
+
+        # Qué auto ocupa cada cara (carril) y quién espera en cada zona: sólo sirven para
+        # dibujar la animación (el motor no los consulta).
+        self.carriles: dict[str, list[Auto | None]] = {
+            g.id: [None] * g.caras for g in self.p.grupos
+        }
+        self.cola_lista: dict[str, list[Auto]] = {g.id: [] for g in self.p.grupos}
 
         # Caras: un recurso por grupo (FIFO) o una fila por cara, según la disciplina.
         self.cola_recurso: dict[str, simpy.Resource] = {}
@@ -404,8 +415,69 @@ class EstacionDeServicio:
                 en_calentamiento=not self.ind.calentamiento_terminado,
                 playeros_ocupados=int(self.ind.playeros_ocupados.valor),
                 playeros_en_turno=int(self.ind.playeros_en_turno.valor),
+                perdidos_cola_llena=self.ind.c_total.perdidos_cola_llena,
+                gnc_cortado=1 if self.gnc_cortado else 0,
+                grupos=self._foto_grupos(),
+                tanques=self._foto_tanques(),
             )
             yield self.env.timeout(self.p.dt_traza)
+
+    # Códigos de los carriles en la foto: -1 libre · 2·k cargando · 2·k+1 con la cara
+    # ocupada esperando al playero (k = índice del producto en `p.productos`).
+    def _indice_producto(self, producto: str) -> int:
+        for i, pr in enumerate(self.p.productos):
+            if pr.id == producto:
+                return i
+        return 0
+
+    def _foto_grupos(self) -> tuple:
+        """((id, carriles, cola, largo de la cola, rechazados), ...) de cada zona."""
+        if not self.es_real:
+            ocupadas = self.surtidores.count
+            carriles = tuple(0 if i < ocupadas else -1 for i in range(self.p.surtidores))
+            largo = len(self.surtidores.queue)
+            return (("A", carriles, (0,) * min(largo, 24), largo, 0),)
+        salida = []
+        for grupo in self.p.grupos:
+            carriles = tuple(
+                -1 if auto is None
+                else 2 * self._indice_producto(auto.producto) + (1 if auto.espera_playero else 0)
+                for auto in self.carriles[grupo.id]
+            )
+            cola = self.cola_lista[grupo.id]
+            salida.append(
+                (
+                    grupo.id,
+                    carriles,
+                    tuple(self._indice_producto(a.producto) for a in cola[:24]),
+                    len(cola),
+                    self.ind.c_grupo_total[grupo.id].perdidos_cola_llena,
+                )
+            )
+        return tuple(salida)
+
+    def _foto_tanques(self) -> tuple:
+        """((producto, nivel, litros en camino, progreso del camión, horas que faltan), ...)."""
+        ahora = self.env.now
+        if not self.es_real:
+            niveles = (("super", self.nivel, self.litros_en_camino),)
+        else:
+            niveles = tuple(
+                (i.producto, self.niveles[i.producto], self.en_camino[i.producto])
+                for i in self.p.inventario
+            )
+        salida = []
+        for producto, nivel, en_camino in niveles:
+            abiertos = self.pedidos_abiertos.get(producto, [])
+            if abiertos:
+                # El camión que llega primero (el que menos falta).
+                t0, plazo = min(abiertos, key=lambda x: x[0] + x[1])
+                progreso = min(1.0, max(0.0, (ahora - t0) / plazo))
+                faltan_horas = max(0.0, (t0 + plazo - ahora) / 60.0)
+            else:
+                progreso, faltan_horas = -1.0, 0.0
+            salida.append((producto, nivel, en_camino, progreso, faltan_horas))
+        return tuple(salida)
 
     def registrar_inventario(self):
         """Muestrea el nivel de los tanques durante toda la corrida (gráfico del mes)."""
@@ -502,7 +574,10 @@ class EstacionDeServicio:
 
         plazo = self.az.triangular(self.p.tanque.plazo_entrega_minutos, "entrega")
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
+        pedido = (self.env.now, plazo)
+        self.pedidos_abiertos.setdefault("super", []).append(pedido)
         yield self.env.timeout(plazo)
+        self.pedidos_abiertos["super"].remove(pedido)
 
         self.litros_en_camino -= cantidad
         self.pedidos_en_camino -= 1
@@ -532,7 +607,10 @@ class EstacionDeServicio:
 
         plazo = self.az.triangular(info.plazo_entrega_minutos, "entrega")
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
+        pedido = (self.env.now, plazo)
+        self.pedidos_abiertos.setdefault(producto, []).append(pedido)
         yield self.env.timeout(plazo)
+        self.pedidos_abiertos[producto].remove(pedido)
 
         self.en_camino[producto] -= cantidad
         self.pedidos_en_camino[producto] -= 1
@@ -675,6 +753,7 @@ class EstacionDeServicio:
 
         self.ind.colas_grupo[grupo].sumar(ahora, +1)
         self.ind.cola_surtidor.sumar(ahora, +1)
+        self.cola_lista[grupo].append(auto)
 
         with self._pedir_cara(grupo) as pedido_cara:
             if pedido_cara.triggered:
@@ -687,6 +766,7 @@ class EstacionDeServicio:
                 atendido = pedido_cara in resultado
             self.ind.colas_grupo[grupo].sumar(self.env.now, -1)
             self.ind.cola_surtidor.sumar(self.env.now, -1)
+            self.cola_lista[grupo].remove(auto)
 
             if not atendido:
                 self.registrar_perdida(auto, motivo="abandono_espera")
@@ -696,50 +776,69 @@ class EstacionDeServicio:
             self.ind.espera_cara.agregar(espera_cara)
             self.ind.esperas_cara_grupo[grupo].agregar(espera_cara)
 
-            # Playero: primero la cara, después el playero (sin deadlock).
-            info_grupo = self.info_grupo[grupo]
-            if info_grupo.requiere_playero:
-                restante = self.p.paciencia_surtidor - espera_cara
-                with self.playeros.request(priority=0) as pedido_playero:
-                    if pedido_playero.triggered:
-                        yield pedido_playero
-                    else:
-                        resultado = yield pedido_playero | self.env.timeout(
-                            max(restante, 0.0)
-                        )
-                        if pedido_playero not in resultado:
-                            # Se cansó esperando al playero: libera la cara y se va.
-                            self.registrar_perdida(auto, motivo="abandono_espera")
-                            self.ind.contar("abandonos_playero")
-                            self.ind.contar_grupo(grupo, "abandonos_playero")
-                            return False
+            # Ocupa un carril (una cara concreta) hasta que se va.
+            carril = self._tomar_carril(grupo, auto)
+            try:
+                return (yield from self._cargar_en_cara(auto, grupo, espera_cara))
+            finally:
+                self.carriles[grupo][carril] = None
 
-                    # Pudo haberse acabado el combustible mientras hacía la cola.
-                    if not self.hay_combustible(auto):
-                        self.registrar_perdida(auto, motivo="sin_combustible")
+    def _tomar_carril(self, grupo: str, auto: Auto) -> int:
+        """Primera cara libre del grupo (sólo para dibujar: la cara real la da el recurso)."""
+        carriles = self.carriles[grupo]
+        indice = next(i for i, ocupante in enumerate(carriles) if ocupante is None)
+        carriles[indice] = auto
+        auto.espera_playero = self.info_grupo[grupo].requiere_playero
+        return indice
+
+    def _cargar_en_cara(self, auto: Auto, grupo: str, espera_cara: float) -> bool:
+        """Ya tiene la cara: espera al playero (si el grupo lo pide) y carga."""
+
+        # Playero: primero la cara, después el playero (sin deadlock).
+        info_grupo = self.info_grupo[grupo]
+        if info_grupo.requiere_playero:
+            restante = self.p.paciencia_surtidor - espera_cara
+            with self.playeros.request(priority=0) as pedido_playero:
+                if pedido_playero.triggered:
+                    yield pedido_playero
+                else:
+                    resultado = yield pedido_playero | self.env.timeout(
+                        max(restante, 0.0)
+                    )
+                    if pedido_playero not in resultado:
+                        # Se cansó esperando al playero: libera la cara y se va.
+                        self.registrar_perdida(auto, motivo="abandono_espera")
+                        self.ind.contar("abandonos_playero")
+                        self.ind.contar_grupo(grupo, "abandonos_playero")
                         return False
-                    self.ind.playeros_ocupados.sumar(self.env.now, +1)
 
-                    espera_real = self.env.now - auto.t_llegada
-                    self.ind.espera_surtidor.agregar(espera_real)
-                    self.ind.esperas_grupo[grupo].agregar(espera_real)
-                    self.ind.por_hora.contar_espera(auto.hora, espera_real)
-
-                    self.consumir(auto)
-                    yield from self._servir(auto, grupo)
-
-                    self.ind.playeros_ocupados.sumar(self.env.now, -1)
-            else:
-                # El GNC no retiene playero (PER-04): sólo conecta la manguera.
+                # Pudo haberse acabado el combustible mientras hacía la cola.
                 if not self.hay_combustible(auto):
                     self.registrar_perdida(auto, motivo="sin_combustible")
                     return False
+                self.ind.playeros_ocupados.sumar(self.env.now, +1)
+                auto.espera_playero = False
+
                 espera_real = self.env.now - auto.t_llegada
                 self.ind.espera_surtidor.agregar(espera_real)
                 self.ind.esperas_grupo[grupo].agregar(espera_real)
                 self.ind.por_hora.contar_espera(auto.hora, espera_real)
+
                 self.consumir(auto)
                 yield from self._servir(auto, grupo)
+
+                self.ind.playeros_ocupados.sumar(self.env.now, -1)
+        else:
+            # El GNC no retiene playero (PER-04): sólo conecta la manguera.
+            if not self.hay_combustible(auto):
+                self.registrar_perdida(auto, motivo="sin_combustible")
+                return False
+            espera_real = self.env.now - auto.t_llegada
+            self.ind.espera_surtidor.agregar(espera_real)
+            self.ind.esperas_grupo[grupo].agregar(espera_real)
+            self.ind.por_hora.contar_espera(auto.hora, espera_real)
+            self.consumir(auto)
+            yield from self._servir(auto, grupo)
         return True
 
     def _servir(self, auto: Auto, grupo: str) -> None:

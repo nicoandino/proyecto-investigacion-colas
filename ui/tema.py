@@ -54,23 +54,21 @@ GRIS = "#94A3B8"
 INDIGO = "#6366F1"            # flete en los costos por política
 TINTA_AZULADA = "#334155"     # ejes y líneas de referencia
 
-# --- Superficies oscuras de la animación (el rediseño de Fase 3 las reemplaza) --
-FONDO_ANIM = "#1B2029"
-PANEL_ANIM = "#232A35"
-BORDE_ANIM = "#3A4351"
-TEXTO_ANIM = "#E8EAED"
-TENUE_ANIM = "#9AA4B2"
-COLORES_AUTO = ["#60A5FA", "#F472B6", "#FBBF24", "#34D399", "#A78BFA", "#FB923C", "#38BDF8"]
+# --- Detalles del dibujo de la animación (autos, surtidores, personas) ----------
 FARO = "#FDE68A"
 NEUMATICO = "#111827"
 VIDRIO = "#0F172A"
 PLATA = "#CBD5E1"
-ROJO_OSCURO = "#7F1D1D"
-ROJO_CLARO = "#FECACA"
-AMBAR_OSCURO = "#78350F"
-AMBAR_CLARO = "#FCD34D"
-VERDE_OSCURO = "#14532D"
-VERDE_CLARO = "#86EFAC"
+
+#: Color de cada producto (id del motor → color de `PRODUCTO`). El mismo color pinta
+#: el auto en la animación, el surtidor y el tanque.
+COLOR_PRODUCTO = {
+    "super": PRODUCTO["super"],
+    "vpower": PRODUCTO["vpower"],
+    "diesel_g2": PRODUCTO["diesel"],
+    "diesel_g3": PRODUCTO["vpower_diesel"],
+    "gnc": PRODUCTO["gnc"],
+}
 
 #: Pares declarados para el control de contraste (WCAG ≥ 4,5:1, §10.3/N15).
 PARES_CONTRASTE = (
@@ -169,26 +167,21 @@ def css_global() -> str:
 def paleta_json() -> dict:
     """Colores que la animación recibe por JSON (ningún hex en `ui/animacion.py`)."""
     return {
-        "fondo": FONDO_ANIM,
-        "panel": PANEL_ANIM,
+        "fondo": FONDO,
+        "panel": FONDO_PANEL,
+        "borde": BORDE,
+        "tinta": TINTA,
+        "tenue": TINTA_TENUE,
         "asfalto": ASFALTO,
-        "borde": BORDE_ANIM,
-        "texto": TEXTO_ANIM,
-        "tenue": TENUE_ANIM,
+        "linea": FONDO,                 # marcas viales sobre el asfalto
+        "amarillo": AMARILLO,
+        "amarilloSuave": AMARILLO_SUAVE,
+        "rojo": ROJO,
         "libre": LIBRE,
-        "ocupado": OCUPADO,
-        "perdido": PERDIDO,
-        "coloresAuto": COLORES_AUTO,
+        "naranja": NARANJA,
+        "producto": COLOR_PRODUCTO,
         "faros": FARO,
         "neumatico": NEUMATICO,
         "vidrio": VIDRIO,
         "plata": PLATA,
-        "amarillo": AMARILLO,
-        "rojo": ROJO,
-        "rojoOscuro": ROJO_OSCURO,
-        "rojoClaro": ROJO_CLARO,
-        "ambarOscuro": AMBAR_OSCURO,
-        "ambarClaro": AMBAR_CLARO,
-        "verdeOscuro": VERDE_OSCURO,
-        "verdeClaro": VERDE_CLARO,
     }

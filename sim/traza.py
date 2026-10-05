@@ -43,6 +43,16 @@ class Cuadro:
     en_calentamiento: bool
     playeros_ocupados: int = 0    # playeros atendiendo en este instante (estación real)
     playeros_en_turno: int = 0    # playeros que corresponden al turno (estación real)
+    perdidos_cola_llena: int = 0  # no entraron porque la cola de su zona estaba llena (acumulado)
+    gnc_cortado: int = 0          # 1 si el GNC está cortado (episodios: Fase 6)
+    # Una foto por zona: (id, carriles, cola, largo de la cola, rechazados acumulados).
+    #   carriles: un código por cara: -1 libre · 2·k cargando · 2·k+1 esperando al
+    #   playero con la cara ocupada (k = índice del producto).
+    #   cola: el producto (índice) de cada auto que espera, en orden de llegada.
+    grupos: tuple = ()
+    # Una foto por tanque: (producto, litros, litros en camino, progreso del camión
+    # entre 0 y 1 (-1 si no hay pedido), horas que faltan para que llegue).
+    tanques: tuple = ()
 
     @property
     def perdidos(self) -> int:

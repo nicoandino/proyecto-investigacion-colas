@@ -1,3 +1,6 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Fase 3: HTML temporales del QA de la animación
+reports/qa/fase3/_*.html

@@ -170,6 +170,7 @@ class ContadoresProducto:
     litros_no_vendidos: float = 0.0
     litros_recibidos: float = 0.0
     perdidos_sin_combustible: int = 0
+    litros_perdidos_sin_combustible: float = 0.0   # litros que pidieron los que se fueron sin stock
     pedidos_emitidos: int = 0
     pedidos_recibidos: int = 0
     dias_con_quiebre: int = 0

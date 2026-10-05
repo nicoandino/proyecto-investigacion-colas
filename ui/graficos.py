@@ -7,6 +7,7 @@ Los colores salen TODOS de `ui/tema.py` (control N15).
 from __future__ import annotations
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from sim.config import DemandaDiaria, ParametrosSimulacion
 from sim.economia import CostoPolitica, ResultadoEconomico
@@ -16,6 +17,7 @@ from ui.tema import (
     AMARILLO,
     AZUL,
     CELESTE,
+    COLOR_PRODUCTO,
     ESCENARIO,
     GRIS,
     INDIGO,
@@ -263,6 +265,47 @@ def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
         xaxis_title="Día",
         yaxis_title="Litros en el tanque",
         **_layout(hovermode="x", height=420),
+    )
+    return fig
+
+
+def grafico_tanques_real(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
+    """Un diente de sierra por tanque (4 productos líquidos), con su punto de pedido."""
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    fig = make_subplots(
+        rows=2, cols=2, shared_xaxes=True,
+        subplot_titles=[nombres[i.producto] for i in p.inventario],
+        vertical_spacing=0.14,
+    )
+    dias = [t / 1440.0 for t, *_ in traza.inventario_producto]
+    for k, inv in enumerate(p.inventario):
+        fila, columna = k // 2 + 1, k % 2 + 1
+        niveles = [fila_[k + 1] for fila_ in traza.inventario_producto]
+        fig.add_trace(
+            go.Scatter(
+                x=dias, y=niveles, mode="lines", name=nombres[inv.producto],
+                line=dict(color=TINTA_AZULADA, width=1.5),
+                fill="tozeroy", fillcolor=rgba(COLOR_PRODUCTO[inv.producto], 0.45),
+                hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
+                showlegend=False,
+            ),
+            row=fila, col=columna,
+        )
+        fig.add_hline(
+            y=inv.punto_pedido, line_dash="dash", line_color=NARANJA_,
+            annotation_text=f"s = {_miles(inv.punto_pedido)} L",
+            annotation_position="top left", row=fila, col=columna,
+        )
+        fig.add_hline(y=0, line_color=ROJO, line_width=1, row=fila, col=columna)
+        fig.add_vrect(
+            x0=0, x1=p.dias_calentamiento, fillcolor=rgba(ESCENARIO["Base"], 0.15),
+            line_width=0, row=fila, col=columna,
+        )
+    fig.update_xaxes(title_text="Día", row=2)
+    fig.update_yaxes(title_text="Litros", col=1)
+    fig.update_layout(
+        title="Nivel de cada tanque (la franja gris es el calentamiento)",
+        **_layout(hovermode="x", height=560),
     )
     return fig
 

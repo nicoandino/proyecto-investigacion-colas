@@ -31,6 +31,13 @@ STREAMS = (
     "entrega",    # plazo de entrega del camión cisterna
     "producto",   # qué producto carga cada cliente (Fase 2)
     "tipo_vehiculo",  # qué tipo de vehículo es cada cliente (Fase 2)
+    # Fase 4: el plazo de cada camión sale de un stream PROPIO por producto. Así, cambiar
+    # la política de un producto no corre los sorteos de plazo de los otros (números
+    # aleatorios comunes por producto: permite barrer las 4 políticas a la vez).
+    "entrega_super",
+    "entrega_vpower",
+    "entrega_diesel_g2",
+    "entrega_diesel_g3",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

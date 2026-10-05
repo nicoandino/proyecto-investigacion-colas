@@ -33,8 +33,10 @@ from sim.config import (
 )
 from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
 from sim.economia import (
+    ahorro_por_producto,
     analizar_escenarios,
     analizar_politicas,
+    analizar_politicas_real,
     mejor_politica,
     pesos,
     recomendacion,
@@ -42,12 +44,15 @@ from sim.economia import (
 from sim.runner import (
     ResultadoEscenario,
     barrer_politicas,
+    barrer_politicas_real,
     buscar,
     con_politica,
     correr_escenarios,
     correr_estacion_real,
     correr_replica,
+    grilla_politicas_real,
     grilla_sugerida,
+    promedio_por_producto,
 )
 from ui import animacion, graficos
 from ui.datos_ui import (
@@ -95,6 +100,11 @@ def correr_estacion_real_cacheado(
     p: ParametrosSimulacion, replicas: int, semilla: int
 ) -> ResultadoEscenario:
     return correr_estacion_real(p, replicas=replicas, semilla_base=semilla)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def barrer_politicas_real_cacheado(p: ParametrosSimulacion, replicas: int, semilla: int):
+    return barrer_politicas_real(p, replicas=replicas, semilla_base=semilla)
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -146,6 +156,13 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
     if sugerida is not None and not es_real:
         st.session_state["w_punto_pedido"] = int(sugerida[0])
         st.session_state["w_cantidad_pedido"] = int(sugerida[1])
+    # Lo mismo para la estación real: una política (s, Q) por tanque.
+    sugerida_real = st.session_state.pop("politica_sugerida_real", None)
+    if sugerida_real is not None and es_real:
+        st.session_state["w_editar_politica"] = True
+        for producto, (s_sug, q_sug) in sugerida_real.items():
+            st.session_state[f"w_s_{producto}"] = int(round(s_sug, -2))
+            st.session_state[f"w_q_{producto}"] = int(round(q_sug, -2))
 
     if es_real:
         with st.sidebar.expander("🏪 Estación y personal", expanded=True):
@@ -471,19 +488,44 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                 float(litros_mes), float(capacidad_tanque), plazo, float(nivel_inicial_pct)
             )
             nombres = {x.id: x.nombre for x in base.productos}
-            st.dataframe(
-                pd.DataFrame(
-                    {
-                        "Tanque": [nombres[i.producto] for i in inventario],
-                        "s (L)": [round(i.punto_pedido) for i in inventario],
-                        "Q (L)": [round(i.cantidad_pedido) for i in inventario],
-                    }
-                ),
-                hide_index=True,
+            editar = st.checkbox(
+                "Editar la política (s, Q) de cada tanque",
+                key="w_editar_politica",
+                help="Sin tildar, s y Q salen de INV-07 (s = 1,5 días de consumo del "
+                     "producto). En la pestaña Inventario se busca la mejor por producto.",
             )
+            if editar:
+                editados = []
+                for inv in inventario:
+                    st.markdown(f"**{nombres[inv.producto]}**")
+                    c_s, c_q = st.columns(2)
+                    tope = int(capacidad_tanque)
+                    s_nuevo = c_s.number_input(
+                        "s (L)", 0, tope, min(int(round(inv.punto_pedido, -2)), tope), 100,
+                        key=f"w_s_{inv.producto}",
+                    )
+                    q_nuevo = c_q.number_input(
+                        "Q (L)", 500, tope, min(int(round(inv.cantidad_pedido, -2)), tope), 100,
+                        key=f"w_q_{inv.producto}",
+                    )
+                    editados.append(
+                        replace(inv, punto_pedido=float(s_nuevo), cantidad_pedido=float(q_nuevo))
+                    )
+                inventario = tuple(editados)
+            else:
+                st.dataframe(
+                    pd.DataFrame(
+                        {
+                            "Tanque": [nombres[i.producto] for i in inventario],
+                            "s (L)": [round(i.punto_pedido) for i in inventario],
+                            "Q (L)": [round(i.cantidad_pedido) for i in inventario],
+                        }
+                    ),
+                    hide_index=True,
+                )
             st.caption(
                 "Política inicial según INV-07 (s = 1,5 días de consumo del producto). "
-                "Buscar la óptima por producto llega en la Fase 4."
+                "La mejor por producto se busca en la pestaña Inventario."
             )
         tanque = base.tanque
     else:
@@ -1084,15 +1126,16 @@ def pestania_demanda(p: ParametrosSimulacion) -> None:
 # =============================================================================
 # Pestaña: inventario
 # =============================================================================
-def pestania_inventario_real(p: ParametrosSimulacion) -> None:
-    """Los 4 tanques (uno por producto líquido) y su política (s, Q) inicial."""
+def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
+    """Los 4 tanques (uno por producto líquido), su política (s, Q) y el barrido por producto."""
     traza = st.session_state.traza
     base = buscar(st.session_state.resultados, "Base")
 
     st.subheader("Inventario: un tanque por producto líquido")
     plazo = p.inventario[0].plazo_entrega
     st.caption(
-        f"Cada producto tiene su tanque y su política (s, Q) (INV-07). El camión tarda entre "
+        f"Cada producto tiene su tanque, su política (s, Q) y su propio camión: un pedido "
+        f"lleva un solo producto (INV-08, etapa 1). El camión tarda entre "
         f"{plazo.minimo:.0f} y {plazo.maximo:.0f} horas (más probable {plazo.moda:.0f} h, "
         f"INV-01). El GNC no tiene tanque: se mide en m³ y no aparece acá."
     )
@@ -1110,8 +1153,8 @@ def pestania_inventario_real(p: ParametrosSimulacion) -> None:
         tarjeta(columna, metrica, base)
 
     nombres = {pr.id: pr.nombre for pr in p.productos}
-    litros_dia = promedio_pares(base, "litros_vendidos_por_producto")
-    quiebres = promedio_pares(base, "dias_quiebre_por_producto")
+    litros_dia = promedio_por_producto(base.replicas, "litros_vendidos_por_producto")
+    quiebres = promedio_por_producto(base.replicas, "dias_quiebre_por_producto")
     filas = []
     for inv in p.inventario:
         consumo_dia = litros_dia[inv.producto]
@@ -1138,22 +1181,109 @@ def pestania_inventario_real(p: ParametrosSimulacion) -> None:
             )
     st.dataframe(pd.DataFrame(filas), hide_index=True)
 
-    st.plotly_chart(graficos.grafico_tanque(traza, p), key="g_tanque")
+    st.plotly_chart(graficos.grafico_tanques_real(traza, p), key="g_tanques_real")
     st.caption(
-        "Se grafica la **suma** de los 4 tanques (cada uno tiene su propio diente de "
-        "sierra). Los saltos son las descargas de los camiones; si un tanque llega a cero, "
-        "ese producto deja de venderse aunque los otros sigan."
+        "Un diente de sierra por tanque: baja mientras se vende y sube de golpe cuando "
+        "descarga el camión. La línea naranja es el punto de pedido s; donde la curva toca "
+        "el cero, ese producto dejó de venderse aunque los otros sigan."
     )
-    st.info(
-        "La búsqueda de la mejor política (s, Q) **por producto** y el camión consolidado "
-        "llegan en la Fase 4: por ahora se usa la política inicial de INV-07.",
-        icon="🛢️",
+
+    st.divider()
+    st.subheader("¿Cuál es la mejor política de reposición de cada tanque?")
+    st.markdown(
+        "Se prueban 13 combinaciones de **punto de pedido (s)** y **cantidad a pedir (Q)** "
+        "—medidas en días de consumo de cada producto— y se elige, **tanque por tanque**, la "
+        "de menor costo mensual:\n\n"
+        "**costo = flete de los pedidos + almacenamiento + venta perdida por falta de stock**\n\n"
+        "Como cada camión es independiente y cada producto tiene su propio stream de plazos, "
+        "las 4 curvas se miden en las mismas corridas. La política cargada es el primer punto "
+        "de la grilla, así que la mejor nunca es peor que ella."
     )
+    c1, c2 = st.columns([1, 2])
+    replicas_barrido = c1.slider("Réplicas por política", 1, 4, 2, 1, key="rep_barrido_real")
+    puntos = len(grilla_politicas_real(p))
+    c2.caption(
+        f"Se van a probar **{puntos} políticas** × {replicas_barrido} réplicas de {p.dias} días. "
+        f"Tarda aproximadamente {puntos * replicas_barrido * 1.1:.0f} segundos."
+    )
+    if st.button("🔎 Buscar la mejor política de cada tanque", type="primary"):
+        with st.spinner("Probando políticas de reposición…"):
+            barrido = barrer_politicas_real_cacheado(
+                p, replicas_barrido, st.session_state.semilla_usada
+            )
+            st.session_state.costos_real = analizar_politicas_real(barrido, eco, p)
+        st.rerun()
+
+    costos = st.session_state.get("costos_real")
+    if not costos:
+        st.info("Todavía no se corrió el barrido.", icon="ℹ️")
+        return
+
+    ahorros = ahorro_por_producto(costos)
+    ahorro_total = sum(ahorros.values())
+    st.metric(
+        "Ahorro mensual de reponer mejor (los 4 tanques)",
+        f"{pesos(ahorro_total)} /mes",
+        help="Costo de la política cargada − costo de la mejor de cada tanque, con los "
+             "márgenes y el flete de ECO-* (placeholders heredados).",
+        border=True,
+    )
+    resumen = []
+    mejores = {}
+    for producto, lista in costos.items():
+        actual, mejor = lista[0], min(lista, key=lambda c: c.costo_total)
+        mejores[producto] = mejor
+        resumen.append(
+            {
+                "Tanque": nombres[producto],
+                "Política cargada": f"s = {actual.punto_pedido:,.0f} · Q = {actual.cantidad_pedido:,.0f}",
+                "Quiebre": f"{actual.porcentaje_dias_quiebre:.1f} %",
+                "Costo actual": pesos(actual.costo_total),
+                "Mejor política": f"s = {mejor.punto_pedido:,.0f} · Q = {mejor.cantidad_pedido:,.0f}",
+                "Quiebre con la mejor": f"{mejor.porcentaje_dias_quiebre:.1f} %",
+                "Costo con la mejor": pesos(mejor.costo_total),
+                "Ahorro": pesos(ahorros[producto]),
+            }
+        )
+    st.dataframe(pd.DataFrame(resumen), hide_index=True)
+    if ahorro_total > 0 and st.button(
+        "✅ Usar las mejores políticas",
+        help="Las carga en la barra lateral. Después hay que apretar Correr simulación.",
+    ):
+        st.session_state.politica_sugerida_real = {
+            producto: (m.punto_pedido, m.cantidad_pedido) for producto, m in mejores.items()
+        }
+        st.rerun()
+
+    elegido = st.selectbox(
+        "Ver el detalle de", list(costos), format_func=lambda x: nombres[x], key="detalle_pol_real"
+    )
+    lista = costos[elegido]
+    filas = []
+    for c in sorted(lista, key=lambda c: c.costo_total):
+        filas.append(
+            {
+                "Punto de pedido (s)": f"{c.punto_pedido:,.0f} L",
+                "Cantidad (Q)": f"{c.cantidad_pedido:,.0f} L",
+                "Cobertura": f"{c.cobertura_dias:.1f} días",
+                "Pedidos/mes": round(c.pedidos_mes, 1),
+                "Costo de pedido": pesos(c.costo_pedidos),
+                "Almacenamiento": pesos(c.costo_almacenamiento),
+                "Faltante": pesos(c.costo_faltante),
+                "COSTO TOTAL": pesos(c.costo_total),
+                "Nivel de servicio": f"{c.nivel_servicio * 100:.1f} %",
+                "Días con quiebre": f"{c.porcentaje_dias_quiebre:.1f} %",
+            }
+        )
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    g1, g2 = st.columns(2)
+    g1.plotly_chart(graficos.grafico_costos_politicas(lista), key="g_costos_pol_real")
+    g2.plotly_chart(graficos.grafico_frontera_politicas(lista), key="g_frontera_real")
 
 
 def pestania_inventario(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
     if p.estacion_real:
-        pestania_inventario_real(p)
+        pestania_inventario_real(p, eco)
         return
     traza = st.session_state.traza
     base = buscar(st.session_state.resultados, "Base")
@@ -1480,6 +1610,26 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
     ]
     for linea in lineas:
         st.markdown(f"- {escapar_pesos(linea)}")
+
+    costos_real = st.session_state.get("costos_real")
+    if costos_real:
+        ahorros = ahorro_por_producto(costos_real)
+        nombres = {pr.id: pr.nombre for pr in p.productos}
+        st.markdown("#### Reposición")
+        st.markdown(
+            escapar_pesos(
+                f"- Con la mejor política de cada tanque se ahorran **{pesos(sum(ahorros.values()))} "
+                f"por mes** (márgenes y flete placeholder). Por producto: "
+                + " · ".join(f"{nombres[k]} {pesos(v)}" for k, v in ahorros.items())
+                + "."
+            )
+        )
+    else:
+        st.info(
+            "Todavía no se buscó la mejor política de reposición de cada tanque: "
+            "andá a **Inventario** y apretá *Buscar la mejor política*.",
+            icon="🛢️",
+        )
 
     if perdidos_nafta > (perdidos_espera + perdidos_cola_llena) * 1.5:
         st.error(
@@ -1841,6 +1991,7 @@ def correr_todo(
     # El barrido de políticas corresponde a otros parámetros: se descarta.
     st.session_state.costos_politicas = None
     st.session_state.politica_actual = None
+    st.session_state.costos_real = None
 
 
 def main() -> None:

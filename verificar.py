@@ -49,6 +49,10 @@ Los controles cubren las dos partes del modelo:
   FASE 3 DEL ORQUESTADOR (animación)
    21. Los cuadros de la animación (carriles, cola, camión) coinciden con el motor y el
        HTML del reproductor pesa menos de 3 MB.
+
+  FASE 4 DEL ORQUESTADOR (política por producto)
+   22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
+       encuentra una política ≤ a la cargada en cada tanque.
 """
 
 from __future__ import annotations
@@ -759,6 +763,88 @@ def main() -> int:
         peso_mb < 3.0,
         "El HTML del reproductor pesa menos de 3 MB (un día, un cuadro cada 0,5 min)",
         f"{peso_mb:.2f} MB para {len(cuadros):,} cuadros",
+    )
+
+    # ------------------------------------------------------------------ 18
+    separador("18. Fase 4: política (s, Q) por producto y barrido")
+    from sim.config import ParametrosEconomicos
+    from sim.economia import ahorro_por_producto, analizar_politicas_real
+    from sim.runner import (
+        barrer_politicas_real,
+        con_politicas,
+        grilla_politicas_real,
+        promedio_por_producto,
+    )
+
+    grilla = grilla_politicas_real(p)
+    capacidades = {i.producto: i.capacidad for i in p.inventario}
+    grilla_valida = all(
+        0 <= s_ and q_ > 0 and s_ + q_ <= capacidades[prod] + 1e-6
+        for punto in grilla for prod, (s_, q_) in punto.items()
+    )
+    cargada = {i.producto: (i.punto_pedido, i.cantidad_pedido) for i in p.inventario}
+    controlar(
+        grilla_valida and grilla[0] == cargada and len(grilla) == 13,
+        "La grilla tiene 13 puntos, empieza por la política cargada y entra en cada tanque",
+        f"{len(grilla)} puntos; el primero = {', '.join(f'{k}: {v[0]:,.0f}/{v[1]:,.0f}' for k, v in cargada.items())}",
+    )
+
+    # Monotonía de s: con un punto de pedido más alto el tanque quiebra menos y guarda más
+    p_baja = con_politicas(p, {"diesel_g2": (1_500.0, 10_000.0)})
+    p_alta = con_politicas(p, {"diesel_g2": (7_000.0, 10_000.0)})
+    r_baja, _ = correr_replica(p_baja, semilla=51)
+    r_alta, _ = correr_replica(p_alta, semilla=51)
+    quiebre_baja = dict(r_baja.dias_quiebre_por_producto)["diesel_g2"]
+    quiebre_alta = dict(r_alta.dias_quiebre_por_producto)["diesel_g2"]
+    nivel_baja = dict(r_baja.nivel_por_producto)["diesel_g2"]
+    nivel_alta = dict(r_alta.nivel_por_producto)["diesel_g2"]
+    controlar(
+        quiebre_alta < quiebre_baja and nivel_alta > nivel_baja,
+        "Subir s en un tanque baja sus días con quiebre y sube su nivel promedio (N11)",
+        f"s = 1.500 L: quiebre {quiebre_baja:.1f} % · nivel {nivel_baja:,.0f} L | "
+        f"s = 7.000 L: quiebre {quiebre_alta:.1f} % · nivel {nivel_alta:,.0f} L",
+    )
+
+    # Independencia: cambiar un tanque no mueve a los otros (cada camión y cada plazo son
+    # propios); sólo queda el acople débil por la congestión de las colas.
+    otros = ("super", "vpower", "diesel_g3")
+    peor = 0.0
+    for producto in otros:
+        v0 = dict(r_baja.litros_vendidos_por_producto)[producto]
+        v1 = dict(r_alta.litros_vendidos_por_producto)[producto]
+        peor = max(peor, abs(v1 - v0) / v0)
+    pedidos_otros_iguales = all(
+        abs(dict(r_baja.pedidos_por_producto)[x] - dict(r_alta.pedidos_por_producto)[x]) <= 2 / 29
+        for x in otros
+    )
+    controlar(
+        peor < 0.03 and pedidos_otros_iguales,
+        "Cambiar la política del diésel G2 casi no mueve a los otros tres tanques",
+        f"mayor cambio en los litros vendidos de los otros: {peor * 100:.2f} %",
+    )
+
+    # El barrido (1 réplica por punto) incluye la política cargada y la mejor no la supera
+    barrido = barrer_politicas_real(p, replicas=1, semilla_base=61)
+    eco = ParametrosEconomicos()
+    costos = analizar_politicas_real(barrido, eco, p)
+    ahorros = ahorro_por_producto(costos)
+    mejores_ok = all(
+        min(c.costo_total for c in lista) <= lista[0].costo_total + 1e-6
+        for lista in costos.values()
+    )
+    reconcilia = all(
+        abs(c.costo_total - (c.costo_pedidos + c.costo_almacenamiento + c.costo_faltante)) < 1e-6
+        for lista in costos.values() for c in lista
+    )
+    controlar(
+        mejores_ok and reconcilia and all(v >= 0 for v in ahorros.values()),
+        "El barrido encuentra una política ≤ a la cargada en cada tanque y el costo reconcilia",
+        " | ".join(f"{k}: ahorra ${v:,.0f}/mes" for k, v in ahorros.items()),
+    )
+    controlar(
+        sum(ahorros.values()) > 0,
+        "Con la política inicial (INV-07) hay algo para mejorar en al menos un tanque",
+        f"ahorro total ${sum(ahorros.values()):,.0f} por mes (márgenes y flete placeholder)",
     )
 
     # ------------------------------------------------------------------

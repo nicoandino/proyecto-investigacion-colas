@@ -96,6 +96,11 @@ class ResultadoReplica:
     atendidos_por_producto: tuple[tuple[str, float], ...] = ()
     litros_vendidos_por_producto: tuple[tuple[str, float], ...] = ()
     dias_quiebre_por_producto: tuple[tuple[str, float], ...] = ()
+    # Fase 4: lo que hace falta para costear la política (s, Q) de CADA tanque
+    pedidos_por_producto: tuple[tuple[str, float], ...] = ()          # camiones pedidos por día
+    nivel_por_producto: tuple[tuple[str, float], ...] = ()            # litros promedio en el tanque
+    litros_sin_stock_por_producto: tuple[tuple[str, float], ...] = () # litros no vendidos por día
+    perdidos_sin_stock_por_producto: tuple[tuple[str, float], ...] = ()  # clientes por día
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -107,6 +112,10 @@ NO_METRICAS = {
     "atendidos_por_producto",
     "litros_vendidos_por_producto",
     "dias_quiebre_por_producto",
+    "pedidos_por_producto",
+    "nivel_por_producto",
+    "litros_sin_stock_por_producto",
+    "perdidos_sin_stock_por_producto",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -166,6 +175,13 @@ class ResultadoPolitica:
 
 
 # --- Una réplica --------------------------------------------------------------
+def _por_tanque(p: ParametrosSimulacion, ind, valor) -> tuple[tuple[str, float], ...]:
+    """((producto, valor), ...) de cada tanque; vacío en el caso clásico (un solo tanque)."""
+    if not p.estacion_real:
+        return ()
+    return tuple((i.producto, float(valor(i.producto))) for i in p.inventario)
+
+
 def correr_replica(
     p: ParametrosSimulacion,
     semilla: int,
@@ -238,6 +254,16 @@ def correr_replica(
         dias_quiebre_por_producto=tuple(
             (pr, 100.0 * ind.c_producto[pr].dias_con_quiebre / dias)
             for pr in ind.c_producto
+        ),
+        pedidos_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].pedidos_emitidos / dias
+        ),
+        nivel_por_producto=_por_tanque(p, ind, lambda pr: ind.niveles[pr].promedio),
+        litros_sin_stock_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].litros_perdidos_sin_combustible / dias
+        ),
+        perdidos_sin_stock_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].perdidos_sin_combustible / dias
         ),
     )
     return resultado, traza
@@ -412,3 +438,96 @@ def grilla_sugerida(p: ParametrosSimulacion) -> tuple[list[float], list[float]]:
     puntos = sorted({x for x in puntos if 0 < x < capacidad})
     cantidades = sorted({x for x in cantidades if 0 < x <= capacidad})
     return puntos, cantidades
+
+
+# --- Política (s, Q) por producto (Fase 4) --------------------------------------
+def promedio_por_producto(
+    replicas: list[ResultadoReplica], campo: str
+) -> dict[str, float]:
+    """Promedio entre réplicas de un campo ((producto, valor), ...)."""
+    acumulado: dict[str, float] = {}
+    for r in replicas:
+        for producto, valor in getattr(r, campo):
+            acumulado[producto] = acumulado.get(producto, 0.0) + valor
+    return {k: v / len(replicas) for k, v in acumulado.items()}
+
+
+def con_politicas(
+    p: ParametrosSimulacion, politicas: dict[str, tuple[float, float]]
+) -> ParametrosSimulacion:
+    """Los mismos parámetros pero con (s, Q) distintos en algunos tanques."""
+    inventario = tuple(
+        replace(i, punto_pedido=politicas[i.producto][0], cantidad_pedido=politicas[i.producto][1])
+        if i.producto in politicas
+        else i
+        for i in p.inventario
+    )
+    return replace(p, inventario=inventario)
+
+
+#: Puntos de pedido y cantidades de la grilla, en DÍAS de consumo del producto. El camión
+#: tarda 24–48 h, así que s por debajo de 1 día casi seguro quiebra.
+S_EN_DIAS = (1.0, 1.5, 2.0, 2.5)
+Q_EN_DIAS = (2.0, 3.0, 4.5)
+
+
+def grilla_politicas_real(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
+    """Puntos de la grilla; cada uno trae la política (s, Q) de TODOS los tanques.
+
+    El punto 0 es la política cargada (para poder compararla). Los demás combinan s y Q
+    medidos en días de consumo de cada producto, así que la grilla se adapta sola a la
+    demanda y a la mezcla. Como cada camión es independiente (un pedido por producto)
+    y cada producto tiene su propio stream de plazos, las cuatro curvas de costo se
+    miden en las MISMAS corridas: 13 puntos × réplicas, no 13⁴.
+    """
+    consumo_mes = p.litros_mes / 30.0
+    pct = {pr.id: pr.pct_litros for pr in p.productos}
+    puntos: list[dict[str, tuple[float, float]]] = [
+        {i.producto: (i.punto_pedido, i.cantidad_pedido) for i in p.inventario}
+    ]
+    for s_dias in S_EN_DIAS:
+        for q_dias in Q_EN_DIAS:
+            punto: dict[str, tuple[float, float]] = {}
+            for i in p.inventario:
+                consumo_dia = consumo_mes * pct[i.producto]
+                s_ = min(round(s_dias * consumo_dia, -2), i.capacidad - 500.0)
+                q_ = max(500.0, min(round(q_dias * consumo_dia, -2), i.capacidad - s_))
+                punto[i.producto] = (s_, q_)
+            puntos.append(punto)
+    return puntos
+
+
+@dataclass(frozen=True)
+class PuntoBarrido:
+    """Una corrida del barrido: la política de cada tanque y las réplicas de la estación."""
+
+    politicas: dict[str, tuple[float, float]]
+    replicas: list[ResultadoReplica]
+
+
+@dataclass(frozen=True)
+class ResultadoBarridoReal:
+    """El barrido de políticas de la estación real (todos los tanques a la vez)."""
+
+    productos: tuple[str, ...]
+    puntos: list[PuntoBarrido]
+
+
+def barrer_politicas_real(
+    p: ParametrosSimulacion,
+    replicas: int = 2,
+    semilla_base: int = 1,
+) -> ResultadoBarridoReal:
+    """Barre la grilla de (s, Q) de los 4 tanques con números aleatorios comunes."""
+    puntos = [
+        PuntoBarrido(
+            politicas=politicas,
+            replicas=correr_replicas(
+                con_politicas(p, politicas), replicas=replicas, semilla_base=semilla_base
+            ),
+        )
+        for politicas in grilla_politicas_real(p)
+    ]
+    return ResultadoBarridoReal(
+        productos=tuple(i.producto for i in p.inventario), puntos=puntos
+    )

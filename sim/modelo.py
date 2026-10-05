@@ -483,7 +483,11 @@ class EstacionDeServicio:
         """Muestrea el nivel de los tanques durante toda la corrida (gráfico del mes)."""
         while True:
             self.traza.capturar_inventario(
-                self.env.now, self._nivel_total(), self._pedidos_en_camino_total()
+                self.env.now,
+                self._nivel_total(),
+                self._pedidos_en_camino_total(),
+                tuple(self.niveles[i.producto] for i in self.p.inventario)
+                if self.es_real else (),
             )
             yield self.env.timeout(DT_INVENTARIO)
 
@@ -605,7 +609,7 @@ class EstacionDeServicio:
         self.ind.contar("pedidos_emitidos")
         self.ind.contar_producto(producto, "pedidos_emitidos")
 
-        plazo = self.az.triangular(info.plazo_entrega_minutos, "entrega")
+        plazo = self.az.triangular(info.plazo_entrega_minutos, f"entrega_{producto}")
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
         pedido = (self.env.now, plazo)
         self.pedidos_abiertos.setdefault(producto, []).append(pedido)
@@ -632,6 +636,10 @@ class EstacionDeServicio:
         if motivo == "sin_combustible":
             self.ind.contar("perdidos_sin_combustible")
             self.ind.contar_producto(auto.producto, "perdidos_sin_combustible")
+            if auto.producto != "gnc":
+                self.ind.contar_producto(
+                    auto.producto, "litros_perdidos_sin_combustible", auto.litros
+                )
             self._marcar_quiebre(auto.producto)
             if self.es_real:
                 self.ind.contar_grupo(auto.grupo, "perdidos_sin_combustible")

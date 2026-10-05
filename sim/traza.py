@@ -99,6 +99,8 @@ class Traza:
     def __init__(self) -> None:
         self.cuadros: list[Cuadro] = []
         self.inventario: list[tuple[float, float, int]] = []   # (minuto, litros, pedidos en camino)
+        # (minuto, litros del tanque 1, 2, 3, 4): el orden es el de `p.inventario` (sólo estación real)
+        self.inventario_producto: list[tuple] = []
         self.dias: list[DiaSimulado] = []
         # Indicadores por hora del día, copiados al terminar la corrida. Sirven para el
         # gráfico del perfil: muestran en qué hora está realmente el pico.
@@ -109,8 +111,12 @@ class Traza:
     def capturar(self, **datos) -> None:
         self.cuadros.append(Cuadro(**datos))
 
-    def capturar_inventario(self, t: float, nivel: float, pedidos_en_camino: int) -> None:
+    def capturar_inventario(
+        self, t: float, nivel: float, pedidos_en_camino: int, por_producto: tuple = ()
+    ) -> None:
         self.inventario.append((t, nivel, pedidos_en_camino))
+        if por_producto:
+            self.inventario_producto.append((t, *por_producto))
 
     def registrar_dia(self, dia: DiaSimulado) -> None:
         self.dias.append(dia)

@@ -28,7 +28,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from sim.config import ParametrosEconomicos, ParametrosSimulacion
-from sim.runner import ResultadoEscenario, ResultadoPolitica, buscar
+from sim.runner import (
+    ResultadoBarridoReal,
+    ResultadoEscenario,
+    ResultadoPolitica,
+    buscar,
+    promedio_por_producto,
+)
 
 DIAS_DEL_MES = 30
 
@@ -277,6 +283,73 @@ def analizar_politicas(
             )
         )
     return salida
+
+
+def analizar_politicas_real(
+    barrido: ResultadoBarridoReal,
+    eco: ParametrosEconomicos,
+    p: ParametrosSimulacion,
+) -> dict[str, list[CostoPolitica]]:
+    """Costo mensual de la política (s, Q) de CADA tanque, punto por punto del barrido.
+
+    El camión es independiente por producto (un flete por pedido de cada tanque), así que
+    el costo de un tanque sale sólo de lo que pasa en ese tanque:
+        costo = pedidos × flete + nivel promedio × $/L-mes + faltante,
+    con faltante = litros que no se vendieron por falta de stock × margen por litro +
+    clientes perdidos por falta de stock × prob. de compra × margen del minimarket.
+    (El abandono por cola o por playero no depende de la política: no se imputa.)
+    """
+    salida: dict[str, list[CostoPolitica]] = {pr: [] for pr in barrido.productos}
+    for punto in barrido.puntos:
+        pedidos = promedio_por_producto(punto.replicas, "pedidos_por_producto")
+        niveles = promedio_por_producto(punto.replicas, "nivel_por_producto")
+        sin_stock = promedio_por_producto(punto.replicas, "litros_sin_stock_por_producto")
+        perdidos = promedio_por_producto(punto.replicas, "perdidos_sin_stock_por_producto")
+        vendidos = promedio_por_producto(punto.replicas, "litros_vendidos_por_producto")
+        quiebre = promedio_por_producto(punto.replicas, "dias_quiebre_por_producto")
+        for producto in barrido.productos:
+            s_, q_ = punto.politicas[producto]
+            pedidos_mes = pedidos[producto] * DIAS_DEL_MES
+            costo_pedidos = pedidos_mes * eco.costo_pedido
+            costo_almacenamiento = niveles[producto] * eco.costo_almacenamiento_litro_mes
+            litros_perdidos_mes = sin_stock[producto] * DIAS_DEL_MES
+            costo_faltante = (
+                litros_perdidos_mes * eco.margen_por_litro
+                + perdidos[producto] * DIAS_DEL_MES * p.prob_compra * eco.margen_compra
+            )
+            vendidos_mes = vendidos[producto] * DIAS_DEL_MES
+            pedido_total = vendidos_mes + litros_perdidos_mes
+            salida[producto].append(
+                CostoPolitica(
+                    punto_pedido=s_,
+                    cantidad_pedido=q_,
+                    pedidos_mes=pedidos_mes,
+                    costo_pedidos=costo_pedidos,
+                    nivel_promedio=niveles[producto],
+                    costo_almacenamiento=costo_almacenamiento,
+                    litros_no_vendidos_mes=litros_perdidos_mes,
+                    costo_faltante=costo_faltante,
+                    costo_total=costo_pedidos + costo_almacenamiento + costo_faltante,
+                    nivel_servicio=vendidos_mes / pedido_total if pedido_total else 1.0,
+                    porcentaje_dias_quiebre=quiebre[producto],
+                    litros_vendidos_mes=vendidos_mes,
+                    margen_operativo=(
+                        vendidos_mes * eco.margen_por_litro
+                        - costo_pedidos
+                        - costo_almacenamiento
+                    ),
+                )
+            )
+    return salida
+
+
+def ahorro_por_producto(costos: dict[str, list[CostoPolitica]]) -> dict[str, float]:
+    """Cuánto baja el costo mensual de cada tanque al pasar de la política cargada (la
+    primera del barrido) a la mejor. Nunca es negativo: la cargada también compite."""
+    return {
+        producto: lista[0].costo_total - min(c.costo_total for c in lista)
+        for producto, lista in costos.items()
+    }
 
 
 def mejor_politica(costos: list[CostoPolitica]) -> CostoPolitica | None:

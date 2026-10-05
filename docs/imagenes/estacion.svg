@@ -1,0 +1,134 @@
+<svg viewBox="0 0 1000 520" xmlns="http://www.w3.org/2000/svg"
+             preserveAspectRatio="xMidYMid meet"
+             style="font-family:system-ui,-apple-system,Segoe UI,sans-serif"><rect width="1000" height="520" rx="10" fill="#1b2029"/><rect x="0" y="0" width="1000" height="52" rx="10" fill="#232a35"/><text x="20" y="34" fill="#e8eaed" font-size="22" font-weight="700">19:40</text><text x="92" y="34" fill="#9aa4b2" font-size="12">día 2</text><rect x="150" y="14" width="168" height="24" rx="12" fill="#14532d"/>
+          <text x="234" y="30" fill="#86efac" font-size="11" text-anchor="middle"
+            font-weight="600">MIDIENDO INDICADORES</text><text x="400" y="32" fill="#22c55e" font-size="18" font-weight="700"
+            text-anchor="end">615</text>
+          <text x="406" y="32" fill="#9aa4b2" font-size="11">cargaron</text><text x="545" y="32" fill="#60a5fa" font-size="18" font-weight="700"
+            text-anchor="end">183</text>
+          <text x="551" y="32" fill="#9aa4b2" font-size="11">compraron</text><text x="690" y="32" fill="#fb923c" font-size="18" font-weight="700"
+            text-anchor="end">0</text>
+          <text x="696" y="32" fill="#9aa4b2" font-size="11">por cola</text><text x="860" y="32" fill="#ef4444" font-size="18" font-weight="700"
+            text-anchor="end">0</text>
+          <text x="866" y="32" fill="#9aa4b2" font-size="11">sin nafta</text><text x="20" y="78" fill="#e8eaed" font-size="13" font-weight="600"
+            letter-spacing="1.2">LLEGADAS Y COLA</text>
+          <text x="20" y="93" fill="#9aa4b2" font-size="11">Poisson con perfil horario</text><rect x="20" y="96" width="270" height="318" rx="8" fill="#2c333f"/><line x1="42" y1="118" x2="42" y2="398" stroke="#3a4351" stroke-width="2"
+          stroke-dasharray="6 8"/><g transform="translate(70,110) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#60a5fa"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#60a5fa" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><g transform="translate(70,152) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#f472b6"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#f472b6" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><g transform="translate(70,194) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#fbbf24"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#fbbf24" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><g transform="translate(70,236) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#34d399"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#34d399" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><g transform="translate(70,278) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#a78bfa"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#a78bfa" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><g transform="translate(70,320) scale(0.9)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#fb923c"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#fb923c" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><text x="155" y="380" fill="#9aa4b2" font-size="13"
+            text-anchor="middle">+1 autos más esperando</text><text x="155" y="406" fill="#e8eaed" font-size="12" text-anchor="middle"
+          font-weight="600">7 en cola</text><line x1="292" y1="255" x2="322" y2="255" stroke="#3a4351"
+            stroke-width="2" stroke-dasharray="5 4"/>
+          <path d="M 321 250 L 330 255 L 321 260 Z" fill="#3a4351"/><text x="340" y="78" fill="#e8eaed" font-size="13" font-weight="600"
+            letter-spacing="1.2">SURTIDORES</text>
+          <text x="340" y="93" fill="#9aa4b2" font-size="11">servicio triangular</text><rect x="340" y="96" width="290" height="318" rx="8" fill="#2c333f"/><rect x="352" y="104" width="266" height="13" rx="6" fill="#3a4351" opacity="0.75"/><g transform="translate(364,164)">
+    <rect x="-3" y="32" width="26" height="5" rx="2" fill="#3a4351"/>
+    <rect x="0" y="0" width="20" height="34" rx="4" fill="#232a35" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="4" y="5" width="12" height="8" rx="2" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="10" cy="23" r="3.2" fill="#f59e0b" opacity="0.7"/>
+    <path d="M 20 15 q 9 2 9 10" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.8"/>
+  </g><g transform="translate(402,169) scale(0.92)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#34d399"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#34d399" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><text x="600" y="186" fill="#9aa4b2" font-size="10" text-anchor="end">S1</text><g transform="translate(364,234)">
+    <rect x="-3" y="32" width="26" height="5" rx="2" fill="#3a4351"/>
+    <rect x="0" y="0" width="20" height="34" rx="4" fill="#232a35" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="4" y="5" width="12" height="8" rx="2" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="10" cy="23" r="3.2" fill="#f59e0b" opacity="0.7"/>
+    <path d="M 20 15 q 9 2 9 10" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.8"/>
+  </g><g transform="translate(402,239) scale(0.92)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#a78bfa"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#a78bfa" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><text x="600" y="256" fill="#9aa4b2" font-size="10" text-anchor="end">S2</text><g transform="translate(364,304)">
+    <rect x="-3" y="32" width="26" height="5" rx="2" fill="#3a4351"/>
+    <rect x="0" y="0" width="20" height="34" rx="4" fill="#232a35" stroke="#f59e0b" stroke-width="2"/>
+    <rect x="4" y="5" width="12" height="8" rx="2" fill="#f59e0b" opacity="0.9"/>
+    <circle cx="10" cy="23" r="3.2" fill="#f59e0b" opacity="0.7"/>
+    <path d="M 20 15 q 9 2 9 10" fill="none" stroke="#f59e0b" stroke-width="2" opacity="0.8"/>
+  </g><g transform="translate(402,309) scale(0.92)">
+    <rect x="0" y="6" width="56" height="16" rx="5" fill="#fb923c"/>
+    <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="#fb923c" opacity="0.85"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
+    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+  </g><text x="600" y="326" fill="#9aa4b2" font-size="10" text-anchor="end">S3</text><text x="485" y="406" fill="#e8eaed" font-size="12" text-anchor="middle"
+          font-weight="600">3 de 3 ocupados</text><line x1="632" y1="255" x2="662" y2="255" stroke="#3a4351"
+            stroke-width="2" stroke-dasharray="5 4"/>
+          <path d="M 661 250 L 670 255 L 661 260 Z" fill="#3a4351"/><text x="651" y="245" fill="#9aa4b2" font-size="11" text-anchor="middle">compran</text><text x="680" y="78" fill="#e8eaed" font-size="13" font-weight="600"
+            letter-spacing="1.2">MINIMARKET</text>
+          <text x="680" y="93" fill="#9aa4b2" font-size="11">Bernoulli: sólo el % que compra</text><rect x="680" y="96" width="300" height="318" rx="8" fill="#2c333f"/><rect x="694" y="106" width="272" height="24" rx="6" fill="#334155"/>
+        <text x="830" y="123" fill="#e8eaed" font-size="12" text-anchor="middle"
+          letter-spacing="2">MINIMARKET</text><text x="716" y="150" fill="#9aa4b2" font-size="10" text-anchor="middle">cola</text><rect x="770" y="242" width="120" height="54" rx="6"
+            fill="#232a35" stroke="#f59e0b" stroke-width="2"/>
+          <text x="830" y="263" fill="#f59e0b" font-size="11" text-anchor="middle"
+            font-weight="600">CAJA 1</text>
+          <text x="830" y="278" fill="#9aa4b2" font-size="10" text-anchor="middle">
+            cobrando</text><g transform="translate(752,266)">
+    <circle cx="0" cy="0" r="4.5" fill="#fbbf24"/>
+    <path d="M -5 6 Q 0 4 5 6 L 4 18 L -4 18 Z" fill="#fbbf24" opacity="0.85"/>
+  </g><text x="830" y="406" fill="#e8eaed" font-size="12" text-anchor="middle"
+          font-weight="600">0 esperando para pagar</text><rect x="20" y="428" width="960" height="76" rx="8" fill="#2c333f"/><text x="40" y="452" fill="#e8eaed" font-size="12" font-weight="600"
+          letter-spacing="1">TANQUE DE COMBUSTIBLE</text><rect x="210" y="444" width="590" height="30" rx="6" fill="#1b2029"
+          stroke="#3a4351"/><rect x="210" y="444" width="124.267275" height="30" rx="6"
+          fill="#f59e0b" opacity="0.85"/><line x1="387" y1="438" x2="387" y2="480"
+          stroke="#e2e8f0" stroke-width="2" stroke-dasharray="4 3"/>
+        <text x="387" y="493" fill="#9aa4b2" font-size="10"
+          text-anchor="middle">punto de pedido</text><text x="814" y="464" fill="#e8eaed" font-size="13"
+          font-weight="700">8.425 L</text><text x="814" y="480" fill="#9aa4b2" font-size="10">
+          de 40.000 L</text><g transform="translate(40,464) scale(0.8)">
+    <rect x="0" y="4" width="34" height="14" rx="4" fill="#94a3b8"/>
+    <rect x="34" y="7" width="14" height="11" rx="3" fill="#cbd5e1"/>
+    <circle cx="10" cy="19" r="3.5" fill="#111827"/>
+    <circle cx="28" cy="19" r="3.5" fill="#111827"/>
+    <circle cx="42" cy="19" r="3.5" fill="#111827"/>
+  </g><text x="92" y="484" fill="#9aa4b2" font-size="11">
+            camión en viaje</text></svg>

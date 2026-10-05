@@ -34,11 +34,18 @@ _LAYOUT = dict(
     height=380,
     hovermode="x unified",
     font=dict(size=13),
+    # Formato de números en castellano: coma decimal y punto de miles.
+    separators=",.",
 )
 
 
 def _layout(**cambios) -> dict:
     return {**_LAYOUT, **cambios}
+
+
+def _miles(valor: float) -> str:
+    """Número con punto de miles, como se escribe en castellano."""
+    return f"{valor:,.0f}".replace(",", ".")
 
 
 # =============================================================================
@@ -134,7 +141,7 @@ def grafico_perfil_horario(traza: Traza, dias_medidos: int) -> go.Figure:
         yaxis=dict(title="Autos por hora"),
         yaxis2=dict(
             title="Espera promedio (min)", overlaying="y", side="right",
-            showgrid=False, rangemode="tozero",
+            showgrid=False, rangemode="tozero", dtick=1,
         ),
         legend=dict(orientation="h", y=1.12, x=0),
         **_layout(hovermode="x"),
@@ -214,18 +221,18 @@ def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
     )
     fig.add_hline(
         y=p.tanque.punto_pedido, line_dash="dash", line_color=NARANJA,
-        annotation_text=f"punto de pedido ({p.tanque.punto_pedido:,.0f} L)",
+        annotation_text=f"punto de pedido ({_miles(p.tanque.punto_pedido)} L)",
         annotation_position="top left",
     )
     fig.add_hline(
         y=p.tanque.capacidad, line_dash="dot", line_color=GRIS,
-        annotation_text=f"capacidad ({p.tanque.capacidad:,.0f} L)",
+        annotation_text=f"capacidad ({_miles(p.tanque.capacidad)} L)",
         annotation_position="bottom left",
     )
     fig.add_hline(y=0, line_color=ROJO, line_width=1)
     fig.add_vrect(
         x0=0, x1=p.dias_calentamiento, fillcolor="rgba(100,116,139,0.18)", line_width=0,
-        annotation_text="calentamiento", annotation_position="top left",
+        annotation_text="calentamiento", annotation_position="bottom right",
         annotation_font_size=11,
     )
     fig.update_layout(

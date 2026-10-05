@@ -15,12 +15,16 @@ import streamlit as st
 import streamlit.components.v1 as componentes
 
 from sim.config import (
+    DEMANDA_TIPICA,
+    ESTACIONALIDAD_LEVE,
+    ESTACIONALIDAD_NEUTRA,
+    ESTACIONALIDAD_PROXY,
     DemandaDiaria,
-    Estacionalidad,
     ParametrosEconomicos,
     ParametrosSimulacion,
     ParametrosTanque,
     Triangular,
+    dias_y_fecha,
 )
 from sim.economia import (
     analizar_escenarios,
@@ -107,56 +111,116 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         surtidores = st.number_input("Surtidores instalados", 1, 8, 3, 1)
         cajas = st.number_input("Cajas en el minimarket", 1, 4, 1, 1)
 
-    # --- FASE 2: Modo determinista y horizonte ---
-    with st.sidebar.expander("📊 Fase 2: Modelo determinista", expanded=True):
-        modo_determinista = st.checkbox(
-            "Usar modelo determinista (sin Monte Carlo)",
-            value=False,
-            help="Cuando está activado, la demanda se calcula de forma determinista basada en "
-                 "demanda base mensual y estacionalidad, sin sorteos aleatorios de demanda.",
-        )
-        if modo_determinista:
-            demanda_base_mensual = st.slider(
-                "Demanda base mensual (litros)", 30_000, 300_000, 120_000, 10_000,
-                help="Consumo total estimado de combustible por mes. Se ajusta con índices "
-                     "de estacionalidad según la época del año."
-            )
-            horizonte = st.radio(
-                "Horizonte de simulación",
-                options=["dia", "semana", "mes", "estacion", "anio"],
-                format_func=lambda x: {
-                    "dia": "📅 Un día",
-                    "semana": "📅 Una semana (7 días)",
-                    "mes": "📅 Un mes (30 días)",
-                    "estacion": "📅 Una estación (90 días)",
-                    "anio": "📅 Un año (365 días)",
-                }[x],
-                horizontal=False,
-            )
-            # Mapeo de horizonte a días
-            horizonte_a_dias = {"dia": 1, "semana": 7, "mes": 30, "estacion": 90, "anio": 365}
-            dias_por_horizonte = horizonte_a_dias[horizonte]
-        else:
-            demanda_base_mensual = 120_000.0  # valor por defecto, no se usa
-            horizonte = "mes"
-            dias_por_horizonte = 30
-
-    with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)", expanded=(not modo_determinista)):
-        st.caption(
-            "Tabla de frecuencias observada: en cuántos días se registró cada nivel de "
-            "demanda. De acá se sortea la demanda de cada día simulado."
-        )
-        tabla = st.data_editor(
-            pd.DataFrame(
-                {"Autos por día": [280, 320, 360, 400, 440],
-                 "Días observados": [10, 20, 40, 20, 10]}
+    # --- Demanda: litros por mes → clientes por día (corrige B1/B2/B5) ---
+    with st.sidebar.expander("📊 Demanda", expanded=True):
+        modo_demanda = st.radio(
+            "Modo de demanda",
+            options=["esperada", "monte_carlo"],
+            format_func=lambda x: (
+                "Demanda esperada (litros por mes)"
+                if x == "esperada"
+                else "Monte Carlo (tabla empírica)"
             ),
-            num_rows="dynamic",
-            hide_index=True,
-            key="tabla_demanda",
+            horizontal=True,
+            help="Con 'esperada' el total diario sale de los litros por mes y el "
+                 "calendario; con 'Monte Carlo' se sortea de la tabla de frecuencias. "
+                 "En ambos modos las llegadas son Poisson y los tiempos aleatorios, "
+                 "así que se mantienen las réplicas y el calentamiento.",
         )
-        demanda = construir_demanda(tabla)
-        st.caption(f"Demanda media: **{demanda.media:.0f} autos por día**")
+        if modo_demanda == "esperada":
+            litros_mes = st.slider(
+                "Demanda mensual (litros/mes)", 50_000, 600_000, 270_000, 10_000,
+                help="Es la variable de entrada: los clientes por día se derivan de "
+                     "acá, nunca al revés.",
+            )
+            litros_medios_por_cliente = st.number_input(
+                "Litros medios por cliente (L)", 5.0, 200.0, 35.7, 0.1,
+                help="Litros que carga en promedio un cliente de combustible líquido "
+                     "(mezcla de productos y tipos de vehículo).",
+            )
+            clientes_dia = (litros_mes / 30.0) / litros_medios_por_cliente
+            st.caption(
+                f"≈ {litros_mes / 30.0:,.0f} L/día ⇒ **{clientes_dia:,.0f} "
+                f"clientes/día** (antes de sumar el GNC)."
+            )
+        else:
+            litros_mes = 270_000.0
+            litros_medios_por_cliente = 35.7
+
+        horizonte = st.radio(
+            "Horizonte de simulación",
+            options=["dia", "semana", "mes", "estacion", "anio"],
+            index=2,
+            format_func=lambda x: {
+                "dia": "📅 Un día",
+                "semana": "📅 Una semana (7 días)",
+                "mes": "📅 Un mes (calendario real)",
+                "estacion": "📅 Una estación (90 días)",
+                "anio": "📅 Un año (365 días)",
+            }[x],
+            horizontal=False,
+        )
+        mes_elegido = 1
+        dia_elegido = 1
+        estacion_elegida = "verano"
+        if horizonte in ("dia", "semana"):
+            c1, c2 = st.columns(2)
+            mes_elegido = c1.selectbox("Mes de inicio", range(1, 13), index=0)
+            dia_elegido = c2.selectbox("Día de inicio", range(1, 32), index=0)
+        elif horizonte == "mes":
+            mes_elegido = st.selectbox("Mes a simular", range(1, 13), index=0)
+        elif horizonte == "estacion":
+            estacion_elegida = st.selectbox(
+                "Estación del año",
+                ["verano", "otonio", "invierno", "primavera"],
+                index=0,
+                format_func=lambda x: {
+                    "verano": "☀️ Verano (ene–mar)",
+                    "otonio": "🍂 Otoño (abr–jun)",
+                    "invierno": "❄️ Invierno (jun–ago)",
+                    "primavera": "🌱 Primavera (sep–nov)",
+                }[x],
+            )
+        fecha_inicio, dias_por_horizonte = dias_y_fecha(
+            horizonte, mes_elegido, dia_elegido, estacion_elegida
+        )
+        if modo_demanda == "esperada":
+            presets = {
+                "Neutra (default)": ESTACIONALIDAD_NEUTRA,
+                "Leve (±6 %)": ESTACIONALIDAD_LEVE,
+                "Proxy turístico": ESTACIONALIDAD_PROXY,
+            }
+            estacionalidad = presets[
+                st.selectbox("Estacionalidad mensual", list(presets), index=0)
+            ]
+            factor_fin_de_semana = st.slider(
+                "Factor de fin de semana", 1.0, 2.0, 1.30, 0.01,
+                help="El finde vende más que un día hábil; el nivel diario se "
+                     "normaliza para conservar los litros del mes.",
+            )
+        else:
+            estacionalidad = ESTACIONALIDAD_NEUTRA
+            factor_fin_de_semana = 1.30
+
+    if modo_demanda == "monte_carlo":
+        with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)"):
+            st.caption(
+                "Tabla de frecuencias observada: en cuántos días se registró cada nivel de "
+                "demanda. De acá se sortea la demanda de cada día simulado."
+            )
+            tabla = st.data_editor(
+                pd.DataFrame(
+                    {"Autos por día": [280, 320, 360, 400, 440],
+                     "Días observados": [10, 20, 40, 20, 10]}
+                ),
+                num_rows="dynamic",
+                hide_index=True,
+                key="tabla_demanda",
+            )
+            demanda = construir_demanda(tabla)
+            st.caption(f"Demanda media: **{demanda.media:.0f} autos por día**")
+    else:
+        demanda = DEMANDA_TIPICA
 
     with st.sidebar.expander("⏱️ Tiempos de servicio"):
         st.markdown("**Carga de combustible** — Triangular (min)")
@@ -222,18 +286,21 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
 
     with st.sidebar.expander("🔬 Corrida"):
-        if modo_determinista:
-            st.info(f"Horizonte seleccionado: **{dias_por_horizonte} días** ({horizonte})")
-            dias = dias_por_horizonte
-            dias_calentamiento = 0  # No necesario en modelo determinista
-            st.caption("(Calentamiento deshabilitado en modo determinista)")
+        st.info(
+            f"Horizonte **{horizonte}**: desde el {fecha_inicio[1]}/{fecha_inicio[0]}, "
+            f"**{dias_por_horizonte} días**."
+        )
+        dias = dias_por_horizonte
+        max_calentamiento = max(0, dias - 1)
+        if max_calentamiento == 0:
+            # Un horizonte de un solo día no tiene lugar para calentar.
+            dias_calentamiento = 0
+            st.caption("(Sin calentamiento: la corrida dura un solo día)")
         else:
-            dias = st.slider("Días simulados", 7, 90, 30, 1,
-                             help="30 días = un mes de operación.")
             dias_calentamiento = st.slider(
-                "Días de calentamiento", 0, 5, 1, 1,
-                help="Días que se simulan pero no se miden: la estación arranca vacía y con "
-                     "el tanque lleno, que no es su estado habitual.",
+                "Días de calentamiento", 0, max_calentamiento, min(2, max_calentamiento), 1,
+                help="Días que se simulan pero no se miden: la estación arranca con las colas "
+                     "vacías y el tanque al 75 %, que no es su estado habitual.",
             )
 
         dia_animado = st.slider("Día a animar", 1, min(dias, 90), min(2, int(dias)), 1)
@@ -286,8 +353,12 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         dias=int(dias),
         dias_calentamiento=int(dias_calentamiento),
         dia_animado=int(dia_animado),
-        modo_determinista=bool(modo_determinista),
-        demanda_base_mensual=float(demanda_base_mensual),
+        modo_demanda=str(modo_demanda),
+        litros_mes=float(litros_mes),
+        litros_medios_por_cliente=float(litros_medios_por_cliente),
+        factor_fin_de_semana=float(factor_fin_de_semana),
+        estacionalidad=estacionalidad,
+        fecha_inicio=fecha_inicio,
         horizonte=str(horizonte),
     )
     eco = ParametrosEconomicos(

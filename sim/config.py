@@ -11,11 +11,15 @@ Convenciones (ver CLAUDE.md):
 
 from __future__ import annotations
 
+import calendar
 from dataclasses import dataclass, replace
+from datetime import date, timedelta
 from functools import cached_property
 
 MINUTOS_POR_DIA = 1440
 HORAS_POR_DIA = 24
+#: Año de referencia del calendario: `fecha_inicio` y los días simulados viven acá (B2).
+ANO_REFERENCIA = 2026
 
 
 @dataclass(frozen=True)
@@ -248,20 +252,7 @@ class ParametrosTanque:
 class Estacionalidad:
     """Multiplicadores de demanda por mes del año (índice base = 100 en enero)."""
 
-    indices: tuple[float, ...] = (
-        100.0,  # enero (vendimia + verano)
-        60.0,   # febrero (transición)
-        70.0,   # marzo
-        75.0,   # abril
-        80.0,   # mayo
-        55.0,   # junio (mínimo + cortes RN)
-        85.0,   # julio (Las Leñas)
-        90.0,   # agosto
-        95.0,   # septiembre
-        92.0,   # octubre
-        98.0,   # noviembre
-        105.0,  # diciembre (Navidad + verano)
-    )
+    indices: tuple[float, ...] = (100.0,) * 12  # neutra: todos los meses pesan igual
 
     def __post_init__(self) -> None:
         if len(self.indices) != 12:
@@ -277,12 +268,57 @@ class Estacionalidad:
 
     @property
     def promedio(self) -> float:
-        """Promedio de todos los índices (debería ser cercano a 100)."""
+        """Promedio de todos los índices (se usa para normalizar, §14.4)."""
         return sum(self.indices) / len(self.indices)
 
 
-#: Estacionalidad típica de una estación de servicio en Mendoza
-ESTACIONALIDAD_TIPICA = Estacionalidad()
+#: Estacionalidad neutra (default, C10/DEM-06): todos los meses pesan igual.
+ESTACIONALIDAD_NEUTRA = Estacionalidad()
+
+#: Preset "leve": oscilación suave de ±6 % con mínimo en invierno (supuesto del orquestador).
+ESTACIONALIDAD_LEVE = Estacionalidad(
+    (
+        106.0, 105.2, 103.0, 100.0, 97.0, 94.8,   # ene..jun
+        94.0, 94.8, 97.0, 100.0, 103.0, 105.2,   # jul..dic
+    )
+)
+
+#: Preset "proxy turístico" (DATOS_OPERACIONALES §6; B3/C10).
+ESTACIONALIDAD_PROXY = Estacionalidad(
+    (
+        100.0, 60.0, 80.0, 65.0, 60.0, 55.0,     # ene..jun
+        85.0, 75.0, 70.0, 70.0, 75.0, 85.0,      # jul..dic
+    )
+)
+
+
+def dias_del_mes(mes: int) -> int:
+    """Días del mes (1=enero .. 12=diciembre) en el año de referencia."""
+    if not 1 <= mes <= 12:
+        raise ValueError(f"El mes debe estar entre 1 y 12, recibido {mes}.")
+    return calendar.monthrange(ANO_REFERENCIA, mes)[1]
+
+
+def dias_y_fecha(
+    horizonte: str, mes: int = 1, dia: int = 1, estacion: str = "verano"
+) -> tuple[tuple[int, int], int]:
+    """Una sola función horizonte → (fecha_inicio, dias) (corrige B5).
+
+    dia = 1 día · semana = 7 · mes = los días reales del mes elegido ·
+    estacion = 90 días desde el 1 del mes que abre la estación · anio = 365 desde el 1/ene.
+    """
+    if horizonte == "dia":
+        return (mes, dia), 1
+    if horizonte == "semana":
+        return (mes, dia), 7
+    if horizonte == "mes":
+        return (mes, 1), dias_del_mes(mes)
+    if horizonte == "estacion":
+        inicio = {"verano": 1, "otonio": 4, "invierno": 6, "primavera": 9}[estacion]
+        return (inicio, 1), 90
+    if horizonte == "anio":
+        return (1, 1), 365
+    raise ValueError(f"Horizonte desconocido: {horizonte}")
 
 
 # =============================================================================
@@ -300,10 +336,13 @@ class ParametrosSimulacion:
     demanda: DemandaDiaria = DEMANDA_TIPICA
     perfil: PerfilHorario = PERFIL_TIPICO
 
-    # --- Modo determinista (Fase 2) -------------------------------------------
-    modo_determinista: bool = False        # Si True, usa demanda determinista en lugar de Monte Carlo
-    demanda_base_mensual: float = 120_000.0  # Litros/mes base (usada en modo determinista)
-    estacionalidad: Estacionalidad = ESTACIONALIDAD_TIPICA
+    # --- Modo de demanda (corrige B1/B4: antes "modo determinista") ------------
+    modo_demanda: str = "monte_carlo"      # "esperada" (litros/mes) | "monte_carlo" (tabla empírica)
+    litros_mes: float = 270_000.0          # DEM-01: LITROS por mes, la variable de entrada
+    litros_medios_por_cliente: float = 35.7  # §14.2: litros medios por cliente líquido
+    factor_fin_de_semana: float = 1.30     # DEM-03, normalizado al mes (§14.4)
+    estacionalidad: Estacionalidad = ESTACIONALIDAD_NEUTRA
+    fecha_inicio: tuple[int, int] = (1, 1)  # (mes, día) del primer día simulado (B2)
 
     # --- Tiempos de servicio --------------------------------------------------
     carga: Triangular = Triangular(3.0, 5.0, 8.0)
@@ -323,7 +362,7 @@ class ParametrosSimulacion:
 
     # --- Control de la corrida ------------------------------------------------
     dias: int = 30                     # días simulados (30 = un mes de operación)
-    dias_calentamiento: int = 1        # días descartados (el tanque arranca lleno)
+    dias_calentamiento: int = 2        # días descartados (B4: el tanque arranca al 75 %)
     dia_animado: int = 2               # qué día se graba para la animación
     dt_traza: float = 0.5              # cada cuánto se captura un cuadro de animación
 
@@ -341,6 +380,17 @@ class ParametrosSimulacion:
             raise ValueError("El calentamiento tiene que ser menor que los días simulados.")
         if not 1 <= self.dia_animado <= self.dias:
             raise ValueError("El día a animar tiene que estar dentro de la corrida.")
+        if self.modo_demanda not in ("esperada", "monte_carlo"):
+            raise ValueError("modo_demanda tiene que ser 'esperada' o 'monte_carlo'.")
+        if self.litros_mes <= 0:
+            raise ValueError("litros_mes tiene que ser positivo.")
+        if self.litros_medios_por_cliente <= 0:
+            raise ValueError("litros_medios_por_cliente tiene que ser positivo.")
+        if self.factor_fin_de_semana <= 0:
+            raise ValueError("factor_fin_de_semana tiene que ser positivo.")
+        mes_inicio, dia_inicio = self.fecha_inicio
+        if not (1 <= mes_inicio <= 12 and 1 <= dia_inicio <= dias_del_mes(mes_inicio)):
+            raise ValueError(f"fecha_inicio inválida: {self.fecha_inicio}.")
 
     # --- Valores derivados ----------------------------------------------------
     @property
@@ -364,45 +414,76 @@ class ParametrosSimulacion:
         return inicio, inicio + MINUTOS_POR_DIA
 
     def _dias_segun_horizonte(self) -> int:
-        """Calcula los días a simular según el horizonte seleccionado."""
-        horizonte_a_dias = {
-            "dia": 1,
-            "semana": 7,
-            "mes": 30,
-            "estacion": 90,
-            "anio": 365,
-        }
-        return horizonte_a_dias.get(self.horizonte, 30)
+        """Días del horizonte elegido (delega en `dias_y_fecha` para no repetir el mapa)."""
+        _, dias = dias_y_fecha(self.horizonte)
+        return dias
+
+    @classmethod
+    def clasico(cls) -> ParametrosSimulacion:
+        """El caso degenerado del proyecto hipotético original.
+
+        Reproduce exactamente los números dorados de ORQUESTADOR §14.1: 3 surtidores,
+        un solo producto, la tabla empírica heredada, el tanque de 40.000 L y 1 día de
+        calentamiento. Es la base del control N1.
+        """
+        return cls(modo_demanda="monte_carlo", dias=30, dias_calentamiento=1)
 
     @property
     def autos_por_dia(self) -> float:
-        """Autos por día promedio.
+        """Clientes por día promedio.
 
-        En modo determinista: demanda_base_mensual / 30.
-        En modo Monte Carlo: media de la tabla empírica.
+        En modo 'esperada': litros del mes ÷ litros medios por cliente, repartidos en
+        los días del mes de `fecha_inicio`. Nunca "litros ÷ 30 llamados autos" (B1).
+        En modo 'monte_carlo': media de la tabla empírica.
         """
-        if self.modo_determinista:
-            return self.demanda_base_mensual / 30.0
-        else:
-            return self.demanda.media
+        if self.modo_demanda == "esperada":
+            return (
+                self.litros_mes / dias_del_mes(self.fecha_inicio[0])
+            ) / self.litros_medios_por_cliente
+        return self.demanda.media
 
-    def autos_por_dia_fecha(self, dia_del_anio: int) -> float:
-        """Autos por día para una fecha específica (considerando estacionalidad).
+    def _fecha_del_dia(self, dia: int) -> tuple[int, int]:
+        """(mes, día de la semana) de la fecha del día `dia` de la corrida.
 
-        Args:
-            dia_del_anio: día del año (1-365)
-
-        Returns:
-            Autos por día ajustados por estacionalidad
+        `dia = 1` es `fecha_inicio`; el día de la semana es 0=lunes .. 6=domingo
+        (como `datetime.weekday()`), en el año de referencia (corrige B2).
         """
-        if not self.modo_determinista:
-            return self.autos_por_dia
+        mes_inicio, dia_inicio = self.fecha_inicio
+        fecha = date(ANO_REFERENCIA, mes_inicio, dia_inicio) + timedelta(days=dia - 1)
+        return fecha.month, fecha.weekday()
 
-        # Calcular mes (1-12) a partir del día del año
-        mes = min(12, ((dia_del_anio - 1) // 30) + 1)
+    def _factor_tipo_de_dia(self, mes: int, dia_semana: int) -> float:
+        """Factor del tipo de día, normalizado para conservar los litros del mes (§14.4)."""
+        total = dias_del_mes(mes)
+        primero = date(ANO_REFERENCIA, mes, 1)
+        fines = sum(
+            1 for d in range(total) if (primero + timedelta(days=d)).weekday() >= 5
+        )
+        habiles = total - fines
+        f = self.factor_fin_de_semana
+        nivel_habil = total / (habiles + f * fines)
+        return f * nivel_habil if dia_semana >= 5 else nivel_habil
+
+    def litros_del_dia(self, dia: int) -> float:
+        """Litros del día `dia` de la corrida (modo 'esperada').
+
+        `litros_mes` ÷ días del mes de esa fecha × estacionalidad del mes
+        (índice ÷ media, §14.4) × factor por tipo de día (normalizado, §14.4).
+        """
+        mes, dia_semana = self._fecha_del_dia(dia)
         indice = self.estacionalidad.indice_mes(mes)
-        autos_base = self.demanda_base_mensual / 30.0
-        return autos_base * (indice / self.estacionalidad.promedio)
+        return (
+            self.litros_mes
+            / dias_del_mes(mes)
+            * (indice / self.estacionalidad.promedio)
+            * self._factor_tipo_de_dia(mes, dia_semana)
+        )
+
+    def autos_por_dia_fecha(self, dia: int) -> float:
+        """Clientes del día `dia` de la corrida, con estacionalidad y tipo de día."""
+        if self.modo_demanda != "esperada":
+            return self.autos_por_dia
+        return self.litros_del_dia(dia) / self.litros_medios_por_cliente
 
     @property
     def litros_por_dia(self) -> float:

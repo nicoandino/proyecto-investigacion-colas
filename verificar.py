@@ -23,13 +23,24 @@ Los controles cubren las dos partes del modelo:
     8. Conservación de litros: lo que entró menos lo que salió es lo que queda.
     9. El tanque nunca queda negativo ni pasa de su capacidad.
    10. Subir el punto de pedido reduce los quiebres de stock.
+
+  FASE 0 DEL ORQUESTADOR (ORQUESTADOR_SIMULADOR.md §10.2)
+   11. N1: el caso clásico reproduce los números dorados de §14.1.
+   12. N16: unidades de la demanda (270.000 L/mes ⇒ 270.000 ± 3 % simulados).
+   13. N17/N18: calendario real (invierno = jun–ago, julio ≠ enero, día de la
+       semana) y normalización del fin de semana (§14.4).
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
 
-from sim.config import MINUTOS_POR_DIA, ParametrosSimulacion
+from sim.config import (
+    ESTACIONALIDAD_PROXY,
+    MINUTOS_POR_DIA,
+    ParametrosSimulacion,
+    dias_y_fecha,
+)
 from sim.modelo import simular
 from sim.runner import con_politica, correr_escenarios, correr_replica
 
@@ -37,10 +48,12 @@ VERDE = "OK  "
 ROJO = "FALLA"
 
 _fallas = 0
+_total = 0
 
 
 def controlar(condicion: bool, titulo: str, detalle: str = "") -> None:
-    global _fallas
+    global _fallas, _total
+    _total += 1
     if not condicion:
         _fallas += 1
     print(f"  [{VERDE if condicion else ROJO}] {titulo}")
@@ -250,12 +263,173 @@ def main() -> int:
         f"de 30.000 L: {grande.pedidos_dia * 30:.1f} pedidos/mes",
     )
 
+    # ------------------------------------------------------------------ 10
+    separador("10. N1: el caso clásico reproduce los números dorados (§14.1)")
+    clasico = ParametrosSimulacion.clasico()
+    # Los dorados se midieron sobre la rama mergeada (5/10/2026) y están en
+    # ORQUESTADOR_SIMULADOR.md §14.1. Deben salir idénticos hasta 6 decimales.
+    DORADOS_REPLICA = {
+        1: {
+            "espera_surtidor": 1.3919284647118675,
+            "espera_pico": 3.6094022200315035,
+            "cola_surtidor": 0.3723630011739665,
+            "util_surtidores": 0.43519483111163554,
+            "atendidos_dia": 350.8965517241379,
+            "perdidos_cola_dia": 4.758620689655173,
+            "perdidos_sin_combustible_dia": 12.482758620689655,
+            "litros_vendidos_dia": 12333.565057334621,
+            "nivel_servicio": 0.9533549473624987,
+            "pedidos_dia": 0.6206896551724138,
+            "compras_dia": 104.6896551724138,
+            "hora_pico": 19,
+        },
+        2: {
+            "espera_surtidor": 1.23730743038923,
+            "espera_pico": 3.1924768285024845,
+            "cola_surtidor": 0.3149593047004242,
+            "util_surtidores": 0.4279340258516126,
+            "atendidos_dia": 345.7931034482759,
+            "perdidos_cola_dia": 2.4827586206896552,
+            "perdidos_sin_combustible_dia": 14.206896551724139,
+            "litros_vendidos_dia": 12058.172472897104,
+            "nivel_servicio": 0.9539092186615971,
+            "pedidos_dia": 0.6206896551724138,
+            "compras_dia": 104.6896551724138,
+            "hora_pico": 19,
+        },
+    }
+    for semilla, esperados in DORADOS_REPLICA.items():
+        r, _ = correr_replica(clasico, semilla=semilla)
+        peor = 0.0
+        peor_campo = ""
+        for campo, esperado in esperados.items():
+            diferencia = abs(float(getattr(r, campo)) - float(esperado))
+            if diferencia > peor:
+                peor, peor_campo = diferencia, campo
+        controlar(
+            peor < 1e-6,
+            f"Réplica con semilla {semilla} idéntica a los dorados (12 campos, |dif| < 1e-6)",
+            f"peor diferencia: {peor:.2e} en {peor_campo}",
+        )
+
+    DORADOS_ESCENARIO = {
+        "Base": (3.2495360377376423, 346.4655172413793, 12140.08982106003),
+        "A": (0.8447869320060243, 348.32758620689657, 12207.652175343133),
+        "B": (3.2495360377376423, 346.4655172413793, 12140.08982106003),
+        "C": (0.8447869320060243, 348.32758620689657, 12207.652175343133),
+    }
+    escenarios = correr_escenarios(clasico, replicas=4, semilla_base=1)
+    peor = 0.0
+    peor_detalle = ""
+    for r in escenarios:
+        for metrica, esperado in zip(
+            ("espera_pico", "atendidos_dia", "litros_vendidos_dia"),
+            DORADOS_ESCENARIO[r.escenario.nombre],
+        ):
+            diferencia = abs(r.prom(metrica) - esperado)
+            if diferencia > peor:
+                peor, peor_detalle = diferencia, f"{r.escenario.nombre}.{metrica}"
+    controlar(
+        peor < 1e-6,
+        "Los 4 escenarios × 4 réplicas reproducen los dorados (B = Base, C = A)",
+        f"peor diferencia: {peor:.2e} en {peor_detalle}",
+    )
+
+    # ------------------------------------------------------------------ 11
+    separador("11. N16: unidades de la demanda (litros, no autos)")
+    fecha_enero, dias_enero = dias_y_fecha("mes", mes=1)
+    p_esperada = replace(
+        p,
+        modo_demanda="esperada",
+        litros_mes=270_000.0,
+        fecha_inicio=fecha_enero,
+        dias=dias_enero,
+        dias_calentamiento=2,
+    )
+    litros_totales = []
+    for semilla in (101, 102, 103):
+        ind, _ = simular(p_esperada, semilla=semilla)
+        litros_totales.append(
+            ind.c_total.litros_vendidos + ind.c_total.litros_no_vendidos
+        )
+    promedio = sum(litros_totales) / len(litros_totales)
+    controlar(
+        abs(promedio - 270_000.0) / 270_000.0 < 0.03,
+        "270.000 L/mes -> 270.000 ± 3 % de litros simulados (3 réplicas)",
+        f"simulado {promedio:,.0f} L/mes ({' · '.join(f'{v:,.0f}' for v in litros_totales)}) | "
+        f"desvío {(promedio - 270_000.0) / 270_000.0 * 100:+.2f} %",
+    )
+
+    # ------------------------------------------------------------------ 12
+    separador("12. N17/N18: calendario real y normalización del fin de semana")
+    fecha_inv, dias_inv = dias_y_fecha("estacion", estacion="invierno")
+    p_inv = replace(
+        p,
+        modo_demanda="esperada",
+        fecha_inicio=fecha_inv,
+        dias=dias_inv,
+        dias_calentamiento=2,
+    )
+    meses = {p_inv._fecha_del_dia(d)[0] for d in range(1, dias_inv + 1)}
+    controlar(
+        meses == {6, 7, 8},
+        "La estación de invierno simula exactamente junio, julio y agosto",
+        f"meses simulados: {sorted(meses)} | arranca el {fecha_inv[1]}/{fecha_inv[0]}",
+    )
+
+    litros_por_mes = {}
+    for nombre, mes in (("enero", 1), ("julio", 7)):
+        fecha_m, dias_m = dias_y_fecha("mes", mes=mes)
+        p_m = replace(
+            p_esperada,
+            estacionalidad=ESTACIONALIDAD_PROXY,
+            fecha_inicio=fecha_m,
+            dias=dias_m,
+        )
+        totales = []
+        for semilla in (101, 102):
+            ind, _ = simular(p_m, semilla=semilla)
+            totales.append(
+                ind.c_total.litros_vendidos + ind.c_total.litros_no_vendidos
+            )
+        litros_por_mes[nombre] = sum(totales) / len(totales)
+    diferencia_relativa = abs(
+        litros_por_mes["julio"] - litros_por_mes["enero"]
+    ) / litros_por_mes["enero"]
+    controlar(
+        diferencia_relativa > 0.01,
+        "Con el preset 'proxy turístico', un mes de julio es distinto de un mes de enero",
+        f"enero {litros_por_mes['enero']:,.0f} L | julio {litros_por_mes['julio']:,.0f} L | "
+        f"diferencia {diferencia_relativa * 100:.1f} %",
+    )
+
+    p_cal = replace(p, fecha_inicio=(7, 1))
+    controlar(
+        p_cal._fecha_del_dia(1) == (7, 2),
+        "El 1/7/2026 es miércoles (día de la semana correcto)",
+        f"_fecha_del_dia(1) = {p_cal._fecha_del_dia(1)}",
+    )
+    controlar(
+        p_cal._fecha_del_dia(30) == (7, 3),
+        "El 30/7/2026 es jueves",
+        f"_fecha_del_dia(30) = {p_cal._fecha_del_dia(30)}",
+    )
+
+    for factor in (1.30, 1.50):
+        p_n = replace(p_esperada, factor_fin_de_semana=factor)
+        suma = sum(p_n.litros_del_dia(d) for d in range(1, dias_enero + 1))
+        controlar(
+            abs(suma - 270_000.0) / 270_000.0 < 1e-9,
+            f"El total del mes no cambia al variar el factor de fin de semana (f = {factor:g})",
+            f"suma de litros_del_dia = {suma:,.1f} L",
+        )
+
     # ------------------------------------------------------------------
     print()
     if _fallas == 0:
-        print("Todos los controles pasaron. El motor se comporta como corresponde.")
+        print(f"Todos los controles pasaron ({_total} en total). El motor se comporta como corresponde.")
         return 0
-    print(f"{_fallas} control(es) fallaron. Revisar antes de sacar conclusiones.")
+    print(f"{_fallas} control(es) de {_total} fallaron. Revisar antes de sacar conclusiones.")
     return 1
 
 

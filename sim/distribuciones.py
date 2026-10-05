@@ -79,16 +79,16 @@ class Aleatorio:
         numero = int(u * 100) + 1           # 01 a 100; el 100 se muestra como "00"
         return tabla.sortear(u), numero
 
-    def determinista(self, autos_por_dia: float) -> tuple[int, int]:
-        """Retorna una demanda determinista (sin azar).
+    def esperada(self, clientes_por_dia: float) -> tuple[int, int]:
+        """Demanda esperada del día, derivada de los litros por mes (sin sorteo).
 
-        En modo determinista no hay número aleatorio. El segundo valor es siempre 50
-        (representa que está en el "medio" del rango de valores posibles).
+        El total diario es fijo pero las llegadas siguen siendo Poisson y los tiempos
+        aleatorios: por eso se mantienen las réplicas y el calentamiento (B4).
 
         Args:
-            autos_por_dia: cantidad de autos esperados para el día
+            clientes_por_dia: clientes esperados para el día (litros ÷ litros medios)
 
         Returns:
-            Tupla (autos_redondeados, numero_pseudoaleatorio_50)
+            Tupla (clientes_redondeados, numero_pseudoaleatorio_50)
         """
-        return int(round(autos_por_dia)), 50
+        return int(round(clientes_por_dia)), 50

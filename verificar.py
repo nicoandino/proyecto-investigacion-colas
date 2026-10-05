@@ -29,6 +29,11 @@ Los controles cubren las dos partes del modelo:
    12. N16: unidades de la demanda (270.000 L/mes ⇒ 270.000 ± 3 % simulados).
    13. N17/N18: calendario real (invierno = jun–ago, julio ≠ enero, día de la
        semana) y normalización del fin de semana (§14.4).
+
+  FASE 1 DEL ORQUESTADOR
+   14. N14: cero parámetros huérfanos (todo campo tiene su Dato en el Registro).
+   15. N15: tema Shell (ningún hex fuera de ui/tema.py, contraste WCAG ≥ 4,5,
+       los 5 colores de PRODUCTO distinguibles).
 """
 
 from __future__ import annotations
@@ -168,7 +173,9 @@ def main() -> int:
 
     # ------------------------------------------------------------------ 6
     separador("6. Monte Carlo: la demanda sorteada respeta la tabla empírica")
-    p_muchos, _ = replace(p, dias=400, dias_calentamiento=1), None
+    p_muchos = replace(
+        p, dias=400, dias_calentamiento=1, modo_demanda="monte_carlo"
+    )
     _, traza = correr_replica(p_muchos, semilla=5, con_traza=True)
     sorteos = [d.autos_sorteados for d in traza.dias]
     media_simulada = sum(sorteos) / len(sorteos)
@@ -203,10 +210,13 @@ def main() -> int:
         f"mayor desvío: {desvio_maximo * 100:.2f} puntos porcentuales sobre {total:,} autos",
     )
     hora_mas_cargada = llegadas.index(max(llegadas))
+    picos = {
+        h for h, f in enumerate(p.perfil.factores) if f == p.perfil.factor_maximo
+    }
     controlar(
-        hora_mas_cargada == p.perfil.hora_pico(),
-        "La hora con más llegadas es la hora pico del perfil",
-        f"simulada: {hora_mas_cargada}:00 | perfil: {p.perfil.hora_pico()}:00",
+        hora_mas_cargada in picos,
+        "La hora con más llegadas es una de las horas pico del perfil",
+        f"simulada: {hora_mas_cargada}:00 | horas pico del perfil: {sorted(picos)}",
     )
 
     # ------------------------------------------------------------------ 8
@@ -423,6 +433,83 @@ def main() -> int:
             f"El total del mes no cambia al variar el factor de fin de semana (f = {factor:g})",
             f"suma de litros_del_dia = {suma:,.1f} L",
         )
+
+    # ------------------------------------------------------------------ 13
+    separador("13. N14: cero parámetros huérfanos")
+    from dataclasses import fields
+
+    from sim.config import ParametrosEconomicos, ParametrosTanque
+    from sim.datos import MAPA_PARAMETROS, REGISTRO as REGISTRO_DATOS
+
+    ids_registro = {d.id for d in REGISTRO_DATOS}
+    huerfanos = []
+    for clase in (ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos):
+        for campo in fields(clase):
+            clave = f"{clase.__name__}.{campo.name}"
+            if clave not in MAPA_PARAMETROS or MAPA_PARAMETROS[clave] not in ids_registro:
+                huerfanos.append(clave)
+    controlar(
+        not huerfanos,
+        "Todo campo de los parámetros tiene su Dato en el Registro",
+        f"{len(MAPA_PARAMETROS)} campos mapeados a Datos"
+        + (f" | HUÉRFANOS: {huerfanos}" if huerfanos else ""),
+    )
+
+    # ------------------------------------------------------------------ 14
+    separador("14. N15: tema (ningún hex fuera de ui/tema.py; contraste; productos)")
+    import pathlib
+    import re
+
+    from ui.tema import PARES_CONTRASTE, PRODUCTO, contraste as contraste_wcag
+
+    hex_re = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
+    # El [theme] de .streamlit/config.toml está exceptuado: sus hex los prescribe el
+    # propio §8.1 (regla 5) y son los únicos que puede haber fuera de ui/tema.py.
+    archivos_ui = [
+        "app.py", "ui/graficos.py", "ui/animacion.py", "ui/datos_ui.py",
+        "ui/textos.py",
+    ]
+    infractores = []
+    for nombre in archivos_ui:
+        texto = pathlib.Path(nombre).read_text(encoding="utf-8")
+        for coincidencia in hex_re.findall(texto):
+            infractores.append(f"{nombre}: {coincidencia}")
+    controlar(
+        not infractores,
+        "Ningún hex hardcodeado fuera de ui/tema.py (salvo el [theme] de config.toml)",
+        f"{len(infractores)} hexes sueltos"
+        + (f": {infractores[:5]}" if infractores else ""),
+    )
+
+    pares_mal = [
+        (nombre, contraste_wcag(fondo, frente))
+        for nombre, fondo, frente in PARES_CONTRASTE
+        if contraste_wcag(fondo, frente) < 4.5
+    ]
+    controlar(
+        not pares_mal,
+        "Contraste WCAG >= 4,5 en los pares declarados (§10.3)",
+        f"{len(PARES_CONTRASTE)} pares"
+        + (f" | fallan: {pares_mal}" if pares_mal else ""),
+    )
+
+    def distancia_rgb(h1: str, h2: str) -> float:
+        h1, h2 = h1.lstrip("#"), h2.lstrip("#")
+        return sum(
+            (int(h1[i : i + 2], 16) - int(h2[i : i + 2], 16)) ** 2 for i in (0, 2, 4)
+        ) ** 0.5
+
+    colores_producto = list(PRODUCTO.values())
+    peor = min(
+        distancia_rgb(a, b)
+        for i, a in enumerate(colores_producto)
+        for b in colores_producto[i + 1 :]
+    )
+    controlar(
+        peor >= 60,
+        "Los 5 colores de PRODUCTO son distinguibles entre sí",
+        f"menor distancia RGB entre productos: {peor:.0f}",
+    )
 
     # ------------------------------------------------------------------
     print()

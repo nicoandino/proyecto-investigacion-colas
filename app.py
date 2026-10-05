@@ -26,6 +26,7 @@ from sim.config import (
     Triangular,
     dias_y_fecha,
 )
+from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
 from sim.economia import (
     analizar_escenarios,
     analizar_politicas,
@@ -43,6 +44,13 @@ from sim.runner import (
     grilla_sugerida,
 )
 from ui import animacion, graficos
+from ui.datos_ui import (
+    csv_registro,
+    esquema_estacion_html,
+    insignia_html,
+    tabla_registro,
+)
+from ui.tema import css_global
 from ui.textos import (
     COMPARACION,
     DESCRIPCION_METODO,
@@ -108,11 +116,22 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
     st.sidebar.caption("Al cambiar algo hay que volver a correr la simulación.")
 
     with st.sidebar.expander("🏪 Capacidad actual", expanded=True):
+        st.markdown(
+            f"El motor todavía usa la configuración clásica "
+            f"{insignia_html(por_id('REC-01'))}{insignia_html(por_id('REC-02'))} "
+            f"(el rediseño de 12 caras y grupos entra en la Fase 2 del orquestador).",
+            unsafe_allow_html=True,
+        )
         surtidores = st.number_input("Surtidores instalados", 1, 8, 3, 1)
         cajas = st.number_input("Cajas en el minimarket", 1, 4, 1, 1)
 
     # --- Demanda: litros por mes → clientes por día (corrige B1/B2/B5) ---
     with st.sidebar.expander("📊 Demanda", expanded=True):
+        st.markdown(
+            f"Fuentes {insignia_html(por_id('DEM-01'))} {insignia_html(por_id('DEM-11'))} "
+            f"{insignia_html(por_id('DEM-06'))} {insignia_html(por_id('DEM-03'))}",
+            unsafe_allow_html=True,
+        )
         modo_demanda = st.radio(
             "Modo de demanda",
             options=["esperada", "monte_carlo"],
@@ -223,19 +242,23 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         demanda = DEMANDA_TIPICA
 
     with st.sidebar.expander("⏱️ Tiempos de servicio"):
+        st.markdown(
+            f"Fuentes {insignia_html(por_id('TIE-02'))} {insignia_html(por_id('TIE-05'))}",
+            unsafe_allow_html=True,
+        )
         st.markdown("**Carga de combustible** — Triangular (min)")
         c1, c2, c3 = st.columns(3)
         carga = Triangular(
-            c1.number_input("mín", 0.5, 30.0, 3.0, 0.5, key="carga_min"),
+            c1.number_input("mín", 0.5, 30.0, 2.0, 0.5, key="carga_min"),
             c2.number_input("moda", 0.5, 30.0, 5.0, 0.5, key="carga_moda"),
             c3.number_input("máx", 0.5, 30.0, 8.0, 0.5, key="carga_max"),
         )
         st.markdown("**Compra en el minimarket** (min)")
         d1, d2, d3 = st.columns(3)
         compra = Triangular(
-            d1.number_input("mín", 0.2, 30.0, 1.5, 0.5, key="compra_min"),
-            d2.number_input("moda", 0.2, 30.0, 3.0, 0.5, key="compra_moda"),
-            d3.number_input("máx", 0.2, 30.0, 6.0, 0.5, key="compra_max"),
+            d1.number_input("mín", 0.2, 30.0, 2.0, 0.5, key="compra_min"),
+            d2.number_input("moda", 0.2, 30.0, 4.0, 0.5, key="compra_moda"),
+            d3.number_input("máx", 0.2, 30.0, 10.0, 0.5, key="compra_max"),
         )
         caja_exponencial = st.checkbox(
             "Usar Exponencial en la caja", value=False,
@@ -244,6 +267,11 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
 
     with st.sidebar.expander("⛽ Litros por carga"):
+        st.markdown(
+            f"Fuente {insignia_html(por_id('VEH-06'))} (el desglose por tipo de "
+            f"vehículo — VEH-01..05 — entra en la Fase 2).",
+            unsafe_allow_html=True,
+        )
         st.caption("Cuánto carga cada auto. Es lo que consume el tanque.")
         e1, e2, e3 = st.columns(3)
         litros = Triangular(
@@ -253,8 +281,12 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         )
 
     with st.sidebar.expander("🧍 Comportamiento del cliente"):
+        st.markdown(
+            f"Fuentes {insignia_html(por_id('DEM-08'))} {insignia_html(por_id('TIE-06'))}",
+            unsafe_allow_html=True,
+        )
         prob_compra = st.slider(
-            "Probabilidad de entrar al minimarket", 0.0, 1.0, 0.30, 0.05,
+            "Probabilidad de entrar al minimarket", 0.0, 1.0, 0.20, 0.05,
             help="Ensayo de Bernoulli después de cargar combustible.",
         )
         paciencia_surtidor = st.slider(
@@ -264,25 +296,30 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         paciencia_caja = st.slider("Paciencia en la cola de la caja (min)", 1.0, 30.0, 8.0, 1.0)
 
     with st.sidebar.expander("🛢️ Tanque y reposición", expanded=True):
-        capacidad = st.number_input("Capacidad del tanque (L)", 5_000, 200_000, 40_000, 5_000)
-        nivel_inicial = st.number_input("Nivel inicial (L)", 0, int(capacidad), 30_000, 1_000)
+        st.markdown(
+            f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
+            f"{insignia_html(por_id('INV-01'))}",
+            unsafe_allow_html=True,
+        )
+        capacidad = st.number_input("Capacidad del tanque (L)", 5_000, 200_000, 20_000, 5_000)
+        nivel_inicial = st.number_input("Nivel inicial (L)", 0, int(capacidad), 15_000, 1_000)
         punto_pedido = st.number_input(
-            "Punto de pedido s (L)", 0, int(capacidad), 12_000, 1_000,
+            "Punto de pedido s (L)", 0, int(capacidad), 13_500, 1_000,
             key="w_punto_pedido",
             help="Cuando el combustible disponible (lo que hay más lo que viene en "
                  "camino) baja de este valor, se pide un camión.",
         )
         cantidad_pedido = st.number_input(
-            "Cantidad a pedir Q (L)", 1_000, int(capacidad), 20_000, 1_000,
+            "Cantidad a pedir Q (L)", 1_000, int(capacidad), 6_500, 1_000,
             key="w_cantidad_pedido",
             help="Cuántos litros trae cada camión cisterna.",
         )
         st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
         f1, f2, f3 = st.columns(3)
         plazo = Triangular(
-            f1.number_input("mín", 1.0, 200.0, 8.0, 1.0, key="plazo_min"),
-            f2.number_input("moda", 1.0, 200.0, 16.0, 1.0, key="plazo_moda"),
-            f3.number_input("máx", 1.0, 200.0, 36.0, 1.0, key="plazo_max"),
+            f1.number_input("mín", 1.0, 200.0, 24.0, 1.0, key="plazo_min"),
+            f2.number_input("moda", 1.0, 200.0, 36.0, 1.0, key="plazo_moda"),
+            f3.number_input("máx", 1.0, 200.0, 48.0, 1.0, key="plazo_max"),
         )
 
     with st.sidebar.expander("🔬 Corrida"):
@@ -312,6 +349,12 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         semilla = st.number_input("Semilla", 1, 99_999, 1, 1)
 
     with st.sidebar.expander("💵 Datos económicos"):
+        st.markdown(
+            f"Fuentes {insignia_html(por_id('ECO-01'))} {insignia_html(por_id('ECO-02'))} "
+            f"{insignia_html(por_id('ECO-06'))} {insignia_html(por_id('ECO-04C'))} "
+            f"(márgenes y flete son heredados sin fuente: placeholders visibles).",
+            unsafe_allow_html=True,
+        )
         st.caption("Valores estimados: hay que reemplazarlos por los datos reales.")
         margen_por_litro = st.number_input("Ganancia por litro ($)", 0.0, 1e6, 100.0, 10.0)
         margen_compra = st.number_input(
@@ -330,7 +373,7 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
         operativo_surtidor = st.number_input(
             "Costo operativo del surtidor ($/mes)", 0.0, 1e8, 250_000.0, 50_000.0
         )
-        sueldo_cajero = st.number_input("Sueldo de un cajero ($/mes)", 0.0, 1e8, 900_000.0, 50_000.0)
+        sueldo_cajero = st.number_input("Sueldo de un cajero ($/mes)", 0.0, 1e8, 1_800_000.0, 50_000.0)
 
     p = ParametrosSimulacion(
         surtidores=int(surtidores),
@@ -923,6 +966,12 @@ def pestania_modelo(p: ParametrosSimulacion) -> None:
 
     st.divider()
     st.subheader("Configuración de esta corrida")
+    if p.modo_demanda == "esperada":
+        demanda_txt = (
+            f"esperada desde {p.litros_mes:,.0f} L/mes ⇒ {p.autos_por_dia:.0f} clientes/día"
+        )
+    else:
+        demanda_txt = f"tabla empírica, media {p.autos_por_dia:.0f} autos/día"
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
@@ -930,7 +979,9 @@ def pestania_modelo(p: ParametrosSimulacion) -> None:
 | Parámetro | Valor |
 |---|---|
 | Surtidores / cajas | {p.surtidores} / {p.cajas} |
-| Demanda diaria | tabla empírica, media {p.autos_por_dia:.0f} autos/día |
+| Demanda diaria | {demanda_txt} |
+| Modo de demanda | {p.modo_demanda} |
+| Inicio (mes, día) | {p.fecha_inicio} |
 | Perfil horario | pico a las {p.perfil.hora_pico()}:00 |
 | Carga | Triangular({p.carga.minimo:g}, {p.carga.moda:g}, {p.carga.maximo:g}) min — media {p.carga.media:.2f} |
 | Litros por carga | Triangular({p.litros.minimo:g}, {p.litros.moda:g}, {p.litros.maximo:g}) L — media {p.litros.media:.1f} |
@@ -954,6 +1005,99 @@ def pestania_modelo(p: ParametrosSimulacion) -> None:
 | Semilla | {st.session_state.semilla_usada} |
 """
         )
+
+
+# =============================================================================
+# Pestaña: la estación (caso real)
+# =============================================================================
+def pestania_estacion() -> None:
+    """Ficha de la estación, esquema del playón, advertencias y contradicciones."""
+    st.subheader("La estación: Shell de Av. Balloffet y Los Sauces")
+    st.markdown(
+        "Estación de servicio **Shell** — Av. Balloffet 1810 esq. Av. Los Sauces, "
+        "San Rafael, Mendoza (operador **LOS SAUCES S.R.L.**). Es el caso real del TP: "
+        "una esquina urbana entre la RN 143 y la RP 158."
+    )
+
+    est = sorted((d for d in REGISTRO if d.id.startswith("EST-")), key=lambda d: d.id)
+    columnas = st.columns(2)
+    for i, d in enumerate(est):
+        with columnas[i % 2]:
+            st.markdown(
+                f"**{d.nombre}** {insignia_html(d)}<br/>"
+                f"<small>{d.valor}</small>"
+                f"<small> — {d.fuente}</small>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown("#### El playón: 6 surtidores de doble cara = 12 caras en 3 zonas")
+    st.caption(
+        "S1–S2 nafta (Súper y V-Power) · S3 diésel (G2 y G3) · S4–S6 GNC. Servicio "
+        "atendido por playeros, playa 24 h."
+    )
+    componentes.html(esquema_estacion_html(), height=340)
+
+    st.markdown("#### Advertencias (§5.3)")
+    for aviso in ADVERTENCIAS:
+        st.markdown(f"- {aviso}")
+
+    st.markdown("#### Contradicciones entre fuentes (§4.2)")
+    st.caption(
+        "El valor adoptado se ve en la pestaña **Datos y fuentes**. Las alternativas "
+        "que perdieron quedan como ejes del análisis de sensibilidad."
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [
+                {
+                    "ID": c.id,
+                    "Tema": c.tema,
+                    "Impacto": c.impacto,
+                    "Valor adoptado": c.adoptado,
+                    "Alternativas": c.alternativas,
+                }
+                for c in CONTRADICCIONES
+            ]
+        ),
+        hide_index=True,
+        height=360,
+    )
+
+
+# =============================================================================
+# Pestaña: datos y fuentes (el Registro completo)
+# =============================================================================
+def pestania_datos_fuentes() -> None:
+    """El Registro de datos completo, con filtros, alternativas y CSV (§8.2)."""
+    st.subheader("Registro de datos (§5.1)")
+    st.caption(
+        "Todo parámetro del modelo tiene su `Dato` con fuente, nivel de evidencia, tipo "
+        "y confianza. Las alternativas que perdieron las contradicciones de §4.2 quedan "
+        "en el Registro y entran al análisis de sensibilidad. Todavía no hay datos de la "
+        "propia estación: el relevamiento (§12) los cargará como `observacion` (🔵)."
+    )
+
+    tabla = tabla_registro()
+    filtro_tipo = st.multiselect(
+        "Filtrar por tipo",
+        ["dato", "estimacion", "observacion", "supuesto", "heredado", "alternativa"],
+    )
+    vista = tabla if not filtro_tipo else tabla[tabla["Tipo"].isin(filtro_tipo)]
+    st.dataframe(vista, hide_index=True, height=420)
+
+    st.download_button(
+        "⬇️ Descargar el Registro completo (CSV)",
+        data=csv_registro(),
+        file_name="registro_datos_shell_san_rafael.csv",
+        mime="text/csv",
+        help="Incluye todas las filas, las alternativas de §4.2 y las contradicciones.",
+    )
+
+    st.markdown("#### Contradicciones y alternativas (§4.2)")
+    for c in CONTRADICCIONES:
+        with st.expander(f"{c.id} · {c.tema} — impacto {c.impacto}"):
+            st.markdown(f"**Valor adoptado:** {c.adoptado}")
+            st.markdown(f"**Alternativas (sensibilidad):** {c.alternativas}")
 
 
 # =============================================================================
@@ -994,15 +1138,17 @@ def correr_todo(
 
 
 def main() -> None:
+    st.markdown(css_global(), unsafe_allow_html=True)
     p, eco, replicas, semilla = leer_parametros()
 
     st.sidebar.divider()
     correr = st.sidebar.button("▶ Correr simulación", type="primary", width="stretch")
 
-    st.title("⛽ Simulador de Estación de Servicio")
+    st.title("⛽ Simulador de la Estación Shell — San Rafael")
     st.caption(
         "Simulación de eventos discretos — Investigación Operativa · Líneas de espera + "
-        "inventario de combustible, con demanda Monte Carlo y análisis económico."
+        "inventario de combustible, con demanda Monte Carlo y análisis económico. "
+        "Caso real: Av. Balloffet 1810 esq. Los Sauces."
     )
 
     if correr or "resultados" not in st.session_state:
@@ -1032,6 +1178,7 @@ def main() -> None:
 
     pestanias = st.tabs(
         [
+            "🏪 La estación",
             "🎬 Animación",
             "📊 Indicadores",
             "🎲 Demanda",
@@ -1040,24 +1187,34 @@ def main() -> None:
             "💰 Economía",
             "📝 Conclusión",
             "📖 Modelo y método",
+            "📚 Datos y fuentes",
         ]
     )
     with pestanias[0]:
-        pestania_animacion(p_corrida)
+        pestania_estacion()
     with pestanias[1]:
-        pestania_indicadores(p_corrida)
+        pestania_animacion(p_corrida)
     with pestanias[2]:
-        pestania_demanda(p_corrida)
+        pestania_indicadores(p_corrida)
     with pestanias[3]:
-        pestania_inventario(p_corrida, st.session_state.parametros_eco)
+        pestania_demanda(p_corrida)
     with pestanias[4]:
-        pestania_escenarios()
+        pestania_inventario(p_corrida, st.session_state.parametros_eco)
     with pestanias[5]:
-        pestania_economia(p_corrida, st.session_state.parametros_eco)
+        pestania_escenarios()
     with pestanias[6]:
-        pestania_conclusion()
+        pestania_economia(p_corrida, st.session_state.parametros_eco)
     with pestanias[7]:
+        pestania_conclusion()
+    with pestanias[8]:
         pestania_modelo(p_corrida)
+    with pestanias[9]:
+        pestania_datos_fuentes()
+
+    st.divider()
+    st.caption(PIE_NO_AFILIADO)
+    st.sidebar.divider()
+    st.sidebar.caption(PIE_NO_AFILIADO)
 
 
 if __name__ == "__main__":

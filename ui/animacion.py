@@ -13,6 +13,7 @@ cliente la animación corre a la velocidad de la pantalla y los botones de play,
 velocidad y posición responden al instante.
 
 Es la única parte del proyecto con JavaScript, y está acotada a dibujar: no simula nada.
+Los colores NO están hardcodeados acá: llegan por JSON desde `ui/tema.py` (N15).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from __future__ import annotations
 import json
 
 from sim.traza import Cuadro
+from ui.tema import paleta_json
 
 #: Alto del componente en píxeles (barra de controles + dibujo).
 ALTO_COMPONENTE = 600
@@ -69,6 +71,7 @@ def reproductor_html(
         "dia": int(dia),
         "litrosMinimos": float(litros_minimos),
         "velocidad": int(velocidad_inicial),
+        "paleta": paleta_json(),
     }
     return _PLANTILLA.replace("__CONFIG__", json.dumps(configuracion))
 
@@ -79,10 +82,12 @@ _PLANTILLA = r"""<!doctype html>
 <meta charset="utf-8">
 <style>
   :root {
-    --panel: #232a35;
-    --borde: #3a4351;
-    --texto: #e8eaed;
-    --tenue: #9aa4b2;
+    --panel: transparent;
+    --borde: transparent;
+    --texto: transparent;
+    --tenue: transparent;
+    --amarillo: transparent;
+    --rojo: transparent;
   }
   html, body { margin: 0; padding: 0; height: 100%; background: transparent; overflow: hidden;
                font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
@@ -92,12 +97,12 @@ _PLANTILLA = r"""<!doctype html>
   button { background: var(--panel); color: var(--texto); border: 1px solid var(--borde);
            border-radius: 7px; padding: 7px 14px; font-size: 13px; cursor: pointer;
            font-family: inherit; }
-  button:hover { border-color: #64748b; }
-  #play { background: #b91c1c; border-color: #b91c1c; font-weight: 600; min-width: 116px; }
-  #play:hover { background: #dc2626; }
+  button:hover { border-color: var(--tenue); }
+  #play { background: var(--rojo); border-color: var(--rojo); font-weight: 600; min-width: 116px; }
+  #play:hover { filter: brightness(1.2); }
   select { background: var(--panel); color: var(--texto); border: 1px solid var(--borde);
            border-radius: 7px; padding: 6px 8px; font-size: 13px; font-family: inherit; }
-  #barra { flex: 1; accent-color: #f59e0b; }
+  #barra { flex: 1; accent-color: var(--amarillo); }
   #reloj { color: var(--tenue); min-width: 128px; font-variant-numeric: tabular-nums; }
   #lienzo { flex: 1; min-height: 0; }
   svg { width: 100%; height: 100%; display: block; }
@@ -124,11 +129,20 @@ _PLANTILLA = r"""<!doctype html>
 <script>
 const CONFIG = __CONFIG__;
 
-// --- Paleta (la misma que usa el resto de la interfaz) -----------------------
-const FONDO = "#1b2029", PANEL = "#232a35", ASFALTO = "#2c333f", BORDE = "#3a4351";
-const TEXTO = "#e8eaed", TENUE = "#9aa4b2";
-const LIBRE = "#22c55e", OCUPADO = "#f59e0b", PERDIDO = "#ef4444";
-const COLORES_AUTO = ["#60a5fa", "#f472b6", "#fbbf24", "#34d399", "#a78bfa", "#fb923c", "#38bdf8"];
+// --- Paleta (llega por JSON desde ui/tema.py) --------------------------------
+const P = CONFIG.paleta;
+const RAIZ = document.documentElement;
+RAIZ.style.setProperty("--panel", P.panel);
+RAIZ.style.setProperty("--borde", P.borde);
+RAIZ.style.setProperty("--texto", P.texto);
+RAIZ.style.setProperty("--tenue", P.tenue);
+RAIZ.style.setProperty("--amarillo", P.amarillo);
+RAIZ.style.setProperty("--rojo", P.rojo);
+
+const FONDO = P.fondo, PANEL = P.panel, ASFALTO = P.asfalto, BORDE = P.borde;
+const TEXTO = P.texto, TENUE = P.tenue;
+const LIBRE = P.libre, OCUPADO = P.ocupado, PERDIDO = P.perdido;
+const COLORES_AUTO = P.coloresAuto;
 const ANCHO = 1000, ALTO = 520;
 const MAX_AUTOS = 6, MAX_PERSONAS = 6;
 
@@ -137,10 +151,10 @@ function auto(x, y, color, escala) {
   return `<g transform="translate(${x},${y}) scale(${escala})">
     <rect x="0" y="6" width="56" height="16" rx="5" fill="${color}"/>
     <path d="M 11 7 L 18 0 L 39 0 L 45 7 Z" fill="${color}" opacity="0.85"/>
-    <rect x="19" y="1" width="17" height="6" rx="2" fill="#0f172a" opacity="0.55"/>
-    <circle cx="15" cy="22" r="4.2" fill="#111827"/>
-    <circle cx="43" cy="22" r="4.2" fill="#111827"/>
-    <rect x="52" y="11" width="4" height="3" rx="1" fill="#fde68a"/>
+    <rect x="19" y="1" width="17" height="6" rx="2" fill="${P.vidrio}" opacity="0.55"/>
+    <circle cx="15" cy="22" r="4.2" fill="${P.neumatico}"/>
+    <circle cx="43" cy="22" r="4.2" fill="${P.neumatico}"/>
+    <rect x="52" y="11" width="4" height="3" rx="1" fill="${P.faros}"/>
   </g>`;
 }
 
@@ -164,11 +178,11 @@ function surtidor(x, y, ocupado, activo) {
 
 function camion(x, y) {
   return `<g transform="translate(${x},${y}) scale(0.8)">
-    <rect x="0" y="4" width="34" height="14" rx="4" fill="#94a3b8"/>
-    <rect x="34" y="7" width="14" height="11" rx="3" fill="#cbd5e1"/>
-    <circle cx="10" cy="19" r="3.5" fill="#111827"/>
-    <circle cx="28" cy="19" r="3.5" fill="#111827"/>
-    <circle cx="42" cy="19" r="3.5" fill="#111827"/>
+    <rect x="0" y="4" width="34" height="14" rx="4" fill="${P.plata}"/>
+    <rect x="34" y="7" width="14" height="11" rx="3" fill="${P.plata}"/>
+    <circle cx="10" cy="19" r="3.5" fill="${P.neumatico}"/>
+    <circle cx="28" cy="19" r="3.5" fill="${P.neumatico}"/>
+    <circle cx="42" cy="19" r="3.5" fill="${P.neumatico}"/>
   </g>`;
 }
 
@@ -213,22 +227,22 @@ function dibujar(c) {
   s += `<text x="92" y="34" fill="${TENUE}" font-size="12">día ${CONFIG.dia}</text>`;
 
   if (!hayNafta) {
-    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="#7f1d1d"/>
-          <text x="234" y="30" fill="#fecaca" font-size="11" text-anchor="middle"
+    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="${P.rojoOscuro}"/>
+          <text x="234" y="30" fill="${P.rojoClaro}" font-size="11" text-anchor="middle"
             font-weight="700">SIN COMBUSTIBLE</text>`;
   } else if (calent) {
-    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="#78350f"/>
-          <text x="234" y="30" fill="#fcd34d" font-size="11" text-anchor="middle"
+    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="${P.ambarOscuro}"/>
+          <text x="234" y="30" fill="${P.ambarClaro}" font-size="11" text-anchor="middle"
             font-weight="600">CALENTAMIENTO</text>`;
   } else {
-    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="#14532d"/>
-          <text x="234" y="30" fill="#86efac" font-size="11" text-anchor="middle"
+    s += `<rect x="150" y="14" width="168" height="24" rx="12" fill="${P.verdeOscuro}"/>
+          <text x="234" y="30" fill="${P.verdeClaro}" font-size="11" text-anchor="middle"
             font-weight="600">MIDIENDO INDICADORES</text>`;
   }
 
-  const marcadores = [[atendidos, "cargaron", "#22c55e", 400],
-                      [compras, "compraron", "#60a5fa", 545],
-                      [perdidosS + perdidosC, "por cola", "#fb923c", 690],
+  const marcadores = [[atendidos, "cargaron", LIBRE, 400],
+                      [compras, "compraron", COLORES_AUTO[0], 545],
+                      [perdidosS + perdidosC, "por cola", COLORES_AUTO[5], 690],
                       [sinNafta, "sin nafta", PERDIDO, 860]];
   for (const [valor, etiqueta, color, x] of marcadores) {
     s += `<text x="${x}" y="32" fill="${color}" font-size="18" font-weight="700"
@@ -281,12 +295,12 @@ function dibujar(c) {
   s += flecha(632, 255, 670, "compran");
   s += rotulo(680, 78, "MINIMARKET", "Bernoulli: sólo el % que compra");
   s += `<rect x="680" y="96" width="300" height="318" rx="8" fill="${ASFALTO}"/>`;
-  s += `<rect x="694" y="106" width="272" height="24" rx="6" fill="#334155"/>
+  s += `<rect x="694" y="106" width="272" height="24" rx="6" fill="${PANEL}"/>
         <text x="830" y="123" fill="${TEXTO}" font-size="12" text-anchor="middle"
           letter-spacing="2">MINIMARKET</text>`;
   s += `<text x="716" y="150" fill="${TENUE}" font-size="10" text-anchor="middle">cola</text>`;
   const personas = Math.min(colaC, MAX_PERSONAS);
-  for (let i = 0; i < personas; i++) s += persona(716, 164 + i * 32, "#cbd5e1");
+  for (let i = 0; i < personas; i++) s += persona(716, 164 + i * 32, P.plata);
   if (colaC > MAX_PERSONAS) {
     s += `<text x="716" y="${164 + MAX_PERSONAS * 32 + 12}" fill="${TENUE}" font-size="11"
             text-anchor="middle">+${colaC - MAX_PERSONAS}</text>`;
@@ -303,7 +317,7 @@ function dibujar(c) {
             font-weight="600">CAJA ${i + 1}</text>
           <text x="830" y="${y + 36}" fill="${TENUE}" font-size="10" text-anchor="middle">
             ${ocupada ? "cobrando" : "libre"}</text>`;
-    if (ocupada) s += persona(752, y + 24, "#fbbf24");
+    if (ocupada) s += persona(752, y + 24, COLORES_AUTO[2]);
   }
   s += `<text x="830" y="406" fill="${TEXTO}" font-size="12" text-anchor="middle"
           font-weight="600">${colaC} esperando para pagar</text>`;
@@ -316,7 +330,7 @@ function dibujar(c) {
   const bx = 210, by = 444, bw = 590, bh = 30;
   const fraccion = Math.max(0, Math.min(1, nivel / CONFIG.capacidad));
   const colorNivel = !hayNafta ? PERDIDO : (nivel <= CONFIG.puntoPedido ? OCUPADO : LIBRE);
-  s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6" fill="#1b2029"
+  s += `<rect x="${bx}" y="${by}" width="${bw}" height="${bh}" rx="6" fill="${FONDO}"
           stroke="${BORDE}"/>`;
   s += `<rect x="${bx}" y="${by}" width="${bw * fraccion}" height="${bh}" rx="6"
           fill="${colorNivel}" opacity="0.85"/>`;
@@ -324,7 +338,7 @@ function dibujar(c) {
   // Marca del punto de pedido
   const xPedido = bx + bw * (CONFIG.puntoPedido / CONFIG.capacidad);
   s += `<line x1="${xPedido}" y1="${by - 6}" x2="${xPedido}" y2="${by + bh + 6}"
-          stroke="#e2e8f0" stroke-width="2" stroke-dasharray="4 3"/>
+          stroke="${TEXTO}" stroke-width="2" stroke-dasharray="4 3"/>
         <text x="${xPedido}" y="${by + bh + 19}" fill="${TENUE}" font-size="10"
           text-anchor="middle">punto de pedido</text>`;
 

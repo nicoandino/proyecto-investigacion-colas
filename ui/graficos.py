@@ -1,6 +1,7 @@
 """Gráficos de la interfaz, armados con Plotly.
 
 Todos reciben resultados del motor y devuelven una figura; no tocan Streamlit.
+Los colores salen TODOS de `ui/tema.py` (control N15).
 """
 
 from __future__ import annotations
@@ -11,25 +12,34 @@ from sim.config import DemandaDiaria, ParametrosSimulacion
 from sim.economia import CostoPolitica, ResultadoEconomico
 from sim.runner import ResultadoEscenario
 from sim.traza import Traza
+from ui.tema import (
+    AMARILLO,
+    AZUL,
+    CELESTE,
+    ESCENARIO,
+    GRIS,
+    INDIGO,
+    NARANJA,
+    ROJO,
+    TINTA_AZULADA,
+    VERDE_INGRESO,
+    VERDE_OK,
+    plantilla_plotly,
+    rgba,
+)
 from ui.textos import Metrica
 
 # Un color por escenario, usado en todos los gráficos para que se lean juntos.
-COLOR_ESCENARIO = {
-    "Base": "#64748b",
-    "A": "#3b82f6",
-    "B": "#a855f7",
-    "C": "#10b981",
-}
-COLOR_SURTIDOR = "#f59e0b"
-COLOR_CAJA = "#3b82f6"
-COLOR_TANQUE = "#0ea5e9"
-VERDE = "#16a34a"
-ROJO = "#dc2626"
-NARANJA = "#fb923c"
-GRIS = "#94a3b8"
+COLOR_ESCENARIO = ESCENARIO
+COLOR_SURTIDOR = AMARILLO
+COLOR_CAJA = AZUL
+COLOR_TANQUE = CELESTE
+VERDE = VERDE_OK
+NARANJA_ = NARANJA
+GRIS_ = GRIS
 
 _LAYOUT = dict(
-    template="plotly_white",
+    template=plantilla_plotly(),
     margin=dict(l=60, r=20, t=50, b=50),
     height=380,
     hovermode="x unified",
@@ -62,7 +72,7 @@ def grafico_evolucion_colas(traza: Traza, dia: int) -> go.Figure:
         go.Scatter(
             x=horas, y=cola_s, name="Cola de surtidores", mode="lines",
             line=dict(color=COLOR_SURTIDOR, width=2, shape="hv"),
-            fill="tozeroy", fillcolor="rgba(245,158,11,0.15)",
+            fill="tozeroy", fillcolor=rgba(AMARILLO, 0.15),
         )
     )
     fig.add_trace(
@@ -91,7 +101,7 @@ def grafico_ocupacion(traza: Traza, surtidores: int, dia: int) -> go.Figure:
         go.Scatter(
             x=horas, y=ocupados, name="Surtidores ocupados", mode="lines",
             line=dict(color=COLOR_SURTIDOR, width=2, shape="hv"),
-            fill="tozeroy", fillcolor="rgba(245,158,11,0.2)",
+            fill="tozeroy", fillcolor=rgba(AMARILLO, 0.2),
         )
     )
     fig.add_hline(
@@ -125,7 +135,7 @@ def grafico_perfil_horario(traza: Traza, dias_medidos: int) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=horas, y=llegadas, name="Autos que llegan",
-        marker_color="rgba(59,130,246,0.55)",
+        marker_color=rgba(AZUL, 0.55),
         hovertemplate="%{x}:00 — %{y:.1f} autos<extra></extra>",
     )
     fig.add_trace(
@@ -158,7 +168,7 @@ def grafico_distribucion_demanda(demanda: DemandaDiaria, traza: Traza) -> go.Fig
     etiquetas = [str(v) for v in demanda.valores]
 
     fig = go.Figure()
-    fig.add_bar(x=etiquetas, y=teoricas, name="Tabla observada (histórica)", marker_color=GRIS)
+    fig.add_bar(x=etiquetas, y=teoricas, name="Tabla observada (histórica)", marker_color=GRIS_)
     fig.add_bar(x=etiquetas, y=observadas, name="Frecuencia simulada", marker_color=COLOR_CAJA)
     fig.update_layout(
         title="La simulación reproduce la tabla de frecuencias",
@@ -181,7 +191,7 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
     )
     fig.add_bar(
         x=numeros, y=[d.perdidos_cola for d in dias], name="Perdidos por cola",
-        marker_color=NARANJA,
+        marker_color=NARANJA_,
     )
     fig.add_bar(
         x=numeros, y=[d.perdidos_sin_combustible for d in dias],
@@ -190,7 +200,7 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
     fig.add_trace(
         go.Scatter(
             x=numeros, y=[d.autos_sorteados for d in dias], name="Demanda sorteada",
-            mode="lines", line=dict(color="#1e293b", width=2, dash="dot"),
+            mode="lines", line=dict(color=TINTA_AZULADA, width=2, dash="dot"),
         )
     )
     fig.update_layout(
@@ -215,23 +225,23 @@ def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
         go.Scatter(
             x=dias, y=litros, name="Nivel del tanque", mode="lines",
             line=dict(color=COLOR_TANQUE, width=2),
-            fill="tozeroy", fillcolor="rgba(14,165,233,0.18)",
+            fill="tozeroy", fillcolor=rgba(CELESTE, 0.18),
             hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
         )
     )
     fig.add_hline(
-        y=p.tanque.punto_pedido, line_dash="dash", line_color=NARANJA,
+        y=p.tanque.punto_pedido, line_dash="dash", line_color=NARANJA_,
         annotation_text=f"punto de pedido ({_miles(p.tanque.punto_pedido)} L)",
         annotation_position="top left",
     )
     fig.add_hline(
-        y=p.tanque.capacidad, line_dash="dot", line_color=GRIS,
+        y=p.tanque.capacidad, line_dash="dot", line_color=GRIS_,
         annotation_text=f"capacidad ({_miles(p.tanque.capacidad)} L)",
         annotation_position="bottom left",
     )
     fig.add_hline(y=0, line_color=ROJO, line_width=1)
     fig.add_vrect(
-        x0=0, x1=p.dias_calentamiento, fillcolor="rgba(100,116,139,0.18)", line_width=0,
+        x0=0, x1=p.dias_calentamiento, fillcolor=rgba(ESCENARIO["Base"], 0.18), line_width=0,
         annotation_text="calentamiento", annotation_position="bottom right",
         annotation_font_size=11,
     )
@@ -252,11 +262,11 @@ def grafico_costos_politicas(costos: list[CostoPolitica]) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=etiquetas, y=[c.costo_pedidos for c in ordenados],
-        name="Costo de pedido (flete)", marker_color="#6366f1",
+        name="Costo de pedido (flete)", marker_color=INDIGO,
     )
     fig.add_bar(
         x=etiquetas, y=[c.costo_almacenamiento for c in ordenados],
-        name="Costo de almacenamiento", marker_color="#0ea5e9",
+        name="Costo de almacenamiento", marker_color=CELESTE,
     )
     fig.add_bar(
         x=etiquetas, y=[c.costo_faltante for c in ordenados],
@@ -286,7 +296,7 @@ def grafico_frontera_politicas(costos: list[CostoPolitica]) -> go.Figure:
             marker=dict(
                 size=13,
                 color=[VERDE if c is mejor else COLOR_CAJA for c in costos],
-                line=dict(width=1, color="#1e293b"),
+                line=dict(width=1, color=TINTA_AZULADA),
             ),
             text=[c.etiqueta if c is mejor else "" for c in costos],
             textposition="top center",
@@ -327,8 +337,8 @@ def grafico_comparativo(
         go.Bar(
             x=nombres,
             y=valores,
-            marker_color=[COLOR_ESCENARIO.get(n, GRIS) for n in nombres],
-            error_y=dict(type="data", array=errores, color="#334155", thickness=1.5, width=8),
+            marker_color=[COLOR_ESCENARIO.get(n, GRIS_) for n in nombres],
+            error_y=dict(type="data", array=errores, color=TINTA_AZULADA, thickness=1.5, width=8),
             text=[f"{v:,.{metrica.decimales}f}" for v in valores],
             textposition="outside",
             hovertemplate="%{x}: %{y:,.2f}<extra></extra>",
@@ -356,7 +366,7 @@ def grafico_atendidos_vs_perdidos(resultados: list[ResultadoEscenario]) -> go.Fi
     )
     fig.add_bar(
         x=nombres, y=[r.prom("perdidos_cola_dia") for r in resultados],
-        name="Perdidos por cola", marker_color=NARANJA,
+        name="Perdidos por cola", marker_color=NARANJA_,
     )
     fig.add_bar(
         x=nombres, y=[r.prom("perdidos_sin_combustible_dia") for r in resultados],
@@ -386,7 +396,7 @@ def grafico_dispersion_replicas(
             go.Box(
                 y=valores,
                 name=r.escenario.nombre,
-                marker_color=COLOR_ESCENARIO.get(r.escenario.nombre, GRIS),
+                marker_color=COLOR_ESCENARIO.get(r.escenario.nombre, GRIS_),
                 boxpoints="all",
                 jitter=0.5,
                 pointpos=0,
@@ -421,7 +431,7 @@ def grafico_beneficio(economia: list[ResultadoEconomico]) -> go.Figure:
             hovertemplate="%{x}: $%{y:,.0f} por mes<extra></extra>",
         )
     )
-    fig.add_hline(y=0, line_color="#334155", line_width=1)
+    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
     fig.update_layout(
         title="Beneficio neto mensual respecto del escenario Base",
         xaxis_title="Escenario",
@@ -440,7 +450,7 @@ def grafico_ingresos_costos(economia: list[ResultadoEconomico]) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=nombres, y=[e.ingreso_extra for e in alternativos],
-        name="Ingreso extra mensual", marker_color="#22c55e",
+        name="Ingreso extra mensual", marker_color=VERDE_INGRESO,
     )
     fig.add_bar(
         x=nombres, y=[-e.costo_capacidad for e in alternativos],
@@ -450,12 +460,12 @@ def grafico_ingresos_costos(economia: list[ResultadoEconomico]) -> go.Figure:
         go.Scatter(
             x=nombres, y=[e.beneficio_neto for e in alternativos],
             name="Beneficio neto", mode="markers+text",
-            marker=dict(size=13, color="#1e293b", symbol="diamond"),
+            marker=dict(size=13, color=TINTA_AZULADA, symbol="diamond"),
             text=[f"${e.beneficio_neto:,.0f}" for e in alternativos],
             textposition="top center",
         )
     )
-    fig.add_hline(y=0, line_color="#334155", line_width=1)
+    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
     fig.update_layout(
         title="De dónde sale el beneficio: ingreso extra menos costo incremental",
         xaxis_title="Escenario",

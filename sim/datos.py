@@ -1,0 +1,739 @@
+"""Registro de datos del caso real (ORQUESTADOR_SIMULADOR.md §5).
+
+Cada valor que usa el modelo entra por acá con su unidad, nivel de evidencia, tipo,
+confianza, fuente y las alternativas que perdieron en las contradicciones de §4.2.
+Reglas del contrato (§5.1):
+
+  - `REGISTRO` + `por_id()` + `valor()`: lectura.
+  - Los defaults de `sim/config.py` salen de acá (nada de números sueltos).
+  - `tipo="heredado"` = placeholder del proyecto hipotético, visible y sin fuente.
+  - `con_valor(id, nuevo)` crea una copia con `tipo="observacion"` (relevamiento propio).
+  - N14 falla si un campo de los parámetros no tiene su `Dato` (ver `MAPA_PARAMETROS`).
+
+Tipos: `dato` | `estimacion` | `observacion` | `supuesto` | `heredado`.
+Confianza: `alta` | `media` | `baja` | `sin_dato`.
+Nivel (jerarquía de evidencia, §4.1): A estación · B San Rafael · C Mendoza ·
+D ciudad parecida · E Argentina/otro.
+Origen: `investigacion` (notas 01/03/06) · `grupo` · `datos_operacionales` ·
+`orquestador` · `heredado`.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+
+
+@dataclass(frozen=True)
+class Dato:
+    """Un valor del Registro con su fuente y su incertidumbre."""
+
+    id: str                       # "DEM-01"
+    nombre: str
+    valor: object                 # lo que usa el modelo (número, tupla, texto)
+    unidad: str
+    bajo: float | None = None     # extremos de sensibilidad (tornado)
+    alto: float | None = None
+    nivel: str = "?"              # A estación · B San Rafael · C Mendoza · D ciudad parecida · E Argentina/otro
+    tipo: str = "supuesto"        # dato | estimacion | observacion | supuesto | heredado
+    confianza: str = "baja"       # alta | media | baja | sin_dato
+    fuente: str = ""
+    url: str = ""
+    fecha_fuente: str = ""
+    nota: str = ""
+    origen: str = "investigacion"  # investigacion | grupo | datos_operacionales | orquestador | heredado
+    conflicto: str = ""            # id de §4.2 (p. ej. "C2")
+    alternativas: tuple = ()       # ((nombre, valor, fuente), ...) las que perdieron
+
+
+# =============================================================================
+# Contradicciones entre fuentes (§4.2), para la pestaña "Datos y fuentes"
+# =============================================================================
+@dataclass(frozen=True)
+class Contradiccion:
+    """Una contradicción entre fuentes y su resolución (§4.1)."""
+
+    id: str
+    tema: str
+    impacto: str
+    adoptado: str
+    alternativas: str
+
+
+CONTRADICCIONES: tuple[Contradiccion, ...] = (
+    Contradiccion("C1", "Horario de la playa", "Medio",
+                  "24 h (Shell API `twenty_four_hour`, nivel 2; los turnos nocturnos de ambos documentos lo confirman).",
+                  "S10: cierre nocturno 22–06 (DATOS §5, sin fuente)."),
+    Contradiccion("C2", "Demanda mensual", "Alto",
+                  "270.000 L/mes (estimación, confianza baja-media): convergencia de fuentes débiles (informe regional, promedio nacional 270–380k, punto de equilibrio 315–400k).",
+                  "150.000 y 400.000 L/mes como ejes de sensibilidad."),
+    Contradiccion("C3", "Litros vs. autos", "Crítico",
+                  "Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente, §14.2).",
+                  "— (los documentos confundían litros/día con autos/día, error ×35–50)."),
+    Contradiccion("C4", "Entrada al minimarket", "Bajo-medio",
+                  "20 % (el único con fuente declarada, aunque débil).",
+                  "15 % · 30 % · 45 %."),
+    Contradiccion("C5", "Personal", "Alto",
+                  "Playeros (noche·mañana·tarde) = 1·2·2; 1 caja; encargado y tienda sólo como costo (único desglose por rol, DATOS §4).",
+                  "Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno). Con 2 playeros ρ_pico = 0,86."),
+    Contradiccion("C6", "Mix diésel G2/G3", "Medio",
+                  "55 % / 45 % del diésel (tabla con fuente declarada, Surtidores.com.ar ago-2026) y ambos activos (Secretaría de Energía).",
+                  "75/25 (ONBOARDING) y 100/0 (sólo G2)."),
+    Contradiccion("C7", "Mezcla de producto", "Medio",
+                  "Mezcla en LITROS (DATOS §7, normalizada a los 4 líquidos: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %); GNC = 3 % de los clientes.",
+                  "GNC 11 % (parque GNC ENARGAS); mezcla por flota."),
+    Contradiccion("C8", "GNC: 6 caras vs. 2–3 %", "Medio",
+                  "Se modela como está y la app muestra una alerta de coherencia (6 caras para ≈ 3 % de los clientes).",
+                  "GNC 3 % / 11 % / 20 %."),
+    Contradiccion("C9", "GNC en invierno", "Alto en invierno",
+                  "Corte TOTAL por episodios (2 × 6 días jun–ago), contrato interrumpible, 3 compresores (20–25 autos/h × 7 min ÷ 60 ≈ 2,6; cifra sin fuente). No citar 'Res. ENARGAS 409/2026'.",
+                  "Contrato firme (sin cortes); ventanas horarias (17–01, 09–24); −50 % de capacidad; migración 0–60 %."),
+    Contradiccion("C10", "Estacionalidad", "Medio",
+                  "Neutra (1,00) por defecto + presets 'leve' y 'proxy turístico'. La ocupación hotelera no es ventas de combustible.",
+                  "Leve ±6 %; proxy turístico (DATOS §6)."),
+    Contradiccion("C11", "Tiempo de servicio", "Medio",
+                  "Nafta/diésel Triangular(2,5,8) min · GNC (5,7,12) · minimarket (2,4,10) (fuentes argentinas con URL, sin medición local).",
+                  "Nota 03: (2,4;3,7;5,0) para nafta y GNC 10–30 min (probablemente incluye espera)."),
+    Contradiccion("C12", "Litros por carga", "Alto",
+                  "Carga media = 0,5 × tanque: Triangular(0,20·T; 0,30·T; 1,00·T) (único anclaje empírico: nota 03, ≈ 30 % del tanque).",
+                  "Preset alto (media 0,8·T, 'carga casi llena') y bajo (0,3·T). Para los mismos litros cambia ×0,6/×1,7 la cantidad de clientes."),
+    Contradiccion("C13", "Tanques de vehículos", "Bajo",
+                  "Auto 47 L (Autocosmos OK-orig); camión 300 L como supuesto (la 'Alta' de DATOS no tiene fuente).",
+                  "Auto 42–52 L; camión 120–600 L."),
+    Contradiccion("C14", "Servicios", "Bajo",
+                  "Sólo lo de la lista oficial Shell (shop, baño, aire y agua). Nombre del shop: 'Shell Select (nombre sin confirmar)'. No se modela lavadero.",
+                  "DATOS §5 suma lavado/Agroservice (no figuran en la lista oficial)."),
+    Contradiccion("C15", "Autoservicio", "Medio",
+                  "Servicio atendido (Shell API: full_service + manned).",
+                  "S9 autoservicio (Decreto 46/2025, Res. 147/2025 — no verificados): −1 playero por turno."),
+    Contradiccion("C16", "Perfil horario", "Medio",
+                  "La tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18; §14.3). La afirmación 'madrugada = 1/40 del pico' no se usa (su propia tabla la contradice).",
+                  "Perfil heredado (picos 08 y 19 con factor 2,0)."),
+    Contradiccion("C17", "Fin de semana / quincena", "Bajo-medio",
+                  "Fin de semana ×1,30 normalizado al mes (§14.4). Quincena = escenario S12, no default.",
+                  "×1,24 – ×1,50."),
+    Contradiccion("C18", "Salarios", "Medio",
+                  "Costos totales estimados: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 (FECRA; la URL dice enero-2026). Vigencia a verificar.",
+                  "Básico sin adicionales."),
+    Contradiccion("C19", "Precios", "Informativo",
+                  "Referencia: DATOS §7 (sept-2026): Súper $2.141 · Premium $2.300+ · G2 $2.116 · G3 $2.641 · GNC $699/m³ (oct-2025). El modelo usa márgenes, no precios.",
+                  "Nota 01 (Mendoza, 6/5/2026); precios de la propia estación congelados (SE, 2025)."),
+    Contradiccion("C20", "Otros", "Nulo",
+                  "Registrar y mostrar; ninguno entra al modelo (Mercuria, estaciones en San Rafael 15–20, tránsito RN 143, temperatura jul).",
+                  "—"),
+)
+
+
+# =============================================================================
+# El Registro (§5.2, tablas A–I + filas que cubren los parámetros del motor)
+# =============================================================================
+def _fila(nombre: str, unidad: str = "", nivel: str = "A", tipo: str = "dato",
+          confianza: str = "media", fuente: str = "", origen: str = "investigacion",
+          conflicto: str = "", alternativas: tuple = (), nota: str = "",
+          bajo: float | None = None, alto: float | None = None) -> tuple:
+    """Una fila del Registro sin el id ni el valor: (nombre, unidad, nivel, tipo,
+    confianza, fuente, origen, conflicto, alternativas, nota, bajo, alto)."""
+    return (nombre, unidad, nivel, tipo, confianza, fuente, origen,
+            conflicto, alternativas, nota, bajo, alto)
+
+
+_CAMPOS = ("nombre", "unidad", "nivel", "tipo", "confianza", "fuente",
+           "origen", "conflicto", "alternativas", "nota", "bajo", "alto")
+
+REGISTRO: tuple[Dato, ...] = tuple(
+    Dato(id_, valor=valor_, **dict(zip(_CAMPOS, fila)))
+    for id_, fila, valor_ in [
+        # --------------------------------------------------------- A. Estación
+        ("EST-01", ("Dirección", "—", "A", "dato", "alta",
+                    "Shell (API oficial) + Secretaría de Energía", "investigacion",
+                    "", (), "", None, None),
+          "Balloffet 1810 esq. Los Sauces, San Rafael, Mendoza, CP 5600"),
+        ("EST-02", ("Operador / CUIT", "—", "A", "dato", "alta",
+                    "Shell, Secretaría de Energía, OSM", "investigacion",
+                    "", (), "", None, None),
+          "LOS SAUCES S.R.L. / 30-67218048-8"),
+        ("EST-03", ("Bandera", "—", "A", "dato", "alta",
+                    "Secretaría de Energía", "investigacion",
+                    "", (), "", None, None),
+          "Shell (SHELL C.A.P.S.A., id 674)"),
+        ("EST-04", ("Coordenadas", "°", "A", "dato", "alta",
+                    "OSM / relevamiento del grupo", "grupo",
+                    "", (), "", None, None),
+          "−34,62833 ; −68,35832"),
+        ("EST-05", ("Horario de la playa", "h", "A", "dato", "alta",
+                    "Shell API `twenty_four_hour` (leída el 5/10/2026)", "investigacion",
+                    "C1", (), "", None, None),
+          "24 h (abre todos los días)"),
+        ("EST-06", ("Horario del minimarket", "h", "A", "supuesto", "baja",
+                    "grupo / DATOS §5 (Shell API: unknown)", "grupo",
+                    "C1", (("06–22", "06–22", "DATOS_OPERACIONALES §5"),),
+                    "playa 24 h; el shop se asume 24 h", None, None),
+          "24 h sin confirmar"),
+        ("EST-07", ("Servicios", "—", "A", "dato", "media",
+                    "lista oficial Shell + DATOS §5", "investigacion",
+                    "C14", (), "lavado/Agroservice no figuran en la lista oficial", None, None),
+          "tienda (\"Shell Select\", ≈ 140 m², nombre sin confirmar), baño, aire y agua, "
+          "servicio atendido, pago en surtidor/móvil, tarjeta de flota"),
+        ("EST-08", ("Calzadas", "—", "A", "dato", "media",
+                    "Vialidad / OSM", "investigacion",
+                    "", (), "", None, None),
+          "Balloffet = RN 143 (tramo urbano, 4 carriles, 60 km/h); Los Sauces = RP 158"),
+        ("EST-09", ("Cercanía", "km", "B", "dato", "alta",
+                    "relevamiento del grupo (OSM)", "grupo",
+                    "", (), "", None, None),
+          "otras Shell a 2,26 y 3,60 km; ninguna estación a < 1,5 km"),
+        ("EST-10", ("Contexto corporativo", "—", "E", "dato", "media",
+                    "nota 01 (jun-2026) / DATOS §5 ('1/9/2026')", "investigacion",
+                    "C20", (), "venta a Mercuria con cierre pendiente", None, None),
+          "venta a Mercuria (jun-2026, cierre pendiente según nota 01)"),
+
+        # -------------------------------------------- B. Surtidores y personal
+        ("SUR-01", ("Caras por surtidor", "caras", "A", "dato", "media",
+                    "capturas de Google Maps (grupo)", "grupo",
+                    "", (), "una flecha = una cara = un carril", None, None),
+          2),
+        ("SUR-02", ("Grupo A (nafta)", "caras", "A", "dato", "media",
+                    "capturas de Google Maps (grupo) · V3", "grupo",
+                    "", (), "S1–S2 → 4 caras → Súper y V-Power", None, None),
+          "S1, S2 → 4 caras → Súper y V-Power"),
+        ("SUR-03", ("Grupo B (diésel)", "caras", "A", "dato", "media",
+                    "capturas del grupo + Secretaría de Energía", "grupo",
+                    "C6", (("sólo G2", "sólo G2", "DATOS §7 'verificar'"),),
+                    "S3 → 2 caras → G2 y G3", None, None),
+          "S3 → 2 caras → G2 y G3"),
+        ("SUR-04", ("Grupo C (GNC)", "caras", "A", "dato", "media",
+                    "capturas de Google Maps (grupo)", "grupo",
+                    "", (), "S4–S6 → 6 caras", None, None),
+          "S4–S6 → 6 caras"),
+        ("SUR-05", ("Vehículos por cara", "vehículos", "A", "supuesto", "media",
+                    "grupo", "grupo",
+                    "", (), "", None, None),
+          1),
+        ("SUR-06", ("Compresores GNC", "compresores", "A", "supuesto", "sin_dato",
+                    "ONBOARDING sin fuente · C9", "orquestador",
+                    "C9", (("sin límite", 6, "ONBOARDING"), ("2", 2, "ONBOARDING")),
+                    "derivado de 20–25 autos/h × 7 min ÷ 60 ≈ 2,6", None, None),
+          3),
+        ("PER-01", ("Playeros por turno (noche·mañana·tarde)", "personas", "A",
+                    "estimacion", "baja",
+                    "DATOS §4 (único desglose por rol)", "datos_operacionales",
+                    "C5", (("2·3·3", (2, 3, 3), "ONBOARDING"),),
+                    "", None, None),
+          (1, 2, 2)),
+        ("PER-02", ("Cajeros (cajas) por turno", "cajas", "A", "estimacion", "baja",
+                    "DATOS §4", "datos_operacionales",
+                    "C5", (), "", None, None),
+          (1, 1, 1)),
+        ("PER-03", ("Encargado / personal de tienda", "personas", "A", "estimacion",
+                    "baja",
+                    "DATOS §4", "datos_operacionales",
+                    "C5", (), "encargado 1 (M, T); tienda 1 (M, T) — sólo costo", None, None),
+          "encargado 1 (M, T); tienda 1 (M, T) — sólo costo"),
+        ("PER-04", ("El GNC retiene playero", "—", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (("sí", True, "orquestador"),),
+                    "sólo conecta la manguera", None, None),
+          False),
+        ("PER-05", ("Capacidad de cola por grupo", "autos", "A", "supuesto", "sin_dato",
+                    "orquestador (relevar)", "orquestador",
+                    "", (("4", 4, "orquestador"), ("14", 14, "orquestador")),
+                    "", 4, 14),
+          8),
+        ("PER-06", ("Disciplina de cola", "—", "A", "supuesto", "sin_dato",
+                    "CASO §7", "investigacion",
+                    "", (("por_cara", "por_cara", "CASO §7"),),
+                    "cola FIFO única por grupo", None, None),
+          "por_grupo"),
+
+        # ---------------------------------------------------- C. Demanda ★
+        ("DEM-00", ("Modo de demanda por defecto", "—", "A", "supuesto", "sin_dato",
+                    "orquestador (N5: el Monte Carlo se conserva para tipo de cliente y "
+                    "producto; el total diario sale de los litros)", "orquestador",
+                    "", (("monte_carlo", "monte_carlo", "orquestador"),),
+                    "'esperada' = total diario fijo desde litros/mes (las llegadas siguen "
+                    "siendo Poisson); 'monte_carlo' = sorteo de la tabla DEM-07", None, None),
+          "esperada"),
+        ("DEM-01", ("Demanda mensual", "L/mes", "B", "estimacion", "baja",
+                    "ONBOARDING + notas 01/03 + DATOS §1 (sin URL confirmada)", "investigacion",
+                    "C2",
+                    (("150.000", 150_000.0, "DATOS §1 (base)"),
+                     ("400.000", 400_000.0, "punto de equilibrio 2021")),
+                    "≈ 9.000 L/día; converge el informe regional, el promedio nacional "
+                    "(270–380k) y el punto de equilibrio (315–400k)",
+                    150_000.0, 400_000.0),
+          270_000.0),
+        ("DEM-02", ("Perfil horario (24 factores)", "factor", "B", "estimacion", "baja",
+                    "DATOS §2 (tabla de 24 factores, §14.3)", "datos_operacionales",
+                    "C16",
+                    (("heredado", (0.30, 0.20, 0.15, 0.15, 0.25, 0.60, 1.10, 1.80, 2.00,
+                                   1.50, 1.10, 1.00, 1.20, 1.10, 0.90, 0.90, 1.00, 1.40,
+                                   1.90, 2.00, 1.60, 1.10, 0.70, 0.40),
+                      "proyecto hipotético"),),
+                    "picos 07–10 y 16–18 (≈ 3–4× el promedio); suma 43", None, None),
+          (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0,
+           1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0)),
+        ("DEM-03", ("Factor de fin de semana", "×", "B", "estimacion", "media",
+                    "DATOS §2 (tabla ×1,3–1,5)", "datos_operacionales",
+                    "C17", (("1,24", 1.24, "DATOS §2"), ("1,50", 1.50, "DATOS §2")),
+                    "normalizado al mes (§14.4)", 1.24, 1.50),
+          1.30),
+        ("DEM-04", ("Mezcla de producto en litros (líquidos)", "%", "B", "estimacion",
+                    "baja",
+                    "DATOS §7 (Surtidores.com.ar, mercado por volumen)", "datos_operacionales",
+                    "C6",
+                    (("mix de flota", None, "nota 03"), ("G2/G3 75/25", None, "ONBOARDING")),
+                    "Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 (normalizado)", None, None),
+          (("super", 28.0), ("vpower", 19.5), ("diesel_g2", 29.3), ("diesel_g3", 23.2))),
+        ("DEM-05", ("Clientes GNC (% de las llegadas)", "%", "B", "estimacion", "baja",
+                    "DATOS §7", "datos_operacionales",
+                    "C8", (("11 %", 0.11, "parque GNC ENARGAS"), ("20 %", 0.20, "orquestador")),
+                    "6 caras para ≈ 3 % de los clientes: alerta de coherencia C8",
+                    0.03, 0.20),
+          0.03),
+        ("DEM-06", ("Estacionalidad mensual (12 factores)", "factor", "B", "supuesto",
+                    "sin_dato",
+                    "orquestador (C10)", "orquestador",
+                    "C10",
+                    (("leve ±6 %", (1.06, 1.052, 1.03, 1.00, 0.97, 0.948, 0.94, 0.948,
+                                   0.97, 1.00, 1.03, 1.052), "orquestador"),
+                     ("proxy turístico", (100/73.333, 60/73.333, 80/73.333, 65/73.333,
+                                         60/73.333, 55/73.333, 85/73.333, 75/73.333,
+                                         70/73.333, 70/73.333, 75/73.333, 85/73.333),
+                      "DATOS §6")),
+                    "neutra por defecto; la serie real está en la SE", None, None),
+          (1.0,) * 12),
+        ("DEM-07", ("Variabilidad día a día (Monte Carlo)", "factor", "B", "heredado",
+                    "sin_dato",
+                    "tabla original del proyecto hipotético, reescalada a relativa",
+                    "heredado",
+                    "", (), "factores (0,78 · 0,89 · 1,00 · 1,11 · 1,22) y frecuencias "
+                           "(10 · 20 · 40 · 20 · 10)", None, None),
+          ((0.78, 0.89, 1.00, 1.11, 1.22), (10, 20, 40, 20, 10))),
+        ("DEM-07C", ("Tabla de demanda del motor (valores absolutos)", "autos/día", "B",
+                     "heredado", "sin_dato",
+                     "proyecto hipotético (la reescala relativa de DEM-07 entra en Fase 2)",
+                     "heredado",
+                     "", (), "es la tabla que sigue usando el modo 'monte_carlo' hoy",
+                     None, None),
+          ((280, 320, 360, 400, 440), (10, 20, 40, 20, 10))),
+        ("DEM-08", ("Entrada al minimarket", "%", "B", "estimacion", "baja",
+                    "ONBOARDING ('dato directo YPF', no confirmado)", "datos_operacionales",
+                    "C4", (("15 %", 0.15, "ONBOARDING (chica)"),
+                           ("30 %", 0.30, "ONBOARDING (Shell premium)"),
+                           ("45 %", 0.45, "orquestador")),
+                    "el único con fuente declarada, aunque débil", 0.15, 0.45),
+          0.20),
+        ("DEM-09", ("Eventos (opcionales)", "—", "B", "dato", "baja",
+                    "DATOS §6", "datos_operacionales",
+                    "", (), "Vendimia 17–26 ene +30–50 % · Las Leñas (jun-ago) +30 % · "
+                           "Carnaval +40 % · vacaciones de invierno 9–20 jul", None, None),
+          "Vendimia, Las Leñas, Carnaval, vacaciones de invierno (escenarios, no default)"),
+        ("DEM-10", ("Cierre de ruta y demanda", "—", "B", "supuesto", "sin_dato",
+                    "DATOS §6", "datos_operacionales",
+                    "", (), "al cerrarse la RN 143 la demanda externa baja; en el "
+                           "pre-cierre (1–2 días) sube", None, None),
+          "la cuantificación es un escenario, no un default"),
+        ("DEM-11", ("Litros medios por cliente líquido", "L/cliente", "B", "estimacion",
+                    "media",
+                    "cadena de demanda §14.2 (mezcla DEM-04 × cargas medias §5-D)",
+                    "orquestador",
+                    "", (), "35,7 L = Σ (mezcla en litros ÷ carga media por producto)",
+                    None, None),
+          35.7),
+
+        # ----------------------------------------- D. Vehículos y litros/carga
+        ("VEH-01", ("Auto: tanque y carga", "L", "B", "dato", "media",
+                    "nota 03 D16 (Autocosmos, leído en el original)", "investigacion",
+                    "C13", (("42 L", 42.0, "nota 03 (mín)"), ("52 L", 52.0, "nota 03 (máx)")),
+                    "carga Triangular(0,20·T; 0,30·T; 1,00·T) → media 0,50·T = 23,5 L",
+                    42.0, 52.0),
+          (47.0, (9.4, 14.1, 47.0))),
+        ("VEH-02", ("Pick-up / utilitario: tanque y carga", "L", "B", "dato", "media",
+                    "nota 03 D18 (sólo resumen de buscador)", "investigacion",
+                    "", (), "media 0,50·T = 40 L", None, None),
+          (80.0, (16.0, 24.0, 80.0))),
+        ("VEH-03", ("Moto 110 cc: tanque y carga", "L", "B", "dato", "media",
+                    "nota 03 D19 (sólo resumen de buscador)", "investigacion",
+                    "", (("3,5 L", 3.5, "nota 03"), ("4,1 L", 4.1, "nota 03")),
+                    "media 0,50·T = 1,85 L", 3.5, 4.1),
+          (3.7, (0.74, 1.11, 3.7))),
+        ("VEH-04", ("Camión / ómnibus: tanque y carga", "L", "B", "supuesto", "sin_dato",
+                    "orquestador / DATOS §8 ('Alta' sin fuente argentina)", "orquestador",
+                    "C13", (("120 L", 120.0, "orquestador"), ("600 L", 600.0, "orquestador")),
+                    "media 0,50·T = 150 L", 120.0, 600.0),
+          (300.0, (60.0, 90.0, 300.0))),
+        ("VEH-05", ("Auto GNC: cilindro y carga", "m³", "B", "dato", "baja",
+                    "nota 03 §2.10 (sólo resumen de buscador)", "investigacion",
+                    "", (), "cilindro 14 m³; carga media 7 m³", None, None),
+          (14.0, (2.8, 4.2, 14.0))),
+        ("VEH-06", ("Litros por carga del motor (una sola distribución)", "L", "B",
+                    "heredado", "sin_dato",
+                    "proyecto hipotético (el desglose por tipo de vehículo entra en Fase 2)",
+                    "heredado",
+                    "", (), "Triangular(15, 30, 60) — media 35 L", None, None),
+          (15.0, 30.0, 60.0)),
+        ("VEH-00", ("Tipo de vehículo por producto (matriz)", "%", "B", "supuesto",
+                    "sin_dato",
+                    "orquestador (diseño 'producto primero', §7.2)", "orquestador",
+                    "", (), "Súper 12/85/3/0 · V-Power 0/85/15/0 · G2 0/20/55/25 · "
+                           "G3 0/15/45/40 · GNC 0/100/0/0 (moto/auto/pick-up/camión)",
+                    None, None),
+          (("super", (0.12, 0.85, 0.03, 0.0)),
+           ("vpower", (0.0, 0.85, 0.15, 0.0)),
+           ("diesel_g2", (0.0, 0.20, 0.55, 0.25)),
+           ("diesel_g3", (0.0, 0.15, 0.45, 0.40)),
+           ("gnc", (0.0, 1.0, 0.0, 0.0)))),
+
+        # --------------------------------------------------- E. Tiempos
+        ("TIE-01", ("Caudal de la manguera", "L/min", "E", "dato", "baja",
+                    "nota 03 D22/D23 (Paraguay 2012)", "investigacion",
+                    "", (("90 L/min", 90.0, "nota 03 (alto caudal)"),
+                         ("120 L/min", 120.0, "nota 03 (alto caudal)")),
+                    "alto caudal 90–120 L/min", 40.0, 120.0),
+          40.0),
+        ("TIE-02", ("Carga nafta/diésel (por vehículo en la cara)", "min", "E",
+                    "supuesto", "media",
+                    "DATOS §3 (papers UNLP/UTN/UNC, sin medición en San Rafael)",
+                    "datos_operacionales",
+                    "C11", (("nota 03", (2.4, 3.7, 5.0), "punto medio de dos refs. débiles"),),
+                    "", None, None),
+          (2.0, 5.0, 8.0)),
+        ("TIE-03", ("Extra de camión/ómnibus", "min", "B", "supuesto", "baja",
+                    "orquestador", "orquestador",
+                    "", (), "+ litros ÷ 90 por la manguera de alto caudal", None, None),
+          "+ litros ÷ 90"),
+        ("TIE-04", ("Carga GNC", "min", "B", "supuesto", "media",
+                    "DATOS §3", "datos_operacionales",
+                    "C11", (("nota 03", (10.0, 15.0, 30.0), "probablemente incluye espera"),),
+                    "", None, None),
+          (5.0, 7.0, 12.0)),
+        ("TIE-05", ("Compra en el minimarket", "min", "B", "supuesto", "baja",
+                    "DATOS §3", "datos_operacionales",
+                    "C11", (("heredado", (1.5, 3.0, 6.0), "proyecto hipotético"),),
+                    "", None, None),
+          (2.0, 4.0, 10.0)),
+        ("TIE-06", ("Paciencia (cola de cara / cola de caja)", "min", "B", "heredado",
+                    "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (("5 min", 5.0, "orquestador"), ("20 min", 20.0, "orquestador")),
+                    "", 5.0, 20.0),
+          (10.0, 8.0)),
+
+        # ---------------------------------------------- F. Abastecimiento
+        ("INV-01", ("Plazo pedido→entrega", "h", "C", "dato", "media",
+                    "Sitio Andino 27-oct-2023 'casi 1 día y medio' (Shell Mendoza capital); "
+                    "extremos supuestos", "investigacion",
+                    "", (), "Triangular(24, 36, 48); reemplaza Triangular(8, 16, 36)",
+                    None, None),
+          (24.0, 36.0, 48.0)),
+        ("INV-02", ("Carga del camión", "L", "E", "estimacion", "media",
+                    "27.000 L (2023) y 34.000 L (2009)", "investigacion",
+                    "", (("27.000", 27_000.0, "Sitio Andino 2023"),
+                         ("34.000", 34_000.0, "nota 06, 2009")),
+                    "", 27_000.0, 34_000.0),
+          30_000.0),
+        ("INV-03", ("Tanque por producto líquido", "L", "A", "supuesto", "baja",
+                    "aviso de venta Guaymallén, no verificado", "orquestador",
+                    "", (("10.000", 10_000.0, "orquestador"),
+                         ("25.000", 25_000.0, "orquestador")),
+                    "", 10_000.0, 25_000.0),
+          20_000.0),
+        ("INV-04", ("Descarga del camión", "min", "C", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "incluida en el plazo base; informativo", None, None),
+          45.0),
+        ("INV-05", ("Origen del abastecimiento", "—", "C", "dato", "media",
+                    "Sitio Andino 2023, Los Andes 2023", "investigacion",
+                    "", (("Luján de Cuyo", "Luján de Cuyo", "nota 06 (YPF)"),),
+                    "Dock Sud ≈ 991 km vía Gral. Alvear (nivel C, 2023)", None, None),
+          "Dock Sud"),
+        ("INV-06", ("Política real de reposición", "—", "C", "dato", "baja",
+                    "Sitio Andino 2023", "investigacion",
+                    "", (), "no documentada (pedido 'a demanda')", None, None),
+          "no documentada (pedido 'a demanda')"),
+        ("INV-07", ("Política (s, Q) inicial", "L", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "s = 1,5 días de consumo (9.000 L/día → 13.500 L); "
+                           "Q = min(cap − s, máx(2,5 × consumo/día, 0,5 × cap)) = 6.500 L",
+                    None, None),
+          (13_500.0, 6_500.0)),
+        ("INV-08", ("Camión consolidado", "—", "C", "supuesto", "media",
+                    "Sitio Andino 2023", "investigacion",
+                    "", (), "un viaje lleva varios productos (observado: 27.000 L de "
+                           "gasoil y naftas)", None, None),
+          True),
+        ("INV-09", ("Crisis de abastecimiento (S7)", "h", "C", "estimacion", "baja",
+                    "Los Andes 31-jul-2023", "investigacion",
+                    "", (), "plazo Triangular(72, 84, 96) durante 3–4 días", None, None),
+          (72.0, 84.0, 96.0)),
+        ("INV-10", ("Nivel inicial del tanque", "%", "A", "supuesto", "sin_dato",
+                    "orquestador (INV-07)", "orquestador",
+                    "", (), "75 % de la capacidad (INV-07)", None, None),
+          0.75),
+
+        # ------------------------------------------------- G. Red de rutas
+        ("RED-01", ("Arco LUJAN–PAREDITAS", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 40; km derivado de los tramos)", "investigacion",
+                    "", (), "114 km ≈ 98 min a 70 km/h; cortable", None, None),
+          114.0),
+        ("RED-02", ("Arco PAREDITAS–SANRAFAEL", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 143)", "investigacion",
+                    "", (), "107 km ≈ 92 min; cortable (nieve jun-ago, obra)", None, None),
+          107.0),
+        ("RED-03", ("Arco PAREDITAS–SOSNEADO", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 40)", "investigacion",
+                    "", (), "176 km ≈ 151 min; cortable", None, None),
+          176.0),
+        ("RED-04", ("Arco SOSNEADO–SANRAFAEL", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 144)", "investigacion",
+                    "", (), "132 km ≈ 113 min; cortable", None, None),
+          132.0),
+        ("RED-05", ("Arco ALVEAR–SANRAFAEL", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 143 este)", "investigacion",
+                    "", (), "87,5 km ≈ 75 min; cortable opcional", None, None),
+          87.5),
+        ("RED-06", ("Arco SANRAFAEL–MONTECOMAN", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 146)", "investigacion",
+                    "", (), "54,1 km ≈ 46 min; no cortable", None, None),
+          54.1),
+        ("RED-07", ("Arco MONTECOMAN–LAPAZ", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RP 153, no verificada)", "investigacion",
+                    "", (), "204,7 km ≈ 175 min; no cortable", None, None),
+          204.7),
+        ("RED-08", ("Arco LAPAZ–LUJAN", "km", "C", "dato", "media",
+                    "nota 06 §1.2 (RN 7)", "investigacion",
+                    "", (), "141,0 km ≈ 121 min; no cortable", None, None),
+          141.0),
+        ("RED-09", ("Arco DOCK–ALVEAR", "km", "C", "dato", "media",
+                    "nota 06 §1.3 (no verificada)", "investigacion",
+                    "", (), "903,8 km ≈ 775 min; no cortable", None, None),
+          903.8),
+        ("RED-10", ("Arco DOCK–LUJAN", "km", "C", "dato", "media",
+                    "nota 06 §1.3 (no verificada)", "investigacion",
+                    "", (), "1.056,5 km ≈ 906 min; no cortable", None, None),
+          1056.5),
+        ("RED-11", ("Velocidad del camión", "km/h", "C", "supuesto", "sin_dato",
+                    "orquestador (entre 80 km/h legales y 60 urbanos)", "orquestador",
+                    "", (), "OSRM da 81 km/h, inalcanzable para un camión", None, None),
+          70.0),
+
+        # ---------------------------------------------------------- H. GNC
+        ("GNC-01", ("Contrato de suministro", "—", "A", "supuesto", "sin_dato",
+                    "ONBOARDING '80 % de las estaciones' sin fuente; ENARGAS abr-2026 "
+                    "(verificado)", "orquestador",
+                    "C9", (("firme", "firme", "orquestador"),),
+                    "interrumpible: sufre los cortes de invierno", None, None),
+          "interrumpible"),
+        ("GNC-02", ("Episodios de corte en invierno", "episodios", "B", "estimacion",
+                    "baja",
+                    "DATOS §7 ('10–14 días en jun/jul')", "datos_operacionales",
+                    "C9", (("0 episodios", 0, "orquestador"), ("4 episodios", 4, "orquestador")),
+                    "2 episodios × 6 días entre 1/jun y 31/ago (≈ 12 días)", 0, 4),
+          2),
+        ("GNC-03", ("Forma del corte", "—", "A", "dato", "media",
+                    "ENARGAS abr-2026; Sitio Andino 23/6/2022", "investigacion",
+                    "C9",
+                    (("ventanas", "ventana", "Sitio Andino 2022 (17–01 y 09–24)"),
+                     ("parcial_50", "parcial_50", "ONBOARDING (sin fuente)")),
+                    "corte total de 24 h 'hasta nuevo aviso'", None, None),
+          "total_24h"),
+        ("GNC-04", ("Migración a nafta durante el corte", "%", "A", "supuesto",
+                    "sin_dato",
+                    "DATOS: 'no hay migración documentada' → supuesto explícito",
+                    "orquestador",
+                    "C9", (("0 %", 0.0, "orquestador"), ("60 %", 0.60, "orquestador")),
+                    "", 0.0, 0.60),
+          0.30),
+        ("GNC-05", ("Flujo máximo de la red de gas", "—", "A", "supuesto", "sin_dato",
+                    "CASO §6.2", "investigacion",
+                    "", (), "sin datos de capacidad ⇒ episodios aleatorios "
+                           "(Edmonds-Karp sólo con capacidades reales)", None, None),
+          "sin datos (ventana/episodio aleatorio)"),
+
+        # ------------------------------------------------------- I. Economía
+        ("ECO-01", ("Margen por litro", "$/L", "E", "heredado", "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "≈ 4,7 % del Súper a $2.141; candidatas CECHA/FECRA; "
+                           "parametrizar también como % del precio", None, None),
+          100.0),
+        ("ECO-02", ("Margen por compra en minimarket", "$/compra", "E", "heredado",
+                    "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "el shop = 5–10 % de los ingresos de la estación (DATOS)",
+                    None, None),
+          2_500.0),
+        ("ECO-03", ("Margen por m³ de GNC", "$/m³", "E", "heredado", "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "mismo placeholder que ECO-01", None, None),
+          100.0),
+        ("ECO-04", ("Sueldos (playero / cajero / encargado)", "$/mes", "E",
+                    "estimacion", "media",
+                    "DATOS §4 (FECRA); la URL dice enero-2026", "datos_operacionales",
+                    "C18", (("básicos", (1_545_472.0, 1_666_391.0, 1_600_406.0),
+                             "FECRA (básico, sin adicionales)"),),
+                    "costos totales con adicionales; vigencia a verificar", None, None),
+          (1_680_000.0, 1_800_000.0, 1_740_000.0)),
+        ("ECO-04C", ("Sueldo del cajero (motor)", "$/mes", "E", "estimacion", "media",
+                     "ECO-04 (cajero, con adicionales)", "datos_operacionales",
+                     "C18", (("heredado", 900_000.0, "proyecto hipotético"),),
+                     "", None, None),
+          1_800_000.0),
+        ("ECO-05", ("Inversión por cara/surtidor nuevo; operativo mensual", "$", "E",
+                    "heredado", "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "$18.000.000 una vez + $250.000/mes", None, None),
+          (18_000_000.0, 250_000.0)),
+        ("ECO-06", ("Flete del camión", "$/viaje", "E", "heredado", "sin_dato",
+                    "proyecto hipotético (fijo); $/km sin dato", "heredado",
+                    "", (), "$150.000 es implausible para ≈ 1.000 km con 30.000 L: "
+                           "consultar transportistas. La app avisa si origen = Dock Sud "
+                           "y $/km = 0", None, None),
+          (150_000.0, 0.0)),
+        ("ECO-07", ("Almacenamiento", "$/litro-mes", "E", "heredado", "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "", None, None),
+          25.0),
+        ("ECO-08", ("Precios (referencia, informativos)", "$", "B", "dato", "media",
+                    "DATOS §7, sept-2026 (GNC oct-2025)", "datos_operacionales",
+                    "C19", (), "Súper $2.141 · Premium $2.300+ · G2 $2.116 · "
+                              "G3 $2.641 · GNC $699/m³", None, None),
+          (("super", 2_141.0), ("premium", 2_300.0), ("diesel_g2", 2_116.0),
+           ("diesel_g3", 2_641.0), ("gnc", 699.0))),
+        ("ECO-09", ("Anualización", "—", "E", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "año = 3 × Σ de los 4 meses representativos; "
+                           "rotular 'estimación'", None, None),
+          "año = 3 × Σ de los 4 meses representativos"),
+
+        # --------------------- Filas que cubren los campos del motor (N14) ----
+        ("REC-01", ("Surtidores del motor (configuración clásica)", "surtidores", "B",
+                    "heredado", "sin_dato",
+                    "proyecto hipotético (los 12 caras reales son SUR-01..04; "
+                    "el rediseño de grupos entra en Fase 2)", "heredado",
+                    "", (), "", None, None),
+          3),
+        ("REC-02", ("Cajas del motor (configuración clásica)", "cajas", "B",
+                    "heredado", "sin_dato",
+                    "proyecto hipotético (PER-02 da 1 caja por turno)", "heredado",
+                    "", (), "", None, None),
+          1),
+        ("REC-03", ("Caja exponencial", "—", "B", "heredado", "sin_dato",
+                    "proyecto hipotético", "heredado",
+                    "", (), "con Exponencial se usa la misma media que la triangular",
+                    None, None),
+          False),
+        ("CAL-01", ("Fecha de inicio", "mes, día", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "elegible en la interfaz; el default es 1/1", None, None),
+          (1, 1)),
+        ("CAL-02", ("Días simulados", "días", "A", "supuesto", "sin_dato",
+                    "orquestador (dias_y_fecha)", "orquestador",
+                    "", (), "los fija dias_y_fecha(horizonte): 1/7/real/90/365", None, None),
+          30),
+        ("CAL-03", ("Días de calentamiento", "días", "A", "supuesto", "sin_dato",
+                    "orquestador (B4)", "orquestador",
+                    "", (), "2 días por defecto en ambos modos", None, None),
+          2),
+        ("CAL-04", ("Día animado", "día", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "", None, None),
+          2),
+        ("CAL-05", ("Intervalo de la traza", "min", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "cuadro de animación cada 0,5 min", None, None),
+          0.5),
+        ("CAL-06", ("Horizonte", "—", "A", "supuesto", "sin_dato",
+                    "orquestador", "orquestador",
+                    "", (), "dia | semana | mes | estacion | anio", None, None),
+          "mes"),
+    ]
+)
+
+
+_POR_ID: dict[str, Dato] = {d.id: d for d in REGISTRO}
+
+
+def por_id(id_: str) -> Dato:
+    """El Dato con ese id (levanta KeyError si no existe)."""
+    if id_ not in _POR_ID:
+        raise KeyError(f"Dato desconocido: {id_}")
+    return _POR_ID[id_]
+
+
+def valor(id_: str) -> object:
+    """El valor que usa el modelo (por_id(id).valor)."""
+    return por_id(id_).valor
+
+
+def con_valor(id_: str, nuevo: object) -> Dato:
+    """Copia del Dato con otro valor, marcada como `observacion` (relevamiento propio)."""
+    original = por_id(id_)
+    return replace(original, valor=nuevo, tipo="observacion", origen="grupo",
+                   nota=f"relevamiento propio (antes: {original.valor}). {original.nota}".rstrip())
+
+
+# =============================================================================
+# Mapa campo de parámetros → Dato (control N14: cero huérfanos)
+# =============================================================================
+MAPA_PARAMETROS: dict[str, str] = {
+    # ParametrosSimulacion
+    "ParametrosSimulacion.surtidores": "REC-01",
+    "ParametrosSimulacion.cajas": "REC-02",
+    "ParametrosSimulacion.demanda": "DEM-07C",
+    "ParametrosSimulacion.perfil": "DEM-02",
+    "ParametrosSimulacion.modo_demanda": "DEM-00",
+    "ParametrosSimulacion.litros_mes": "DEM-01",
+    "ParametrosSimulacion.litros_medios_por_cliente": "DEM-11",
+    "ParametrosSimulacion.factor_fin_de_semana": "DEM-03",
+    "ParametrosSimulacion.estacionalidad": "DEM-06",
+    "ParametrosSimulacion.fecha_inicio": "CAL-01",
+    "ParametrosSimulacion.carga": "TIE-02",
+    "ParametrosSimulacion.compra": "TIE-05",
+    "ParametrosSimulacion.caja_exponencial": "REC-03",
+    "ParametrosSimulacion.litros": "VEH-06",
+    "ParametrosSimulacion.prob_compra": "DEM-08",
+    "ParametrosSimulacion.paciencia_surtidor": "TIE-06",
+    "ParametrosSimulacion.paciencia_caja": "TIE-06",
+    "ParametrosSimulacion.tanque": "INV-03",
+    "ParametrosSimulacion.dias": "CAL-02",
+    "ParametrosSimulacion.dias_calentamiento": "CAL-03",
+    "ParametrosSimulacion.dia_animado": "CAL-04",
+    "ParametrosSimulacion.dt_traza": "CAL-05",
+    "ParametrosSimulacion.horizonte": "CAL-06",
+    # ParametrosTanque
+    "ParametrosTanque.capacidad": "INV-03",
+    "ParametrosTanque.nivel_inicial": "INV-10",
+    "ParametrosTanque.punto_pedido": "INV-07",
+    "ParametrosTanque.cantidad_pedido": "INV-07",
+    "ParametrosTanque.plazo_entrega": "INV-01",
+    # ParametrosEconomicos
+    "ParametrosEconomicos.margen_por_litro": "ECO-01",
+    "ParametrosEconomicos.margen_compra": "ECO-02",
+    "ParametrosEconomicos.inversion_surtidor": "ECO-05",
+    "ParametrosEconomicos.operativo_surtidor_mensual": "ECO-05",
+    "ParametrosEconomicos.sueldo_cajero_mensual": "ECO-04C",
+    "ParametrosEconomicos.costo_pedido": "ECO-06",
+    "ParametrosEconomicos.costo_almacenamiento_litro_mes": "ECO-07",
+}
+
+
+# =============================================================================
+# Advertencias que la app debe mostrar (§5.3)
+# =============================================================================
+ADVERTENCIAS: tuple[str, ...] = (
+    "Cada contradicción de §4.2 se muestra con el valor adoptado y las alternativas.",
+    "Los precios de la propia estación en la Secretaría de Energía están congelados "
+    "(2025) y hubo subas del 15 % en 2 meses.",
+    "`[RESUMEN]`: tanques de pick-up y moto, cilindro de GNC y tiempo de GNC no fueron "
+    "verificados en el original.",
+    "Cifras 'confirmadas' sin URL: 270.000 L/mes, 20 % de minimarket, 'Res. ENARGAS "
+    "409/2026' y compresor 20–25 autos/h.",
+    "Alerta de coherencia (C8): 6 caras de GNC para ≈ 3 % de los clientes.",
+    "Dock Sud es el origen documentado para una Shell de Mendoza capital (2023).",
+    "El GNC se mide en m³, no en litros.",
+    "Sin datos de la propia estación: hoy todo es estimación o supuesto hasta el "
+    "relevamiento (§12).",
+)
+
+PIE_NO_AFILIADO = (
+    "Proyecto académico de Investigación Operativa; no es oficial ni está afiliado a Shell."
+)

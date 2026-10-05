@@ -16,6 +16,8 @@ from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from functools import cached_property
 
+from sim.datos import valor
+
 MINUTOS_POR_DIA = 1440
 HORAS_POR_DIA = 24
 #: Año de referencia del calendario: `fecha_inicio` y los días simulados viven acá (B2).
@@ -106,7 +108,8 @@ class PerfilHorario:
         return autos_del_dia * (self.factor_maximo / self.total) / 60.0
 
 
-#: Perfil típico de una estación de servicio abierta las 24 horas.
+#: Perfil típico de una estación de servicio abierta las 24 horas (heredado; la
+#: alternativa adoptada para el caso real es DEM-02 en el Registro).
 PERFIL_TIPICO = PerfilHorario(
     (
         # 00    01    02    03    04    05    06    07    08    09    10    11
@@ -217,13 +220,15 @@ class ParametrosTanque:
     cisterna, que tarda un plazo de entrega aleatorio en llegar. Si mientras tanto el
     tanque se vacía, la estación no puede atender: no se pierde un cliente, se pierden
     todos los que llegan hasta que el camión descargue.
+
+    Los defaults salen del Registro (INV-03/INV-10/INV-07/INV-01, §5.1-b).
     """
 
-    capacidad: float = 40_000.0          # litros
-    nivel_inicial: float = 30_000.0      # litros al empezar la simulación
-    punto_pedido: float = 12_000.0       # litros: cuando baja de acá, se pide
-    cantidad_pedido: float = 20_000.0    # litros que trae el camión
-    plazo_entrega: Triangular = Triangular(8.0, 16.0, 36.0)   # HORAS
+    capacidad: float = valor("INV-03")                              # litros (20.000)
+    nivel_inicial: float = valor("INV-10") * valor("INV-03")        # 75 % de la capacidad
+    punto_pedido: float = valor("INV-07")[0]                        # 1,5 días de consumo
+    cantidad_pedido: float = valor("INV-07")[1]                     # INV-07: Q = min(cap−s, …)
+    plazo_entrega: Triangular = Triangular(*valor("INV-01"))        # HORAS (24, 36, 48)
 
     def __post_init__(self) -> None:
         if self.capacidad <= 0:
@@ -333,29 +338,31 @@ class ParametrosSimulacion:
     cajas: int = 1
 
     # --- Demanda --------------------------------------------------------------
-    demanda: DemandaDiaria = DEMANDA_TIPICA
-    perfil: PerfilHorario = PERFIL_TIPICO
+    demanda: DemandaDiaria = DemandaDiaria(
+        valores=valor("DEM-07C")[0], frecuencias=valor("DEM-07C")[1]
+    )
+    perfil: PerfilHorario = PerfilHorario(valor("DEM-02"))
 
     # --- Modo de demanda (corrige B1/B4: antes "modo determinista") ------------
-    modo_demanda: str = "monte_carlo"      # "esperada" (litros/mes) | "monte_carlo" (tabla empírica)
-    litros_mes: float = 270_000.0          # DEM-01: LITROS por mes, la variable de entrada
-    litros_medios_por_cliente: float = 35.7  # §14.2: litros medios por cliente líquido
-    factor_fin_de_semana: float = 1.30     # DEM-03, normalizado al mes (§14.4)
+    modo_demanda: str = "esperada"        # "esperada" (litros/mes) | "monte_carlo" (tabla empírica)
+    litros_mes: float = valor("DEM-01")   # DEM-01: LITROS por mes, la variable de entrada
+    litros_medios_por_cliente: float = valor("DEM-11")  # §14.2: litros medios por cliente líquido
+    factor_fin_de_semana: float = valor("DEM-03")  # DEM-03, normalizado al mes (§14.4)
     estacionalidad: Estacionalidad = ESTACIONALIDAD_NEUTRA
     fecha_inicio: tuple[int, int] = (1, 1)  # (mes, día) del primer día simulado (B2)
 
     # --- Tiempos de servicio --------------------------------------------------
-    carga: Triangular = Triangular(3.0, 5.0, 8.0)
-    compra: Triangular = Triangular(1.5, 3.0, 6.0)
+    carga: Triangular = Triangular(*valor("TIE-02"))
+    compra: Triangular = Triangular(*valor("TIE-05"))
     caja_exponencial: bool = False
 
     # --- Volumen cargado ------------------------------------------------------
-    litros: Triangular = Triangular(15.0, 30.0, 60.0)
+    litros: Triangular = Triangular(*valor("VEH-06"))
 
     # --- Comportamiento del cliente ------------------------------------------
-    prob_compra: float = 0.30          # Bernoulli: 30% entra al minimarket
-    paciencia_surtidor: float = 10.0   # umbral de abandono en la cola del surtidor
-    paciencia_caja: float = 8.0        # umbral de abandono en la cola de la caja
+    prob_compra: float = valor("DEM-08")      # Bernoulli: entra al minimarket
+    paciencia_surtidor: float = valor("TIE-06")[0]   # umbral de abandono en la cola del surtidor
+    paciencia_caja: float = valor("TIE-06")[1]       # umbral de abandono en la cola de la caja
 
     # --- Inventario -----------------------------------------------------------
     tanque: ParametrosTanque = ParametrosTanque()
@@ -423,10 +430,29 @@ class ParametrosSimulacion:
         """El caso degenerado del proyecto hipotético original.
 
         Reproduce exactamente los números dorados de ORQUESTADOR §14.1: 3 surtidores,
-        un solo producto, la tabla empírica heredada, el tanque de 40.000 L y 1 día de
-        calentamiento. Es la base del control N1.
+        un solo producto, la tabla empírica heredada, el perfil y los tiempos del
+        proyecto original, el tanque de 40.000 L y 1 día de calentamiento. Es la base
+        del control N1: cada valor queda fijado acá para que los defaults del caso
+        real (que salen del Registro) no los pisen.
         """
-        return cls(modo_demanda="monte_carlo", dias=30, dias_calentamiento=1)
+        return cls(
+            modo_demanda="monte_carlo",
+            dias=30,
+            dias_calentamiento=1,
+            demanda=DEMANDA_TIPICA,
+            perfil=PERFIL_TIPICO,
+            carga=Triangular(3.0, 5.0, 8.0),
+            compra=Triangular(1.5, 3.0, 6.0),
+            litros=Triangular(15.0, 30.0, 60.0),
+            prob_compra=0.30,
+            tanque=ParametrosTanque(
+                capacidad=40_000.0,
+                nivel_inicial=30_000.0,
+                punto_pedido=12_000.0,
+                cantidad_pedido=20_000.0,
+                plazo_entrega=Triangular(8.0, 16.0, 36.0),
+            ),
+        )
 
     @property
     def autos_por_dia(self) -> float:
@@ -557,22 +583,22 @@ def escenarios_desde(p: ParametrosSimulacion) -> list[Escenario]:
 class ParametrosEconomicos:
     """Costos e ingresos para el análisis económico.
 
-    Los valores por defecto son ESTIMACIONES provisorias (ver TASK.md: falta definirlos
-    con datos reales). Todos son editables desde la interfaz.
+    Los defaults salen del Registro (ECO-01..ECO-07, §5.1-b). La mayoría es `heredado`
+    del proyecto hipotético y se muestra como placeholder visible en la interfaz.
     """
 
     # Ingresos
-    margen_por_litro: float = 100.0              # $ de ganancia bruta por litro vendido
-    margen_compra: float = 2500.0                # $ de ganancia bruta por compra en minimarket
+    margen_por_litro: float = valor("ECO-01")              # $ de ganancia bruta por litro vendido
+    margen_compra: float = valor("ECO-02")                 # $ de ganancia bruta por compra en minimarket
 
     # Inversión y operación de la capacidad de atención
-    inversion_surtidor: float = 18_000_000.0     # $ por instalar un surtidor (una sola vez)
-    operativo_surtidor_mensual: float = 250_000.0
-    sueldo_cajero_mensual: float = 900_000.0
+    inversion_surtidor: float = valor("ECO-05")[0]         # $ por instalar un surtidor (una sola vez)
+    operativo_surtidor_mensual: float = valor("ECO-05")[1]
+    sueldo_cajero_mensual: float = valor("ECO-04C")
 
     # Costos de inventario
-    costo_pedido: float = 150_000.0              # $ de flete por cada camión cisterna
-    costo_almacenamiento_litro_mes: float = 25.0  # $ por litro promedio en tanque, por mes
+    costo_pedido: float = valor("ECO-06")[0]               # $ de flete por cada camión cisterna
+    costo_almacenamiento_litro_mes: float = valor("ECO-07")  # $ por litro promedio en tanque, por mes
 
     def __post_init__(self) -> None:
         if self.margen_por_litro < 0 or self.margen_compra < 0:

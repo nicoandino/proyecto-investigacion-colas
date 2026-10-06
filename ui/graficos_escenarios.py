@@ -252,3 +252,60 @@ def grafico_delta_margen(conclusiones, titulo: str) -> go.Figure:
     )
     fig.update_yaxes(autorange="reversed")
     return fig
+
+
+#: Cómo se muestra cada métrica del tornado: (nombre, unidad, escala, decimales).
+METRICAS_TORNADO = {
+    "margen": ("Margen operativo mensual", "millones de $ por mes", 1e-6, 2),
+    "espera": ("Espera en la hora pico", "minutos", 1.0, 2),
+    "servicio": ("Nivel de servicio", "puntos porcentuales", 100.0, 2),
+}
+
+
+def grafico_tornado(resultado, metrica: str, cantidad: int = 15) -> go.Figure:
+    """Tornado: por eje, cuánto mueve la métrica su extremo más bajo y su extremo más alto.
+
+    Los ejes van del que más mueve al que menos; cada barra lleva la etiqueta del extremo
+    que la produce. Azul = el extremo que baja la métrica, naranja = el que la sube.
+    """
+    nombre, unidad, escala, dec = METRICAS_TORNADO[metrica]
+    ejes = resultado.ranking(metrica)[:cantidad]
+    y, bajos, altos, t_bajos, t_altos = [], [], [], [], []
+    for eje in ejes:
+        puntos = [(getattr(v, f"d_{metrica}").promedio * escala, v.etiqueta) for v in eje.variantes]
+        menor = min(puntos, key=lambda x: x[0])
+        mayor = max(puntos, key=lambda x: x[0])
+        etiqueta = (
+            f"{eje.id} · {eje.nombre}"
+            + (" ◆" if eje.solo_economia else "") + (" †" if eje.rango_de_prueba else "")
+        )
+        y.append(etiqueta)
+        bajos.append(min(menor[0], 0.0))
+        altos.append(max(mayor[0], 0.0))
+        t_bajos.append(f"{menor[1]}: {menor[0]:+,.{dec}f}" if menor[0] < 0 else "")
+        t_altos.append(f"{mayor[1]}: {mayor[0]:+,.{dec}f}" if mayor[0] > 0 else "")
+    fig = go.Figure()
+    fig.add_bar(
+        y=y, x=bajos, orientation="h", name="Extremo que la baja", marker_color=AZUL,
+        text=t_bajos, textposition="outside", cliponaxis=False,
+        hovertemplate="%{text}<extra></extra>",
+    )
+    fig.add_bar(
+        y=y, x=altos, orientation="h", name="Extremo que la sube", marker_color=NARANJA,
+        text=t_altos, textposition="outside", cliponaxis=False,
+        hovertemplate="%{text}<extra></extra>",
+    )
+    fig.update_layout(
+        title=f"{nombre}: qué dato incierto la mueve más (cambio contra la base)",
+        barmode="relative",
+        xaxis_title=f"Cambio en {unidad} contra la base",
+        legend=dict(orientation="h", y=-0.12),
+        **{**_LAYOUT, "height": max(420, 90 + 44 * len(y)),
+           "margin": dict(l=60, r=60, t=60, b=70)},
+    )
+    # Aire a los dos lados para que las etiquetas de las barras largas no pisen el eje
+    abajo, arriba = min(bajos), max(altos)
+    holgura = 0.55 * (arriba - abajo or 1.0)
+    fig.update_xaxes(range=[abajo - holgura, arriba + holgura])
+    fig.update_yaxes(autorange="reversed")
+    return fig

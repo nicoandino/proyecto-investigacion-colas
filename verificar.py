@@ -54,6 +54,12 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  FASE 9 DEL ORQUESTADOR (sensibilidad)
+   27. El listado cubre todos los supuesto/heredado/estimación y las 20 contradicciones, la
+       cadena de demanda sobrevive a cambiar vehículos o mezcla, el tornado es coherente
+       (demanda, playeros, francos), los ejes económicos son lineales y el ranking cambia
+       según la métrica.
+
   FASE 8 DEL ORQUESTADOR (economía real)
    26. Ingresos − costos = margen (y contra un cálculo independiente), la venta perdida no se
        resta, personal desde la dotación (S2/S9), flete = fijo + $/km × km, anualización
@@ -1400,6 +1406,102 @@ def main() -> int:
         abs(margen_eq) < 1.0 and eq > eco.margen_por_litro,
         "El margen por litro de equilibrio hace el margen operativo igual a 0",
         f"equilibrio ${eq:,.0f}/L (hoy ${eco.margen_por_litro:,.0f}/L) → margen {margen_eq:,.2f} $",
+    )
+
+    # ------------------------------------------------------------------ 23
+    separador("23. Fase 9: sensibilidad (tornado de los datos inciertos)")
+    from sim.datos import CONTRADICCIONES, REGISTRO, por_id
+    from sim.sensibilidad import (
+        EJES,
+        _tanque_de,
+        base_de_sensibilidad,
+        contradicciones_y_ejes,
+        correr_sensibilidad,
+        listado_registro,
+    )
+
+    # Gate: lista TODOS los supuesto/heredado/estimación y las contradicciones, sin dejar huecos
+    listado = listado_registro()
+    tipos_lista = [d for d in REGISTRO if d.tipo in ("supuesto", "heredado", "estimacion")]
+    sin_clasificar = [f["ID"] for f in listado if "SIN CLASIFICAR" in f["¿Eje del tornado?"]]
+    sin_clasificar += [
+        f["ID"] for f in contradicciones_y_ejes() if "SIN CLASIFICAR" in f["En el tornado"]
+    ]
+    con_alternativas = [
+        d for d in tipos_lista if d.alternativas or d.bajo is not None or d.alto is not None
+    ]
+    controlar(
+        len(listado) == len(tipos_lista) and not sin_clasificar
+        and len(contradicciones_y_ejes()) == len(CONTRADICCIONES)
+        and all(por_id(i) for e in EJES for i in e.datos),
+        "El listado cubre todos los supuesto/heredado/estimación y las 20 contradicciones",
+        f"{len(listado)} datos ({len(con_alternativas)} con alternativas o rango), "
+        f"{len(EJES)} ejes, {sum(len(e.variantes) for e in EJES)} variantes, "
+        f"sin clasificar: {sin_clasificar or 'ninguno'}",
+    )
+
+    # La cadena de demanda no se rompe al cambiar vehículos o mezcla (no repetir B1)
+    p_sen = base_de_sensibilidad(p, 7)
+    ejes = {e.id: e for e in EJES}
+    p_igual, _ = _tanque_de("auto", 47.0)(p_sen, None)
+    p_c12, _ = ejes["C12"].variantes[1][1](p_sen, None)
+    p_c6, _ = ejes["C6"].variantes[1][1](p_sen, None)
+    mix0 = {x.id: x.pct_litros for x in p_sen.productos}
+    mix6 = {x.id: x.pct_litros for x in p_c6.productos}
+    ind_c12, _ = simular(p_c12, semilla=91)
+    pedido_c12 = (
+        ind_c12.c.litros_vendidos + ind_c12.c.litros_no_vendidos
+    ) / p_c12.dias_medidos
+    controlar(
+        abs(p_igual.litros_medios_por_cliente - p_sen.litros_medios_por_cliente) < 1e-9
+        and abs(p_c12.litros_medios_por_cliente / p_sen.litros_medios_por_cliente - 0.8 / 0.5) < 0.12
+        and abs(sum(mix6.values()) - 1.0) < 1e-9
+        and abs(mix6["diesel_g2"] + mix6["diesel_g3"] - mix0["diesel_g2"] - mix0["diesel_g3"]) < 1e-9
+        and mix6["diesel_g3"] == 0.0
+        and abs(pedido_c12 * 31 / p.litros_mes - 1.0) < 0.04,
+        "Cambiar vehículos o mezcla rehace los litros por cliente y conserva la demanda en litros",
+        f"carga media 0,8 × T: {p_c12.litros_medios_por_cliente:.1f} L/cliente "
+        f"(base {p_sen.litros_medios_por_cliente:.1f}) | litros pedidos por día "
+        f"{pedido_c12:,.0f} (esperado ≈ {p.litros_mes / 31:,.0f}) | "
+        f"mezcla sólo G2: G3 = {mix6['diesel_g3']:.0%}",
+    )
+
+    # El tornado corre y sus resultados son coherentes
+    t0 = time.time()
+    tor = correr_sensibilidad(p, eco, mes=7, replicas=2)
+    seg_tornado = time.time() - t0
+    por_eje = {e.id: e for e in tor.ejes}
+
+    def delta(eje: str, k: int, campo: str) -> float:
+        return getattr(por_eje[eje].variantes[k], campo).promedio
+
+    controlar(
+        len(tor.ejes) == len(EJES)
+        and delta("C2", 1, "d_margen") > 0 > delta("C2", 0, "d_margen")
+        and delta("C2", 1, "d_espera") > 0 > delta("C2", 0, "d_espera")
+        and delta("C5", 1, "d_espera") < 0 < delta("C5", 0, "d_espera")
+        and delta("ECO-10", 0, "d_margen") > 0 > delta("ECO-10", 1, "d_margen"),
+        "Más demanda ⇒ más margen y más espera; más playeros ⇒ menos espera; menos francos ⇒ más margen",
+        f"C2 {delta('C2', 0, 'd_margen') / 1e6:+.1f} M / {delta('C2', 1, 'd_margen') / 1e6:+.1f} M · "
+        f"C5 espera {delta('C5', 0, 'd_espera'):+.2f} / {delta('C5', 1, 'd_espera'):+.2f} min "
+        f"({seg_tornado:.0f} s)",
+    )
+    controlar(
+        all(
+            abs(delta(e, 0, "d_margen") + delta(e, 1, "d_margen")) < 1e-6 * abs(delta(e, 1, "d_margen"))
+            and delta(e, 0, "d_espera") == delta(e, 1, "d_espera") == 0.0
+            for e in ("ECO-01", "ECO-02", "ECO-03", "ECO-07")
+        ),
+        "Los ejes económicos son lineales (±50 % simétrico) y no mueven ni la espera ni el servicio",
+        "ECO-01, ECO-02, ECO-03 y ECO-07 recalculan sobre las réplicas de la base",
+    )
+    top_margen = [e.id for e in tor.ranking("margen")][:5]
+    top_espera = [e.id for e in tor.ranking("espera")][:5]
+    top_servicio = [e.id for e in tor.ranking("servicio")][:5]
+    controlar(
+        len({tuple(top_margen), tuple(top_espera), tuple(top_servicio)}) > 1,
+        "El ranking no es constante: cambia según la métrica",
+        f"margen {top_margen} | espera {top_espera} | servicio {top_servicio}",
     )
 
     # ------------------------------------------------------------------

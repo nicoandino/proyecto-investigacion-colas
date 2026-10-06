@@ -46,6 +46,12 @@ from sim.economia_real import (
     margen_de_equilibrio_por_litro,
     resumir_economia,
 )
+from sim.sensibilidad import (
+    EJES,
+    contradicciones_y_ejes,
+    correr_sensibilidad,
+    listado_registro,
+)
 from sim.escenarios import (
     ESTACIONES,
     MESES,
@@ -156,6 +162,13 @@ def correr_catalogo_cacheado(
     p: ParametrosSimulacion, mes: int, replicas: int, semilla: int, nombres: tuple[str, ...]
 ):
     return correr_catalogo(p, mes, replicas=replicas, semilla_base=semilla, nombres=nombres)
+
+
+@st.cache_data(show_spinner=False, max_entries=3)
+def correr_sensibilidad_cacheado(
+    p: ParametrosSimulacion, eco: ParametrosEconomicos, mes: int, replicas: int, semilla: int
+):
+    return correr_sensibilidad(p, eco, mes=mes, replicas=replicas, semilla_base=semilla)
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -1702,6 +1715,101 @@ def estado_de_resultados(p: ParametrosSimulacion, lista, res) -> pd.DataFrame:
     return pd.DataFrame(filas)
 
 
+# =============================================================================
+# Pestaña: sensibilidad (Fase 9, §7.8)
+# =============================================================================
+def pestania_sensibilidad(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
+    st.subheader("Sensibilidad: qué dato incierto mueve más la conclusión")
+    if not p.estacion_real:
+        st.info("La sensibilidad es del caso real. Elegí la **estación real** en la barra "
+                "lateral.", icon="🌪️")
+        return
+    st.markdown(
+        "Casi todos los datos del modelo son **supuestos o estimaciones** (no hay datos de la "
+        "propia estación). Esta pestaña mide cuánto cambia el resultado si cada uno vale lo "
+        "que dicen sus alternativas del Registro: se corre la estación con cada extremo, "
+        "**dejando todo lo demás igual y con las mismas semillas**, y se mira el cambio en el "
+        "margen mensual, la espera en la hora pico y el nivel de servicio. Los que están arriba "
+        "son los que **hay que relevar primero**."
+    )
+    n_sim = sum(len(e.variantes) for e in EJES if not e.solo_economia) + 1
+    c1, c2, c3 = st.columns([1, 1, 2])
+    mes = c1.selectbox("Mes", list(range(1, 13)), index=6, key="sen_mes",
+                       format_func=lambda m: MESES[m - 1].capitalize())
+    replicas = c2.slider("Réplicas por variante", 1, 4, 2, 1, key="sen_rep")
+    c3.caption(
+        f"{len(EJES)} ejes, {sum(len(e.variantes) for e in EJES)} variantes "
+        f"({n_sim} simulaciones × {replicas} réplicas ≈ {n_sim * replicas * 1.0:.0f} s; los ejes "
+        f"económicos ◆ no vuelven a simular). Queda en caché. La base es el mes elegido con los "
+        f"episodios de GNC forzados adentro."
+    )
+    semilla = st.session_state.semilla_usada
+    if st.button("🌪️ Correr el tornado", type="primary", key="btn_tornado"):
+        with st.spinner(f"Simulando {n_sim} configuraciones × {replicas} réplicas…"):
+            resultado = correr_sensibilidad_cacheado(p, eco, mes, replicas, semilla)
+        st.session_state.sensibilidad = (p, eco, resultado)
+    guardado = st.session_state.get("sensibilidad")
+    if not guardado:
+        st.info("Apretá **Correr el tornado** para medirlo.", icon="▶")
+    else:
+        p_usado, eco_usado, res = guardado
+        if p_usado != p or eco_usado != eco:
+            st.info("Cambiaste parámetros: lo que se ve es el último tornado.", icon="🔄")
+        etiquetas = {"Margen operativo ($/mes)": "margen", "Espera en la hora pico (min)": "espera",
+                     "Nivel de servicio (puntos %)": "servicio"}
+        elegida = st.radio("Métrica", list(etiquetas), horizontal=True, key="sen_metrica")
+        metrica = etiquetas[elegida]
+        cantidad = st.slider("Cuántos ejes mostrar", 5, len(res.ejes), 15, 1, key="sen_cant")
+        st.plotly_chart(graficos_escenarios.grafico_tornado(res, metrica, cantidad),
+                        key="g_tornado")
+        ranking_margen = res.ranking("margen")
+        mas_margen = ranking_margen[0]
+        mas_margen_dato = next(e for e in ranking_margen if not e.rango_de_prueba)
+        mas_espera = res.ranking("espera")[0]
+        st.caption(escapar_pesos(
+            f"Base ({MESES[res.mes - 1]}, {res.replicas} réplicas): margen "
+            f"{pesos(res.base_margen.promedio)} ± {pesos(res.base_margen.semiamplitud)} por mes, "
+            f"espera pico {res.base_espera.promedio:.2f} min, servicio "
+            f"{res.base_servicio.promedio * 100:.1f} %. Para el **margen** manda "
+            f"**{mas_margen.id} ({mas_margen.nombre})**"
+            + (
+                f", y entre los datos con rango del Registro **{mas_margen_dato.id} "
+                f"({mas_margen_dato.nombre})**" if mas_margen.rango_de_prueba else ""
+            )
+            + f"; para la **espera** manda **{mas_espera.id} ({mas_espera.nombre})**: el ranking "
+            f"cambia según lo que se mire. ◆ = eje económico (no vuelve a simular). † = los "
+            f"extremos son un **rango de prueba** que puso el grupo (ECO-01/02/03/06/07/10), no "
+            f"un dato: dicen qué tan sensible es el margen a ese número, no qué valor tiene. "
+            f"Con {res.replicas} réplicas los intervalos son anchos: leelos como órdenes de "
+            f"magnitud, no como cifras."
+        ))
+        filas = []
+        for eje in res.ranking(metrica):
+            for v in eje.variantes:
+                filas.append({
+                    "Eje": f"{eje.id} · {eje.nombre}" + (" ◆" if eje.solo_economia else "")
+                    + (" †" if eje.rango_de_prueba else ""),
+                    "Extremo": v.etiqueta,
+                    "Δ margen por mes": f"{pesos(v.d_margen.promedio)} ± {pesos(v.d_margen.semiamplitud)}",
+                    "Δ espera pico (min)": f"{v.d_espera.promedio:+.2f} ± {v.d_espera.semiamplitud:.2f}",
+                    "Δ servicio (pp)": f"{v.d_servicio.promedio * 100:+.2f} ± {v.d_servicio.semiamplitud * 100:.2f}",
+                })
+        with st.expander("Todos los extremos con su IC 95 % (ordenados por la métrica elegida)"):
+            st.dataframe(pd.DataFrame(filas), hide_index=True,
+                         height=min(900, 36 * (len(filas) + 1) + 3))
+
+    st.markdown("##### Qué datos son eje y cuáles no")
+    st.caption(
+        "Todas las contradicciones del §4.2 y todos los datos supuesto, heredado o estimación del "
+        "Registro, con su eje (o el motivo por el que no lo son)."
+    )
+    with st.expander("Contradicciones C1–C20 y su eje"):
+        st.dataframe(pd.DataFrame(contradicciones_y_ejes()), hide_index=True)
+    with st.expander("Todos los datos supuesto / heredado / estimación"):
+        listado = pd.DataFrame(listado_registro())
+        st.dataframe(listado, hide_index=True, height=min(900, 36 * (len(listado) + 1) + 3))
+
+
 def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
     st.subheader("Economía de la estación real")
     for aviso in avisos_economia(p, eco):
@@ -2939,6 +3047,7 @@ def main() -> None:
         # Las corridas del catálogo y de las estaciones eran de otros parámetros: se descartan.
         st.session_state.pop("estaciones", None)
         st.session_state.pop("comparacion", None)
+        st.session_state.pop("sensibilidad", None)
         with st.spinner(
             f"Simulando {replicas} réplicas de {p.dias} días "
             f"{'de la estación real' if p.estacion_real else 'en 4 escenarios'}…"
@@ -2976,6 +3085,7 @@ def main() -> None:
             "🍂 Estaciones",
             "⚖️ Escenarios",
             "💰 Economía",
+            "🌪️ Sensibilidad",
             "📝 Conclusión",
             "📖 Modelo y método",
             "📚 Datos y fuentes",
@@ -3008,10 +3118,12 @@ def main() -> None:
         else:
             pestania_economia(p_corrida, st.session_state.parametros_eco)
     with pestanias[10]:
-        pestania_conclusion()
+        pestania_sensibilidad(p_corrida, st.session_state.parametros_eco)
     with pestanias[11]:
-        pestania_modelo(p_corrida)
+        pestania_conclusion()
     with pestanias[12]:
+        pestania_modelo(p_corrida)
+    with pestanias[13]:
         pestania_datos_fuentes()
 
     st.divider()

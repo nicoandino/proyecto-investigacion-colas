@@ -69,7 +69,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 | Etapa | Qué incluye | Compuerta |
 |---|---|---|
 | **0** | Limpieza de documentos (hecha, `0eaae74`) | un solo md de contexto y uno de datos |
-| **1 · Motor** | Modo `real` (determinista) y modo `editado` (con azar); tanques llenos al día 0; registro de pedidos de camión (día de pedido y de llegada, ruta, km, costo); grabación de todos los días | `clasico()` sigue dando los dorados; el modo real da siempre lo mismo; conservación de clientes y litros |
+| **1 · Motor ✅** | Modo `real` (determinista) y modo `editado` (con azar); tanques llenos al día 0; registro de pedidos de camión (día de pedido y de llegada, ruta, km, costo); grabación de todos los días | `clasico()` sigue dando los dorados; el modo real da siempre lo mismo; conservación de clientes y litros |
 | **2 · Menú inicial** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
 | **3 · Animación** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
 | **4 · Indicadores y Demanda** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
@@ -93,3 +93,23 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 ## 5. Pendientes
 - **La imagen del diseño de la animación** (la pasa el usuario).
 - El OK del usuario para arrancar la **Etapa 1**.
+
+## 6. Etapa 1 cerrada (6/10/2026)
+
+- `sim/distribuciones.py`: `AleatorioDeterminista`: el mismo contrato que `Aleatorio` pero **sin azar**. Tiempos y litros = el
+  promedio; producto, tipo de vehículo, compra y migración del GNC = **cuotas exactas** (reparto proporcional suave);
+  como el motor pide todo a `self.az`, alcanza con cambiar ese objeto: el modelo con azar y los dorados no se tocan.
+- `sim/modelo.py`: `_llegadas_deterministas` (los clientes de cada día repartidos por el perfil horario, equiespaciados
+  dentro de cada hora, la suma exacta); registro de **cada camión** (`PedidoCamion`: día de pedido, de llegada, litros,
+  demora de ruta y causa); `simular` elige el generador según `p.determinista`.
+- `sim/gnc.py`: episodios de GNC **equiespaciados** en jun–ago (con los defaults: 28/jun–3/jul y 30/jul–4/ago), siempre
+  en las mismas fechas. `sim/red.py`: sin cortes de ruta sorteados.
+- `sim/config.py`: `determinista`, `animar_todo` y `ParametrosSimulacion.datos_reales()` (sin azar, sin calentamiento,
+  tanques llenos, sin cortes aleatorios, animación de todos los días). Registro: MOD-02, INV-12, CAL-07.
+- **Compuerta:** `verificar.py` **107/107** (control 25) · dorados exactos · otra semilla da exactamente el mismo
+  resultado · llegadas exactas (7.783 clientes en julio = la suma día por día) · mezcla y compra por cuotas · camiones
+  a 36 h exactas · GNC: 35 afectados = 11 migrados + 24 perdidos, y 0 en enero · la animación graba los 31 días.
+- **Lo que se ve en julio con datos reales:** espera media 0,19 min y en la hora pico 1,0 min (casi no hay colas, como se
+  anticipó), nivel de servicio 98,7 %, 22 pedidos de camión y quiebres por falta de combustible en 19 % de los días con la
+  política (s, Q) por defecto.
+- **Pendiente para la Etapa 3:** la cola de **3 lugares por cara** cambia PER-05 (hoy 8 por zona) y por lo tanto los resultados.

@@ -242,11 +242,24 @@ def capacidad_total(p: ParametrosSimulacion) -> float:
     return _capacidad_total(p)
 
 
+@dataclass(frozen=True)
+class PedidoCamion:
+    """Un pedido de combustible: cuándo se hizo, cuándo llegó y cuánto se demoró en la ruta."""
+
+    producto: str
+    t_pedido: float          # minuto de la corrida
+    t_llegada: float
+    litros: float
+    demora_ruta: float       # minutos que sumó un corte de ruta (0 si no hubo)
+    causa: str               # "" · "corte E2" · "obra" · ...
+
+
 class Indicadores:
     """Todos los colectores de una corrida, en un solo objeto."""
 
     def __init__(self, p: ParametrosSimulacion) -> None:
         self.p = p
+        self.pedidos: list[PedidoCamion] = []      # cada camión pedido (día, plazo, demora de ruta)
         self.capacidad_surtidores = p.surtidores
         self.capacidad_cajas = p.cajas
 

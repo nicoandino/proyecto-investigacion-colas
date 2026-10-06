@@ -708,6 +708,10 @@ class ParametrosSimulacion:
     red: ParametrosRed | None = ParametrosRed()   # None = el plazo no suma demoras de ruta
     gnc: ParametrosGNC | None = ParametrosGNC()   # None = sin cortes ni compresores
 
+    # --- Simulación con datos reales (rediseño v3) ------------------------------
+    determinista: bool = False         # True = sin azar: cuotas exactas y valores promedio (MOD-02)
+    animar_todo: bool = False          # True = grabar la animación de TODOS los días (CAL-07)
+
     # --- Escenarios S7 y S12 (Fase 7): apagados por defecto -------------------
     factor_quincena: float = valor("DEM-12")[0]            # S12: cuánto se multiplica el día
     dias_quincena: tuple[int, ...] = ()                    # días del mes con pico de cobro (() = ninguno)
@@ -740,6 +744,8 @@ class ParametrosSimulacion:
             raise ValueError("El día a animar tiene que estar dentro de la corrida.")
         if self.modo_demanda not in ("esperada", "monte_carlo"):
             raise ValueError("modo_demanda tiene que ser 'esperada' o 'monte_carlo'.")
+        if self.determinista and self.modo_demanda != "esperada":
+            raise ValueError("La simulación sin azar usa la demanda esperada (litros por mes).")
         if self.litros_mes <= 0:
             raise ValueError("litros_mes tiene que ser positivo.")
         if self.litros_medios_por_cliente <= 0:
@@ -780,9 +786,31 @@ class ParametrosSimulacion:
     def dias_medidos(self) -> int:
         return self.dias - self.dias_calentamiento
 
+    def datos_reales(self) -> ParametrosSimulacion:
+        """Los mismos parámetros pero para la **simulación con datos reales** (sin azar).
+
+        Determinista, sin calentamiento (arranca en el momento cero), tanques llenos (INV-12), sin
+        cortes de ruta sorteados y con la animación de todos los días. Es la modalidad por defecto
+        de la app; la que tiene azar es la "editada".
+        """
+        inventario = tuple(
+            replace(i, nivel_inicial=i.capacidad * valor("INV-12")) for i in self.inventario
+        )
+        red = (
+            replace(self.red, escenario_corte="ninguno")
+            if self.red is not None and self.red.escenario_corte == "aleatorio"
+            else self.red
+        )
+        return replace(
+            self, determinista=True, modo_demanda="esperada", dias_calentamiento=0,
+            inventario=inventario, red=red, animar_todo=True, dia_animado=1,
+        )
+
     @property
     def ventana_animacion(self) -> tuple[float, float]:
-        """Intervalo de minutos que se graba para la animación (un solo día)."""
+        """Intervalo de minutos que se graba para la animación (un día, o todos si `animar_todo`)."""
+        if self.animar_todo:
+            return 0.0, self.duracion
         inicio = (self.dia_animado - 1) * MINUTOS_POR_DIA
         return inicio, inicio + MINUTOS_POR_DIA
 

@@ -54,6 +54,10 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  REDISEÑO v3 (ORQUESTADOR.md)
+   29. Etapa 1: simulación con datos reales sin azar (mismo resultado con cualquier semilla,
+       llegadas y mezcla exactas, camión = plazo medio, GNC con fechas fijas, animación de todos los días).
+
   FASE 10 DEL ORQUESTADOR (cierre)
    28. N19: clientes líquidos × litros medios por cliente = litros del día, y los litros medios
        por cliente salen de la mezcla y las cargas de cada producto.
@@ -1530,6 +1534,81 @@ def main() -> int:
         "Los litros medios por cliente (DEM-11 = 35,7 L) salen de la mezcla y las cargas de cada producto",
         f"1 ÷ Σ(% de litros ÷ carga media) = {_armonica(p.productos):.3f} L contra "
         f"{p.litros_medios_por_cliente} L del Registro",
+    )
+
+    # ------------------------------------------------------------------ 25
+    separador("25. Rediseño, etapa 1: simulación con datos reales (sin azar)")
+    import dataclasses
+
+    p_dr = para_mes(p, 7).datos_reales()
+    r_a, _ = correr_replica(p_dr, semilla=1)
+    r_b, _ = correr_replica(p_dr, semilla=987)
+    controlar(
+        r_a == dataclasses.replace(r_b, semilla=r_a.semilla),
+        "Sin azar: dos semillas distintas dan EXACTAMENTE el mismo resultado",
+        f"espera pico {r_a.espera_pico:.4f} min · nivel de servicio {r_a.nivel_servicio:.4f} (semillas 1 y 987)",
+    )
+
+    ind_dr, traza_dr = simular(
+        dataclasses.replace(p_dr, dt_traza=15.0), semilla=1, con_traza=True
+    )
+    c_dr = ind_dr.c
+    esperados = sum(int(round(p_dr.autos_por_dia_fecha(d))) for d in range(1, p_dr.dias + 1))
+    controlar(
+        c_dr.llegadas == esperados and p_dr.dias_calentamiento == 0,
+        "Las llegadas son exactas: la suma de los clientes de cada día, sin calentamiento",
+        f"{c_dr.llegadas} clientes en {p_dr.dias} días = {esperados} calculados día por día",
+    )
+
+    pesos_dr = dict(zip((pr.id for pr in p_dr.productos), p_dr.pesos_llegada()))
+    desvio_mezcla = max(
+        abs(ind_dr.c_producto[k].llegadas / c_dr.llegadas - w) for k, w in pesos_dr.items()
+    )
+    controlar(
+        desvio_mezcla < 0.003      # los GNC que migran se cuentan como Súper
+        and abs(c_dr.compras_atendidas / c_dr.atendidos_surtidor - p_dr.prob_compra) < 0.005,
+        "El producto y la compra en el minimarket salen por cuotas exactas (no por sorteo)",
+        f"desvío máximo de la mezcla {desvio_mezcla:.5f} · compran "
+        f"{c_dr.compras_atendidas / c_dr.atendidos_surtidor:.3f} (esperado {p_dr.prob_compra})",
+    )
+
+    dentro = c_dr.llegadas - c_dr.atendidos_surtidor - (
+        c_dr.perdidos_surtidor + c_dr.perdidos_sin_combustible + c_dr.perdidos_cola_llena
+        + c_dr.perdidos_corte_gnc
+    )
+    controlar(
+        0 <= dentro <= 12 + 3 * 8 and c_dr.viajes_demorados == 0,
+        "N2 sin azar: llegadas = atendidos + perdidos + adentro, y no hay cortes de ruta sorteados",
+        f"adentro al final: {dentro} · camiones demorados: {c_dr.viajes_demorados}",
+    )
+
+    pedidos_ok = (
+        len(ind_dr.pedidos) == c_dr.pedidos_emitidos > 0
+        and all(abs((x.t_llegada - x.t_pedido) - 36.0 * 60.0) < 1e-6 for x in ind_dr.pedidos)
+        and all(i.nivel_inicial == i.capacidad for i in p_dr.inventario)
+        and min(x.t_pedido for x in ind_dr.pedidos) > 0
+    )
+    controlar(
+        pedidos_ok,
+        "Los tanques arrancan llenos y cada camión tarda exactamente su plazo medio (36 h)",
+        f"{len(ind_dr.pedidos)} pedidos; el primero se pidió el día "
+        f"{min(x.t_pedido for x in ind_dr.pedidos) / 1440 + 1:.1f}",
+    )
+
+    af = c_dr.gnc_afectados
+    controlar(
+        af > 0 and c_dr.migrados_gnc_a_nafta + c_dr.perdidos_corte_gnc == af
+        and abs(c_dr.migrados_gnc_a_nafta / af - p_dr.gnc.migracion_a_nafta) < 0.1
+        and simular(para_mes(p, 1).datos_reales(), semilla=5)[0].c.gnc_afectados == 0,
+        "GNC sin azar: los episodios caen siempre en las mismas fechas, la migración es una cuota y en enero no hay cortes",
+        f"julio: {af} afectados = {c_dr.migrados_gnc_a_nafta} migrados + {c_dr.perdidos_corte_gnc} perdidos",
+    )
+
+    controlar(
+        len(traza_dr.cuadros) == int(p_dr.duracion // 15.0)
+        and traza_dr.cuadros[-1].t >= p_dr.duracion - 15.0,
+        "La animación graba TODOS los días (un cuadro cada 15 min)",
+        f"{len(traza_dr.cuadros)} cuadros para {p_dr.dias} días",
     )
 
     # ------------------------------------------------------------------

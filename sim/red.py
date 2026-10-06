@@ -181,8 +181,8 @@ def demora_de_viaje(
         return 0.0, ""
 
     if escenario == "aleatorio":
-        if mes not in red.meses_corte:
-            return 0.0, ""
+        if az.es_determinista or mes not in red.meses_corte:
+            return 0.0, ""       # sin azar no hay cortes sorteados (sólo los E1–E4 elegidos)
         if not az.bernoulli(red.prob_corte_viaje, stream):
             return 0.0, ""
         cortables = [a for a in red.arcos if a.cortable]

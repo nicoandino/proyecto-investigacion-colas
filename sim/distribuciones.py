@@ -57,6 +57,9 @@ _MULTIPLICADOR = 7_919
 class Aleatorio:
     """Fábrica de variables aleatorias del modelo, con un generador por stream."""
 
+    #: En el modelo con azar es False; `AleatorioDeterminista` lo pone en True.
+    es_determinista = False
+
     def __init__(self, semilla: int) -> None:
         self.semilla = int(semilla)
         self._gen: dict[str, random.Random] = {
@@ -136,3 +139,60 @@ class Aleatorio:
             Tupla (clientes_redondeados, numero_pseudoaleatorio_50)
         """
         return int(round(clientes_por_dia)), 50
+
+
+class AleatorioDeterminista(Aleatorio):
+    """El mismo contrato que `Aleatorio`, pero SIN azar (simulación con datos reales).
+
+    Cada "sorteo" del modelo pasa a ser una regla exacta y reproducible:
+
+      · tiempos y litros (Triangular, exponencial) = el promedio de su distribución;
+      · producto, tipo de vehículo, compra en el minimarket y migración del GNC = **cuotas
+        exactas** (reparto proporcional "suave": con 20 % de compra, entra uno de cada cinco, y
+        los demás clientes se reparten igual, siempre en el mismo orden);
+      · el resto de los sorteos (cortes de ruta, etc.) devuelve el valor central.
+
+    Como el motor pide todo a `self.az`, alcanza con cambiar este objeto para que el modelo
+    entero sea determinista: la semilla no tiene ningún efecto.
+    """
+
+    es_determinista = True
+
+    def __init__(self, semilla: int = 0) -> None:
+        super().__init__(semilla)
+        self._acumulado: dict[tuple, list[float]] = {}
+
+    def _cuota(self, clave: tuple, pesos: tuple[float, ...]) -> int:
+        """Reparto proporcional suave: el índice que más "debe" según su peso en cada turno."""
+        total = sum(pesos)
+        estado = self._acumulado.setdefault(clave, [0.0] * len(pesos))
+        for i, peso in enumerate(pesos):
+            estado[i] += peso
+        elegido = max(range(len(pesos)), key=lambda i: (estado[i], -i))
+        estado[elegido] -= total
+        return elegido
+
+    def uniforme(self, stream: str) -> float:
+        return 0.5
+
+    def exponencial(self, media: float, stream: str) -> float:
+        return media
+
+    def triangular(self, t: Triangular, stream: str) -> float:
+        return t.media
+
+    def bernoulli(self, p: float, stream: str) -> bool:
+        if p <= 0.0:
+            return False
+        if p >= 1.0:
+            return True
+        return self._cuota((stream, "bernoulli", p), (p, 1.0 - p)) == 0
+
+    def discreta(self, pesos: tuple[float, ...], stream: str) -> int:
+        return self._cuota((stream, tuple(pesos)), tuple(pesos))
+
+    def discreta_con_numero(self, pesos: tuple[float, ...], stream: str) -> tuple[int, int]:
+        return self.discreta(pesos, stream), 0
+
+    def empirica(self, tabla: DemandaDiaria, stream: str) -> tuple[int, int]:
+        return int(round(tabla.media)), 0

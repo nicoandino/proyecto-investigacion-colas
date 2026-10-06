@@ -437,6 +437,8 @@ def correr_sensibilidad(
 #: Datos con rango o alternativas que NO son eje, y por qué (cada motivo es verificable).
 NO_ES_EJE: dict[str, str] = {
     "MOD-01": "es el caso clásico (otro modelo), no un valor incierto: se elige en la barra lateral",
+    "MOD-02": "elige entre la simulación con datos reales (sin azar) y la que tiene azar: no es un valor",
+    "INV-12": "condición de arranque de la simulación con datos reales (tanques llenos); el modo con azar usa INV-10",
     "DEM-00": "cambia el tratamiento del azar de la demanda (esperada vs. Monte Carlo), no un valor",
     "INV-02": "informativo: el modelo pide la Q de la política (s, Q), no la capacidad del camión",
     "INV-09": "sólo vale dentro del escenario S7 (crisis de abastecimiento): la base no tiene crisis",

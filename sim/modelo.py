@@ -43,8 +43,8 @@ from datetime import date
 import simpy
 
 from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion, Triangular
-from sim.distribuciones import Aleatorio
-from sim.estadisticas import Indicadores
+from sim.distribuciones import Aleatorio, AleatorioDeterminista
+from sim.estadisticas import Indicadores, PedidoCamion
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
 from sim.red import demora_de_viaje, mes_del_dia
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
@@ -105,8 +105,10 @@ class EstacionDeServicio:
             self._montar_clasico()
 
         # Procesos
+        self._contador_det = 0
         env.process(self.correr_dias())
-        env.process(self.generar_llegadas())
+        if not aleatorio.es_determinista:
+            env.process(self.generar_llegadas())
         if traza is not None:
             env.process(self.registrar_animacion())
             env.process(self.registrar_inventario())
@@ -337,6 +339,9 @@ class EstacionDeServicio:
                 {i.producto: False for i in self.p.inventario} if self.es_real else False
             )
 
+            if self.az.es_determinista:
+                self.env.process(self._llegadas_deterministas(autos))
+
             antes = _foto(self.ind.c_total)
             antes_gnc = self._conteo_gnc()
             yield self.env.timeout(MINUTOS_POR_DIA)
@@ -433,6 +438,30 @@ class EstacionDeServicio:
             ahora = self.env.now
             auto = self._crear_auto(contador, ahora)
             self.env.process(self.atender(auto))
+
+    def _llegadas_deterministas(self, autos: int):
+        """Las llegadas de UN día, a intervalos exactos (simulación con datos reales).
+
+        Los `autos` del día se reparten en las 24 horas según el perfil (acumulado redondeado, así
+        la suma da exactamente `autos`) y dentro de cada hora quedan equiespaciados. Se arranca a
+        la medianoche del día: no hay azar y comprobar cualquier hora es hacer una cuenta.
+        """
+        fracciones = self.p.perfil.fracciones
+        inicio = self.env.now
+        acumulado, anterior = 0.0, 0
+        for hora in range(24):
+            acumulado += fracciones[hora]
+            hasta = round(autos * acumulado)
+            en_la_hora = hasta - anterior
+            anterior = hasta
+            for j in range(en_la_hora):
+                instante = inicio + hora * 60.0 + (j + 0.5) / en_la_hora * 60.0
+                if instante > self.env.now:
+                    yield self.env.timeout(instante - self.env.now)
+                self._contador_det += 1
+                self.autos_llegados_hoy += 1
+                auto = self._crear_auto(self._contador_det, self.env.now)
+                self.env.process(self.atender(auto))
 
     def _crear_auto(self, contador: int, ahora: float) -> Auto:
         """Sorteo de todos los atributos del cliente AL LLEGAR (streams propios).
@@ -736,9 +765,10 @@ class EstacionDeServicio:
         # Cortes de ruta (Fase 5): el plazo base ya incluye el viaje normal; si el camión
         # encuentra un corte, se le SUMA la demora (desvío o espera, la menor).
         demora = 0.0
+        causa = ""
         if self.p.red is not None:
             dia = int(self.env.now // MINUTOS_POR_DIA) + 1
-            demora, _ = demora_de_viaje(
+            demora, causa = demora_de_viaje(
                 self.p.red,
                 self.env.now,
                 mes_del_dia(self.p.fecha_inicio, dia),
@@ -750,6 +780,9 @@ class EstacionDeServicio:
                 self.ind.contar("viajes_demorados")
                 self.ind.demora_ruta.agregar(demora / 60.0)
         plazo += demora
+        self.ind.pedidos.append(
+            PedidoCamion(producto, self.env.now, self.env.now + plazo, cantidad, demora, causa)
+        )
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
         pedido = (self.env.now, plazo, demora)
         self.pedidos_abiertos.setdefault(producto, []).append(pedido)
@@ -1085,7 +1118,7 @@ def simular(
 ) -> tuple[Indicadores, Traza | None]:
     """Corre UNA réplica del modelo y devuelve los indicadores (y la traza, si se pidió)."""
     env = simpy.Environment()
-    aleatorio = Aleatorio(semilla)
+    aleatorio = AleatorioDeterminista(semilla) if p.determinista else Aleatorio(semilla)
     indicadores = Indicadores(p)
     traza = Traza() if con_traza else None
 

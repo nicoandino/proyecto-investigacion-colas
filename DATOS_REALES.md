@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 108 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 41
+**Resumen:** 111 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 44
 
 ## La estación
 
@@ -111,6 +111,7 @@
 | INV-08 | Camión consolidado | True | — | 🟠 supuesto | Mendoza | media | Sitio Andino 2023 | — |
 | INV-09 | Crisis de abastecimiento (S7) | (72.0, 84.0, 96.0) | h | 🟡 estimación | Mendoza | baja | Los Andes 31-jul-2023 | — |
 | INV-11 | Ventana de la crisis de abastecimiento (S7): día de inicio y duración | (10, 3.5) | día · días | 🟠 supuesto | Mendoza | sin_dato | INV-09 (Los Andes 31-jul-2023: 3–4 días); el día de inicio es arbitrario | 3 días = (10, 3.0) · 4 días = (10, 4.0) |
+| INV-12 | Nivel inicial de los tanques en la simulación con datos reales | 1.0 | % | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): los tanques arrancan llenos | 75 % = 0.75 |
 | INV-10 | Nivel inicial del tanque | 0.75 | % | 🟠 supuesto | la estación | sin_dato | orquestador (INV-07) | — |
 
 ## Red de rutas
@@ -181,12 +182,14 @@
 | CAL-03 | Días de calentamiento | 2 | días | 🟠 supuesto | la estación | sin_dato | orquestador (B4) | — |
 | CAL-04 | Día animado | 2 | día | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 | CAL-05 | Intervalo de la traza | 0.5 | min | 🟠 supuesto | la estación | sin_dato | orquestador | — |
+| CAL-07 | Grabar la animación de todos los días | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): se anima todo el período, un día cada 5 s | — |
 | CAL-06 | Horizonte | mes | — | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 
 ## Modelo
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
+| MOD-02 | Simulación con datos reales: sin azar (determinista) | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): con datos reales no se sortea nada | con azar = False |
 | MOD-01 | Modelo de la estación (real vs. clásico) | True | — | 🟠 supuesto | la estación | sin_dato | orquestador (el clásico reproduce los dorados, §10.1) | clasico = False |
 
 ## Contradicciones entre fuentes y cuál se adoptó

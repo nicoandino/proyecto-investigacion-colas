@@ -46,6 +46,24 @@ def calendario_de_episodios(
     if g.contrato != "interrumpible" or g.episodios <= 0:
         return []
     episodios: list[tuple[int, int]] = []
+    if az.es_determinista:
+        # Sin azar: los episodios quedan equiespaciados dentro del invierno (o de sus días
+        # dentro del horizonte), siempre en las mismas fechas.
+        n, dur = g.episodios, g.dias_por_episodio
+        if g.episodios_en_horizonte:
+            candidatos = [
+                d for d in range(dias)
+                if (fecha_inicio + timedelta(days=d)).month in MESES_INVIERNO
+            ]
+            for k in range(1, n + 1):
+                if candidatos:
+                    episodios.append((candidatos[len(candidatos) * k // (n + 1)], dur))
+        else:
+            hueco = (DIAS_INVIERNO - n * dur) / (n + 1)
+            for k in range(1, n + 1):
+                corrimiento = round(k * hueco + (k - 1) * dur)
+                episodios.append(((INICIO_INVIERNO + timedelta(days=corrimiento) - fecha_inicio).days, dur))
+        return sorted(episodios)
     if g.episodios_en_horizonte:
         candidatos = [
             d for d in range(dias)

@@ -110,6 +110,15 @@ class ResultadoReplica:
     nivel_por_producto: tuple[tuple[str, float], ...] = ()            # litros promedio en el tanque
     litros_sin_stock_por_producto: tuple[tuple[str, float], ...] = () # litros no vendidos por día
     perdidos_sin_stock_por_producto: tuple[tuple[str, float], ...] = ()  # clientes por día
+    # Totales ENTEROS del período medido (rediseño v3: los clientes se cuentan, no se promedian)
+    totales: tuple[tuple[str, int], ...] = ()                     # llegadas, atendidos, perdidos…
+    totales_zona: tuple[tuple[str, int, int, int, int, int, int], ...] = ()
+    # (zona, llegadas, atendidos, perdidos por espera, cola llena, sin combustible, corte de GNC)
+    totales_producto: tuple[tuple[str, int, int, float], ...] = ()   # (producto, llegadas, atendidos, litros o m³)
+    dias_quiebre_total: tuple[tuple[str, int], ...] = ()          # días con quiebre de cada tanque
+    pedidos_total: tuple[tuple[str, int], ...] = ()               # camiones pedidos de cada tanque
+    tiempo_sin_stock: tuple[tuple[str, float], ...] = ()          # fracción del tiempo con cada tanque vacío
+    dias_medidos: int = 0
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -125,6 +134,12 @@ NO_METRICAS = {
     "nivel_por_producto",
     "litros_sin_stock_por_producto",
     "perdidos_sin_stock_por_producto",
+    "totales",
+    "totales_zona",
+    "totales_producto",
+    "dias_quiebre_total",
+    "pedidos_total",
+    "tiempo_sin_stock",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -294,6 +309,41 @@ def correr_replica(
         perdidos_sin_stock_por_producto=_por_tanque(
             p, ind, lambda pr: ind.c_producto[pr].perdidos_sin_combustible / dias
         ),
+        totales=(
+            ("llegadas", c.llegadas),
+            ("atendidos", c.atendidos_surtidor),
+            ("compras", c.compras_atendidas),
+            ("perdidos_espera", c.perdidos_surtidor),
+            ("perdidos_cola_llena", c.perdidos_cola_llena),
+            ("perdidos_sin_combustible", c.perdidos_sin_combustible),
+            ("perdidos_corte_gnc", c.perdidos_corte_gnc),
+            ("perdidos_caja", c.perdidos_caja),
+            ("migrados_gnc", c.migrados_gnc_a_nafta),
+            ("dias_con_quiebre", c.dias_con_quiebre),
+            ("dias_con_corte_gnc", c.dias_con_corte_gnc),
+        ),
+        totales_zona=tuple(
+            (
+                g.id, ind.c_grupo[g.id].llegadas, ind.c_grupo[g.id].atendidos,
+                ind.c_grupo[g.id].perdidos_espera, ind.c_grupo[g.id].perdidos_cola_llena,
+                ind.c_grupo[g.id].perdidos_sin_combustible, ind.c_grupo[g.id].perdidos_corte_gnc,
+            )
+            for g in p.grupos
+        ) if p.estacion_real else (),
+        totales_producto=tuple(
+            (pr, ind.c_producto[pr].llegadas, ind.c_producto[pr].atendidos, ind.c_producto[pr].litros_vendidos)
+            for pr in ind.c_producto
+        ) if p.estacion_real else (),
+        dias_quiebre_total=tuple(
+            (pr, ind.c_producto[pr].dias_con_quiebre) for pr in ind.c_producto
+        ) if p.estacion_real else (),
+        pedidos_total=tuple(
+            (i.producto, ind.c_producto[i.producto].pedidos_emitidos) for i in p.inventario
+        ) if p.estacion_real else (),
+        tiempo_sin_stock=tuple(
+            (pr, serie.promedio) for pr, serie in ind.sin_stock.items()
+        ) if p.estacion_real else (),
+        dias_medidos=p.dias_medidos,
     )
     return resultado, traza
 

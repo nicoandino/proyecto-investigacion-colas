@@ -113,7 +113,7 @@ from sim.red import (
     dias_de_mes_en_corrida,
     muestrear_plazos,
 )
-from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red
+from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red, vistas
 from ui.datos_ui import (
     csv_registro,
     esquema_estacion_html,
@@ -995,143 +995,8 @@ def promedio_pares(resultado: ResultadoEscenario, campo: str) -> dict[str, float
     return {k: v / len(resultado.replicas) for k, v in acumulado.items()}
 
 
-def tablas_real(p: ParametrosSimulacion, base: ResultadoEscenario) -> None:
-    """Indicadores por zona y por producto de la estación real."""
-    st.markdown("##### Por zona de surtidores")
-    esperas = promedio_tupla(base, "espera_por_grupo")
-    colas = promedio_tupla(base, "cola_por_grupo")
-    utils = promedio_tupla(base, "util_por_grupo")
-    st.dataframe(
-        pd.DataFrame(
-            {
-                "Zona": [f"{g.id} · {g.nombre}" for g in p.grupos],
-                "Caras": [g.caras for g in p.grupos],
-                "Espera hasta ser atendido (min)": [round(x, 2) for x in esperas],
-                "Cola promedio (autos)": [round(x, 3) for x in colas],
-                "Utilización de las caras": [f"{x * 100:.1f} %" for x in utils],
-            }
-        ),
-        hide_index=True,
-    )
-    st.markdown("##### Por producto")
-    atendidos = promedio_pares(base, "atendidos_por_producto")
-    litros = promedio_pares(base, "litros_vendidos_por_producto")
-    quiebres = promedio_pares(base, "dias_quiebre_por_producto")
-    st.dataframe(
-        pd.DataFrame(
-            {
-                "Producto": [pr.nombre for pr in p.productos],
-                "Clientes atendidos/día": [round(atendidos[pr.id], 1) for pr in p.productos],
-                "Vendido por día": [
-                    f"{litros[pr.id]:,.0f} {'m³' if pr.es_gnc else 'L'}" for pr in p.productos
-                ],
-                "Días con quiebre": [
-                    "—" if pr.es_gnc else f"{quiebres[pr.id]:.1f} %" for pr in p.productos
-                ],
-            }
-        ),
-        hide_index=True,
-    )
-    st.caption(
-        "El GNC se mide en **m³**, no en litros, y todavía no tiene cortes de invierno "
-        "(Fase 6). Los litros de la estación suman sólo los 4 combustibles líquidos."
-    )
-
-
-def pestania_indicadores(p: ParametrosSimulacion) -> None:
-    base = buscar(st.session_state.resultados, "Base")
-
-    if p.estacion_real:
-        st.subheader("Indicadores de la estación real")
-    else:
-        st.subheader("Indicadores del escenario Base (situación actual)")
-    st.caption(
-        f"Promedio de {st.session_state.replicas} réplicas de {p.dias} días, descartando "
-        f"{p.dias_calentamiento} día/s de calentamiento."
-    )
-
-    st.markdown("##### Líneas de espera")
-    fila = st.columns(4)
-    for columna, metrica in zip(fila, INDICADORES_COLAS[:4]):
-        tarjeta(columna, metrica, base)
-
-    st.markdown("##### Inventario")
-    fila = st.columns(4)
-    for columna, metrica in zip(fila, INDICADORES_INVENTARIO[:4]):
-        tarjeta(columna, metrica, base)
-
-    st.markdown("##### Clientes")
-    fila = st.columns(4)
-    for columna, metrica in zip(fila, INDICADORES_CLIENTES[:4]):
-        tarjeta(columna, metrica, base)
-
-    if p.estacion_real:
-        st.markdown("##### Playeros y cola")
-        fila = st.columns(4)
-        for columna, metrica in zip(
-            fila, (POR_CLAVE["util_playeros"], POR_CLAVE["perdidos_cola_llena_dia"])
-        ):
-            tarjeta(columna, metrica, base)
-        fila[2].metric(
-            "ρ analítico en la hora pico",
-            f"{p.rho_pico:.2f}",
-            help="ρ = λ_pico · E[servicio] ÷ playeros del turno más cargado "
-                 "(sólo nafta y diésel usan playero). ρ ≥ 1 ⇒ la cola crece sin parar.",
-            border=True,
-        )
-        tablas_real(p, base)
-
-    # Diagnóstico automático
-    utilizacion = base.prom("util_surtidores")
-    espera_pico = base.prom("espera_pico")
-    perdidos_cola = base.prom("perdidos_cola_dia")
-    perdidos_nafta = base.prom("perdidos_sin_combustible_dia")
-
-    if perdidos_nafta > perdidos_cola * 1.5:
-        st.error(
-            f"Se pierden más clientes por falta de combustible ({perdidos_nafta:.1f} por día) "
-            f"que por cola larga ({perdidos_cola:.1f} por día). El cuello de botella está en "
-            f"el abastecimiento, no en la cantidad de surtidores.",
-            icon="🛢️",
-        )
-    elif perdidos_cola > perdidos_nafta * 1.5:
-        st.warning(
-            f"Se pierden más clientes por cola larga ({perdidos_cola:.1f} por día) que por "
-            f"falta de combustible ({perdidos_nafta:.1f} por día). El cuello de botella es "
-            f"la capacidad de atención.",
-            icon="🚗",
-        )
-
-    if utilizacion < 0.5 and espera_pico > 2.0:
-        if p.estacion_real:
-            st.info(
-                f"Ojo con el promedio: las caras están ocupadas apenas el "
-                f"{utilizacion * 100:.0f} % del tiempo y los playeros el "
-                f"{base.prom('util_playeros') * 100:.0f} %, pero en la hora pico se espera "
-                f"{espera_pico:.1f} min. El cuello no son las caras sino los playeros en "
-                f"las horas pico.",
-                icon="⏰",
-            )
-        else:
-            st.info(
-                f"Ojo con el promedio: los surtidores están ocupados apenas el "
-                f"{utilizacion * 100:.0f} % del tiempo, pero en la hora pico se espera "
-                f"{espera_pico:.1f} min. El problema no es de capacidad total sino de "
-                f"concentración horaria.",
-                icon="⏰",
-            )
-
-    st.divider()
-    st.subheader("Detalle completo")
-    t1, t2, t3, t4 = st.tabs(["Colas", "Clientes", "Inventario", "Complementarios"])
-    t1.dataframe(tabla_detalle(base, INDICADORES_COLAS), hide_index=True)
-    t2.dataframe(tabla_detalle(base, INDICADORES_CLIENTES), hide_index=True)
-    t3.dataframe(tabla_detalle(base, INDICADORES_INVENTARIO), hide_index=True)
-    t4.dataframe(tabla_detalle(base, INDICADORES_COMPLEMENTARIOS), hide_index=True)
-
-
 # =============================================================================
-# Pestaña: demanda (Monte Carlo)
+# Pestaña: qué se sorteó (sólo en la simulación editada)
 # =============================================================================
 def tabla_monte_carlo(etiquetas: list[str], pesos_sorteo: tuple[float, ...],
                       titulo_columna: str) -> pd.DataFrame:
@@ -1152,12 +1017,29 @@ def tabla_monte_carlo(etiquetas: list[str], pesos_sorteo: tuple[float, ...],
     )
 
 
-def pestania_demanda_real(p: ParametrosSimulacion) -> None:
-    """Litros/mes → clientes/día, y los dos Monte Carlo de 5 pasos de la estación real."""
+def pestania_sorteos(p: ParametrosSimulacion) -> None:
+    """Qué se sorteó en la simulación EDITADA: los Monte Carlo de 5 pasos, la semilla y los demás azares."""
     traza = st.session_state.traza
     mes_inicio = p.fecha_inicio[0]
 
-    st.subheader("De los litros por mes a los clientes por día")
+    st.subheader("Qué se sorteó en esta simulación")
+    st.warning(
+        f"Esta simulación fue **editada**, así que usa azar (semilla **{st.session_state.semilla_usada}**; con la "
+        f"misma semilla da siempre lo mismo). Acá se explica cada cosa que se sorteó. En la simulación con "
+        f"datos reales no se sortea nada y esta pestaña no existe.",
+        icon="🎲",
+    )
+    st.markdown(
+        "- **Cuándo llega cada cliente:** proceso de Poisson no homogéneo (tiempos exponenciales con la tasa de "
+        "cada hora del perfil).\n"
+        "- **Qué producto y qué vehículo es:** dos sorteos Monte Carlo de 5 pasos (tablas de abajo).\n"
+        "- **Cuántos litros carga y cuánto tarda:** distribuciones triangulares (mínimo, moda, máximo).\n"
+        "- **Si entra al minimarket y cuánto tarda en la caja:** Bernoulli y triangular.\n"
+        "- **Cuánto tarda cada camión:** triangular (24 · 36 · 48 h) más la demora de un corte de ruta, si hay.\n"
+        "- **Las fechas de los cortes de GNC y cuántos clientes pasan a Súper.**"
+    )
+
+    st.markdown("##### De los litros por mes a los clientes por día")
     st.markdown(
         "La demanda de entrada son **litros por mes**; los clientes por día **se derivan** "
         "(nunca al revés: dividir litros por 30 y llamarlo 'autos' fue el error B1)."
@@ -1270,7 +1152,7 @@ def pestania_demanda_real(p: ParametrosSimulacion) -> None:
 
 def pestania_demanda(p: ParametrosSimulacion) -> None:
     if p.estacion_real:
-        pestania_demanda_real(p)
+        pestania_sorteos(p)
         return
     traza = st.session_state.traza
 
@@ -3260,45 +3142,45 @@ def main() -> None:
         st.session_state.politica_actual,
     )
 
-    pestanias = st.tabs(
-        [
-            "🏪 La estación",
-            "🎬 Animación",
-            "📊 Indicadores",
-            "🎲 Demanda",
-            "🛢️ Inventario",
-            "🗺️ Red y rutas",
-            "🔥 GNC",
-            "⚖️ Escenarios",
-            "💰 Economía",
-            "📝 Conclusión",
-            "📖 Modelo y método",
-            "📚 Datos y fuentes",
-        ]
-    )
-    with pestanias[0]:
+    editada = st.session_state.get("modo") == "editada"
+    nombres_tabs = [
+        "🏪 La estación", "🎬 Animación", "📊 Indicadores", "🎲 Demanda", "🛢️ Inventario",
+        "🗺️ Red y rutas", "🔥 GNC", "⚖️ Escenarios", "💰 Economía", "📝 Conclusión",
+        "📖 Modelo y método", "📚 Datos y fuentes",
+    ]
+    if editada:
+        nombres_tabs.insert(4, "🎲 Qué se sorteó")      # sólo existe si la simulación fue editada
+    pestanias = dict(zip(nombres_tabs, st.tabs(nombres_tabs)))
+    resultado = st.session_state.resultados[0]
+    with pestanias["🏪 La estación"]:
         pestania_estacion()
-    with pestanias[1]:
+    with pestanias["🎬 Animación"]:
         pestania_animacion(p_corrida)
-    with pestanias[2]:
-        pestania_indicadores(p_corrida)
-    with pestanias[3]:
-        pestania_demanda(p_corrida)
-    with pestanias[4]:
+    with pestanias["📊 Indicadores"]:
+        vistas.pestania_indicadores(
+            p_corrida, resultado, st.session_state.traza, st.session_state.periodo,
+            st.session_state.modo,
+        )
+    with pestanias["🎲 Demanda"]:
+        vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
+    if editada:
+        with pestanias["🎲 Qué se sorteó"]:
+            pestania_sorteos(p_corrida)
+    with pestanias["🛢️ Inventario"]:
         pestania_inventario(p_corrida, st.session_state.parametros_eco)
-    with pestanias[5]:
+    with pestanias["🗺️ Red y rutas"]:
         pestania_red(p_corrida)
-    with pestanias[6]:
+    with pestanias["🔥 GNC"]:
         pestania_gnc(p_corrida)
-    with pestanias[7]:
+    with pestanias["⚖️ Escenarios"]:
         pestania_comparar(p_corrida)
-    with pestanias[8]:
+    with pestanias["💰 Economía"]:
         pestania_economia_real(p_corrida, st.session_state.parametros_eco)
-    with pestanias[9]:
+    with pestanias["📝 Conclusión"]:
         pestania_conclusion()
-    with pestanias[10]:
+    with pestanias["📖 Modelo y método"]:
         pestania_modelo(p_corrida)
-    with pestanias[11]:
+    with pestanias["📚 Datos y fuentes"]:
         pestania_datos_fuentes()
 
     pie_de_resultados()

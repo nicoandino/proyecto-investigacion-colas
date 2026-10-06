@@ -295,6 +295,8 @@ class Indicadores:
             for pr, inv in zip(ids_liquidos, p.inventario)
         }
         self.sin_combustible = SerieTemporal()   # indicador 0/1: fracción de tiempo sin nafta
+        # 0/1 por tanque: fracción del tiempo en que ese producto no alcanza ni para la carga más chica
+        self.sin_stock = {pr: SerieTemporal() for pr in ids_liquidos}
         self.plazo_entrega = Muestras()
         self.demora_ruta = Muestras()        # horas de demora por corte de ruta (sólo los demorados)
 
@@ -325,6 +327,7 @@ class Indicadores:
             self.compresores_ocupados,
             self.nivel_tanque,
             self.sin_combustible,
+            *self.sin_stock.values(),
             *self.colas_grupo.values(),
             *self.ocupados_grupo.values(),
             *self.niveles.values(),

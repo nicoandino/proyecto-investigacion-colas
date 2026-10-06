@@ -55,6 +55,9 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   32. Etapa 4: los totales enteros cierran por zona, producto, hora y día, y el tiempo sin
+       combustible por tanque es coherente con los días de quiebre.
+
    31. Etapa 3: capacidad de cola de 3 lugares por cara, la cola no la supera, el tablero graba todos
        los días, litros por producto coherentes con el motor y peso del año completo.
 
@@ -1769,6 +1772,39 @@ def main() -> int:
         and peso_y < 8.0,
         "El año completo se anima con un cuadro cada 36 min y el HTML pesa menos de 8 MB",
         f"{len(traza_y.cuadros):,} cuadros · {peso_y:.2f} MB",
+    )
+
+    # ------------------------------------------------------------------ 28
+    separador("28. Rediseño, etapa 4: totales enteros y tiempo sin combustible por tanque")
+    r28, traza28 = correr_replica(
+        con_periodo(ParametrosSimulacion().datos_reales(), por_dias(30, 1, 1)), semilla=1, con_traza=True
+    )
+    t28 = dict(r28.totales)
+    perdidos28 = (
+        t28["perdidos_espera"] + t28["perdidos_cola_llena"] + t28["perdidos_sin_combustible"]
+        + t28["perdidos_corte_gnc"]
+    )
+    zonas_llegadas = sum(z[1] for z in r28.totales_zona)
+    productos_llegadas = sum(x[1] for x in r28.totales_producto)
+    controlar(
+        0 <= t28["llegadas"] - t28["atendidos"] - perdidos28 <= 60
+        and zonas_llegadas == t28["llegadas"] == productos_llegadas
+        and sum(x[2] for x in r28.totales_producto) == t28["atendidos"]
+        and sum(traza28.llegadas_por_hora) == t28["llegadas"]
+        and sum(d.autos_llegados for d in traza28.dias) == t28["llegadas"],
+        "Los totales cierran: llegadas = Σ por zona = Σ por producto = Σ por hora = Σ por día",
+        f"{t28['llegadas']} llegadas · {t28['atendidos']} atendidos · {perdidos28} perdidos",
+    )
+    quiebres = dict(r28.dias_quiebre_total)
+    vacios = dict(r28.tiempo_sin_stock)
+    controlar(
+        all(0.0 <= f <= 1.0 for f in vacios.values())
+        and all(vacios[pr] == 0 or quiebres[pr] > 0 for pr in vacios)
+        and abs(sum(dict(r28.pedidos_total).values()) - r28.pedidos_dia * 30) < 0.5,
+        "Un tanque con tiempo sin combustible tuvo días de quiebre; los camiones pedidos cierran",
+        "tiempo sin combustible por tanque: "
+        + " · ".join(f"{pr} {100 * f:.1f} %" for pr, f in vacios.items())
+        + f" | días con quiebre: {quiebres}",
     )
 
     # ------------------------------------------------------------------

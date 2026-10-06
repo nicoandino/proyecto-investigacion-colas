@@ -72,7 +72,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 | **1 · Motor ✅** | Modo `real` (determinista) y modo `editado` (con azar); tanques llenos al día 0; registro de pedidos de camión (día de pedido y de llegada, ruta, km, costo); grabación de todos los días | `clasico()` sigue dando los dorados; el modo real da siempre lo mismo; conservación de clientes y litros |
 | **2 · Menú inicial ✅** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
 | **3 · Animación ✅** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
-| **4 · Indicadores y Demanda** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
+| **4 · Indicadores y Demanda ✅** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
 | **5 · Inventario, Red y GNC** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | idem |
 | **6 · Escenarios, Economía, Conclusión** | Escenario elegido antes de simular y explicado; economía separando verificable y supuesto; conclusión según el período; réplicas y efecto de cortes en pestaña aparte; tornado fuera | idem |
 | **7 · Frontend** | Ajustes en un menú (no en la barra lateral), nuevo diseño con una skill de diseño | QA visual en escritorio y celular |
@@ -153,3 +153,24 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
   sólo en invierno, el año completo carga, **0 errores de consola**. Capturas en `reports/qa/etapa3/`.
 - **Pendiente:** los números "esperados" de las barras (clientes, litros, ventas) son los del día según el Registro, no un
   objetivo del negocio; la pestaña Animación sigue dentro de las pestañas de arriba (el menú lateral del diseño llega en la etapa 7).
+
+## 9. Etapa 4 cerrada (6/10/2026)
+
+- **Indicadores** (`ui/vistas.py`): un menú **"¿Qué querés saber?"** con Resumen · Colas y esperas · Clientes · Playeros y
+  surtidores · Inventario · Detalle completo, sobre el **promedio del período elegido**. Los clientes se cuentan (enteros, punto de
+  miles); sólo los tiempos y las utilizaciones llevan decimales. Cada sección trae **"¿Cómo se comprueba?"** con la cuenta y los
+  números de la corrida; el diagnóstico (se pierden clientes por X, "ojo con el promedio") queda en el Resumen. Se sacaron *nivel de
+  servicio* y los litros vendidos del inventario; se mantienen *días con quiebre* y *tiempo sin combustible* (ahora **por tanque**).
+  El detalle completo es una sola tabla ordenada por tema (Indicador · Valor · Unidad · Cómo se calcula).
+- **Demanda** verificable: la cadena litros → clientes con su cuenta, el perfil del día (peso, % del día, clientes esperados contra
+  simulados, espera por hora), la mezcla de productos (esperados contra simulados) y el día a día. **Sin Monte Carlo** y sin
+  "número aleatorio". La pestaña vieja pasa a **🎲 Qué se sorteó**, que **sólo existe si la simulación fue editada**: explica la
+  semilla, el Poisson, los dos Monte Carlo de 5 pasos, las triangulares y los cortes de GNC.
+- **Motor:** `ResultadoReplica` trae totales enteros (llegadas, atendidos, perdidos por motivo, por zona y por producto, días con quiebre,
+  camiones pedidos) y el **tiempo sin combustible de cada tanque**. Se corrigió que el **último día de la corrida nunca se registraba**
+  (la corrida cortaba justo cuando se cerraba): en la estación real se corre un instante más; el caso clásico no se toca (dorados).
+- **Compuerta:** `verificar.py` **118/118** (control 28: llegadas = Σ por zona = Σ por producto = Σ por hora = Σ por día) · dorados
+  exactos · QA con Playwright (`reports/qa_etapa4_app.py`): las 6 secciones de Indicadores, Demanda sin Monte Carlo ni "número
+  aleatorio", "Qué se sorteó" ausente con datos reales y presente al editar, **0 errores de consola**. Capturas en `reports/qa/etapa4/`.
+- **Pendiente:** con estacionalidad neutra (default, C10) el verano **no** es más cargado que el invierno; para que el turismo suba la
+  demanda hay que usar el preset "proxy turístico" (hoy sólo en el escenario S11). Inventario, Red y GNC siguen con el diseño viejo (etapa 5).

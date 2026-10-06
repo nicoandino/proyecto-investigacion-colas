@@ -689,6 +689,10 @@ class EstacionDeServicio:
         ) else 0.0
         if sin_stock != self.ind.sin_combustible.valor:
             self.ind.sin_combustible.cambiar(self.env.now, sin_stock)
+        for pr, serie in self.ind.sin_stock.items():
+            vacio = 1.0 if self.niveles[pr] < self.min_carga[pr] else 0.0
+            if vacio != serie.valor:
+                serie.cambiar(self.env.now, vacio)
 
     def hay_combustible(self, auto: Auto) -> bool:
         if not self.es_real:
@@ -1127,7 +1131,9 @@ def simular(
     traza = Traza() if con_traza else None
 
     EstacionDeServicio(env, p, aleatorio, indicadores, traza)
-    env.run(until=p.duracion)
+    # Estación real: se corre un instante más para que se cierre el ÚLTIMO día (su registro, sus días con
+    # quiebre). El caso clásico no se toca: los dorados incluyen ese comportamiento.
+    env.run(until=p.duracion + (1e-6 if p.estacion_real else 0.0))
     indicadores.cerrar(p.duracion)
 
     if traza is not None:

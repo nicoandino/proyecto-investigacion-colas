@@ -58,6 +58,8 @@ class Cuadro:
     # entre 0 y 1 (-1 si no hay pedido), horas que faltan para que llegue, horas de
     # demora que le agregó un corte de ruta).
     tanques: tuple = ()
+    # Litros (m³ el GNC) vendidos de cada producto, acumulados; el orden es el de `p.productos`.
+    litros_producto: tuple = ()
 
     @property
     def perdidos(self) -> int:

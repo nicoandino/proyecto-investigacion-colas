@@ -563,6 +563,9 @@ class EstacionDeServicio:
                 perdidos_corte_gnc=self.ind.c_total.perdidos_corte_gnc,
                 grupos=self._foto_grupos(),
                 tanques=self._foto_tanques(),
+                litros_producto=tuple(
+                    self.ind.c_producto_total[pr.id].litros_vendidos for pr in self.p.productos
+                ) if self.es_real else (),
             )
             yield self.env.timeout(self.p.dt_traza)
 
@@ -596,6 +599,8 @@ class EstacionDeServicio:
                     tuple(self._indice_producto(a.producto) for a in cola[:24]),
                     len(cola),
                     self.ind.c_grupo_total[grupo.id].perdidos_cola_llena,
+                    self.ind.esperas_grupo[grupo.id].suma,        # esperas acumuladas de la zona
+                    self.ind.esperas_grupo[grupo.id].n,
                 )
             )
         return tuple(salida)
@@ -935,9 +940,8 @@ class EstacionDeServicio:
         grupo = auto.grupo
 
         # ¿Hay lugar en la cola? (capacidad finita, PER-05)
-        if self.p.capacidad_cola is not None and (
-            self._largo_cola(grupo) >= self.p.capacidad_cola
-        ):
+        capacidad = self.p.capacidad_de(grupo)
+        if capacidad is not None and self._largo_cola(grupo) >= capacidad:
             self.registrar_perdida(auto, motivo="cola_llena")
             return False
 

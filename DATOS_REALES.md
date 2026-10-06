@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 113 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 46
+**Resumen:** 114 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 47
 
 ## La estación
 
@@ -52,6 +52,7 @@
 | PER-03 | Encargado / personal de tienda | encargado 1 (M, T); tienda 1 (M, T) — sólo costo | personas | 🟡 estimación | la estación | baja | DATOS §4 | — |
 | PER-04 | El GNC retiene playero | False | — | 🟠 supuesto | la estación | sin_dato | orquestador | sí = True |
 | PER-05 | Capacidad de cola por grupo | 8 | autos | 🟠 supuesto | la estación | sin_dato | orquestador (relevar) | 4 = 4 · 14 = 14 |
+| PER-07 | Lugares de cola por cara | 3 | autos | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): todas las caras tienen la misma capacidad de cola | 8 por zona = 8 |
 | PER-06 | Disciplina de cola | por_grupo | — | 🟠 supuesto | la estación | sin_dato | CASO §7 | por_cara = por_cara |
 
 ## Demanda

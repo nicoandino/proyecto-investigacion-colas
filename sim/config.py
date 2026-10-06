@@ -697,7 +697,8 @@ class ParametrosSimulacion:
     playeros_por_turno: tuple[int, int, int] = valor("PER-01")  # noche · mañana · tarde
     turnos: tuple[tuple[float, int], ...] = turnos_de(valor("PER-01"))  # (hora, playeros)
     pct_gnc: float = valor("DEM-05")
-    capacidad_cola: int | None = valor("PER-05")
+    capacidad_cola: int | None = valor("PER-05")   # por zona; la pisa `cola_por_cara` si está
+    cola_por_cara: int | None = valor("PER-07")    # lugares de cola de CADA cara (misma en todas)
     disciplina_cola: str = valor("PER-06")       # "por_grupo" | "por_cara"
     sorteo_producto_primero: bool = True         # clásico lo apaga para reproducir los dorados
     tabla_demanda_relativa: bool = True          # DEM-07: factores relativos × litros del día
@@ -786,6 +787,12 @@ class ParametrosSimulacion:
     def dias_medidos(self) -> int:
         return self.dias - self.dias_calentamiento
 
+    def capacidad_de(self, id_grupo: str) -> int | None:
+        """Lugares de cola de una zona: `cola_por_cara` × sus caras (o la capacidad fija por zona)."""
+        if self.cola_por_cara is not None:
+            return self.cola_por_cara * next(g.caras for g in self.grupos if g.id == id_grupo)
+        return self.capacidad_cola
+
     def datos_reales(self) -> ParametrosSimulacion:
         """Los mismos parámetros pero para la **simulación con datos reales** (sin azar).
 
@@ -843,6 +850,7 @@ class ParametrosSimulacion:
             sorteo_producto_primero=False,
             tabla_demanda_relativa=False,
             capacidad_cola=None,
+            cola_por_cara=None,
             red=None,
             gnc=None,
             tanque=ParametrosTanque(

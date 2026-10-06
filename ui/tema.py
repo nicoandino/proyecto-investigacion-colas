@@ -70,6 +70,29 @@ COLOR_PRODUCTO = {
     "gnc": PRODUCTO["gnc"],
 }
 
+# --- Tablero oscuro de la animación (rediseño v3) ------------------------------------------
+OSC_FONDO = "#0A1220"
+OSC_PANEL = "#111D33"
+OSC_PANEL_2 = "#17263F"
+OSC_BORDE = "#2A3F63"
+OSC_TEXTO = "#EAF0F8"
+OSC_TENUE = "#9DB0CC"
+OSC_ASFALTO = "#2C313C"
+OSC_ASFALTO_2 = "#383E4B"
+OSC_ARBOL = "#1E5B34"
+OSC_ARBOL_2 = "#2A7345"
+OSC_VERDE = "#34D399"
+OSC_TURQUESA = "#2DD4BF"
+
+#: Color de cada producto sobre fondo oscuro (el diésel gris y el turquesa oscuro no se ven).
+COLOR_PRODUCTO_OSCURO = {
+    "super": AMARILLO,
+    "vpower": ROJO,
+    "diesel_g2": GRIS,
+    "diesel_g3": OSC_TURQUESA,
+    "gnc": AZUL,
+}
+
 #: Pares declarados para el control de contraste (WCAG ≥ 4,5:1, §10.3/N15).
 PARES_CONTRASTE = (
     ("TINTA/AMARILLO", TINTA, AMARILLO),
@@ -77,6 +100,11 @@ PARES_CONTRASTE = (
     ("TINTA/FONDO_PANEL", TINTA, FONDO_PANEL),
     ("AMARILLO/ASFALTO", AMARILLO, ASFALTO),
     ("FONDO/ROJO", FONDO, ROJO),
+    ("OSC_TEXTO/OSC_PANEL", OSC_TEXTO, OSC_PANEL),
+    ("OSC_TENUE/OSC_PANEL", OSC_TENUE, OSC_PANEL),
+    ("OSC_TEXTO/OSC_FONDO", OSC_TEXTO, OSC_FONDO),
+    ("AMARILLO/OSC_PANEL", AMARILLO, OSC_PANEL),
+    ("OSC_VERDE/OSC_PANEL", OSC_VERDE, OSC_PANEL),
 )
 
 
@@ -184,4 +212,33 @@ def paleta_json() -> dict:
         "neumatico": NEUMATICO,
         "vidrio": VIDRIO,
         "plata": PLATA,
+    }
+
+
+def paleta_oscura_json() -> dict:
+    """Colores del tablero oscuro de la animación (ningún hex en `ui/animacion.py`)."""
+    return {
+        "fondo": OSC_FONDO,
+        "panel": OSC_PANEL,
+        "panel2": OSC_PANEL_2,
+        "borde": OSC_BORDE,
+        "tinta": OSC_TEXTO,
+        "tenue": OSC_TENUE,
+        "asfalto": OSC_ASFALTO,
+        "asfalto2": OSC_ASFALTO_2,
+        "linea": AMARILLO,
+        "amarillo": AMARILLO,
+        "rojo": ROJO,
+        "azul": AZUL,
+        "libre": OSC_VERDE,
+        "naranja": NARANJA,
+        "arbol": OSC_ARBOL,
+        "arbol2": OSC_ARBOL_2,
+        "faros": FARO,
+        "neumatico": NEUMATICO,
+        "vidrio": VIDRIO,
+        "plata": PLATA,
+        "negro": OSC_FONDO,
+        "blanco": FONDO,
+        "producto": COLOR_PRODUCTO_OSCURO,
     }

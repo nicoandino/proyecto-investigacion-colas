@@ -30,7 +30,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   desde Dock Sud (991 km) o Luján por una red de rutas (Dijkstra) con cortes.
 - **GNC:** 3 compresores; episodios de corte total en jun–ago; el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** indicadores con IC 95 %, 19 escenarios (S0–S12) con diferencias pareadas, estaciones del año,
-  economía mensual, tornado de sensibilidad. `verificar.py`: **112 controles**.
+  economía mensual, tornado de sensibilidad. `verificar.py`: **116 controles**.
 
 ## Reglas de oro (no romper)
 
@@ -50,7 +50,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      112 controles
+verificar.py      116 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · gnc · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -62,7 +62,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 112 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 116 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.

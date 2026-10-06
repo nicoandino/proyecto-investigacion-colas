@@ -71,7 +71,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 | **0** | Limpieza de documentos (hecha, `0eaae74`) | un solo md de contexto y uno de datos |
 | **1 · Motor ✅** | Modo `real` (determinista) y modo `editado` (con azar); tanques llenos al día 0; registro de pedidos de camión (día de pedido y de llegada, ruta, km, costo); grabación de todos los días | `clasico()` sigue dando los dorados; el modo real da siempre lo mismo; conservación de clientes y litros |
 | **2 · Menú inicial ✅** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
-| **3 · Animación** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
+| **3 · Animación ✅** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
 | **4 · Indicadores y Demanda** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
 | **5 · Inventario, Red y GNC** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | idem |
 | **6 · Escenarios, Economía, Conclusión** | Escenario elegido antes de simular y explicado; economía separando verificable y supuesto; conclusión según el período; réplicas y efecto de cortes en pestaña aparte; tornado fuera | idem |
@@ -135,3 +135,21 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 - **Pendiente para las etapas siguientes:** la animación sigue siendo de un día (etapa 3); los indicadores todavía muestran
   "± IC" con 0 réplicas y decimales (etapa 4); la pestaña Demanda todavía muestra el Monte Carlo y no hay pestaña "Qué se
   sorteó" (etapa 4); Escenarios, Economía y Conclusión no distinguen aún lo verificable de lo supuesto (etapa 6).
+
+## 8. Etapa 3 cerrada (6/10/2026)
+
+- **Tablero nuevo** (`ui/animacion.py`, reescrito; tema oscuro de `ui/tema.py`, sin logo de Shell): barra superior (estado,
+  día y hora, clientes de hoy, litros de hoy, ventas de hoy, tiempo simulado, ▶/⏸), el playón visto desde arriba con las zonas
+  A, B y C, **cada cara con su surtidor (S1…) arriba y 3 lugares de cola abajo**, panel derecho (minimarket, playeros, GNC,
+  camión cisterna, color = producto) y panel inferior (tanques, colas actuales con su espera, indicadores del día con barras de
+  avance y un **gráfico a elección**: clientes por hora, ventas acumuladas, autos en cola, caras ocupadas, u ocultarlo).
+- **Se anima todo el período**: un día cada 5 segundos (2, 5, 10 o 20 s por día), con ◀ Día / Día ▶, barra para saltar y los
+  saltos a la hora pico, el primer quiebre, la próxima descarga y el corte de GNC (deshabilitados si no ocurren en el período).
+  Un cuadro cada 12 min hasta 133 días; para el año completo, cada 36 min (14.600 cuadros, 3,8 MB).
+- **Motor:** la cola es de **3 lugares por cara** (PER-07: A 12 · B 6 · C 18; antes 8 por zona, PER-05); cada cuadro trae los
+  litros por producto y las esperas acumuladas de cada zona. `clasico()` no tiene cola finita y los dorados siguen exactos.
+- **Compuerta:** `verificar.py` 116/116 (control 27) · QA con Playwright (`reports/qa_animacion.py` sin Streamlit y
+  `reports/qa_etapa3_app.py` dentro de la app): 7 s de reproducción caen en el día 2 a las 09:36, el corte de GNC se habilita
+  sólo en invierno, el año completo carga, **0 errores de consola**. Capturas en `reports/qa/etapa3/`.
+- **Pendiente:** los números "esperados" de las barras (clientes, litros, ventas) son los del día según el Registro, no un
+  objetivo del negocio; la pestaña Animación sigue dentro de las pestañas de arriba (el menú lateral del diseño llega en la etapa 7).

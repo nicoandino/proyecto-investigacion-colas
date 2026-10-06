@@ -911,43 +911,35 @@ def construir_demanda(tabla: pd.DataFrame) -> DemandaDiaria:
 # =============================================================================
 # Pestaña: animación
 # =============================================================================
+def precios_por_producto(eco: ParametrosEconomicos) -> dict[str, float]:
+    """Precio de cada producto del motor ($/L; el GNC por m³), con V-Power = el 'premium' de ECO-08."""
+    d = dict(eco.precios)
+    return {
+        "super": d["super"], "vpower": d["premium"], "diesel_g2": d["diesel_g2"],
+        "diesel_g3": d["diesel_g3"], "gnc": d["gnc"],
+    }
+
+
 def pestania_animacion(p: ParametrosSimulacion) -> None:
-    c1, c2 = st.columns([2, 3])
-    if p.dias > 1:
-        dia = c1.slider(
-            "Día a animar", 1, min(p.dias, 90), min(p.dia_animado, p.dias), 1,
-            help="Se anima un día completo. Los primeros días son de calentamiento "
-                 "(se simulan pero no se miden).",
-        )
-    else:
-        dia = 1
-    traza = correr_traza_cacheada(replace(p, dia_animado=int(dia)), st.session_state.semilla_usada)
-    c2.markdown(f"**{animacion.fecha_texto(p, int(dia))}**")
-    if dia <= p.dias_calentamiento:
-        c2.caption("Este día es de calentamiento: el sistema todavía no está en régimen.")
-
-    if p.estacion_real:
-        st.caption(
-            "Estación real: avenida Balloffet, playón techado con las zonas A (nafta), B "
-            "(diésel) y C (GNC), playeros, minimarket, un tanque por producto y el camión "
-            "en viaje. Cada auto tiene el color de su producto."
-        )
-    else:
-        st.caption(
-            f"Caso clásico ({p.surtidores} surtidores, {p.cajas} caja/s, un solo tanque). "
-            f"Se anima un día completo, de 00:00 a 24:00."
-        )
-
+    """El tablero animado de TODO el período: un día cada 5 segundos (se puede cambiar)."""
+    dt = animacion.dt_para(p.dias)
+    p_anim = replace(p, animar_todo=True, dt_traza=dt, dia_animado=1)
+    with st.spinner("Preparando la animación de todos los días…"):
+        traza = correr_traza_cacheada(p_anim, st.session_state.semilla_usada)
+    periodo = st.session_state.get("periodo")
+    st.caption(
+        f"{periodo.titulo + ' — ' + periodo.texto + '. ' if periodo else ''}"
+        f"Se reproducen los {p.dias} días uno detrás de otro (por defecto, 5 segundos cada día); "
+        f"la barra de abajo permite saltar a cualquier día. Cada auto tiene el color de su producto; "
+        f"cada cara tiene 3 lugares de cola. Un cuadro cada {dt:g} minutos simulados."
+    )
     componentes.html(
-        animacion.reproductor_html(traza, p, int(dia), animacion.fecha_texto(p, int(dia))),
+        animacion.reproductor_html(
+            traza, p_anim, precios_por_producto(st.session_state.parametros_eco),
+            periodo.titulo if periodo else "",
+        ),
         height=animacion.ALTO_COMPONENTE,
     )
-
-    st.divider()
-    caras = sum(g.caras for g in p.grupos) if p.estacion_real else p.surtidores
-    g1, g2 = st.columns(2)
-    g1.plotly_chart(graficos.grafico_evolucion_colas(traza, int(dia)), key="g_colas")
-    g2.plotly_chart(graficos.grafico_ocupacion(traza, caras, int(dia)), key="g_ocupacion")
 
 
 # =============================================================================

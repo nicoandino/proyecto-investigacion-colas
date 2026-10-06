@@ -272,8 +272,8 @@ def _construir_ejes() -> tuple[_Eje, ...]:
              solo_economia=True),
         # --- Ejes sin contradicción numerada pero con rango en el Registro --------------------
         _Eje("PER-05", "Capacidad de la cola por zona", "", ("PER-05",),
-             ((f"{_bajo('PER-05')} autos", _p(capacidad_cola=_bajo("PER-05"))),
-              (f"{_alto('PER-05')} autos", _p(capacidad_cola=_alto("PER-05"))))),
+             ((f"{_bajo('PER-05')} autos por zona", _p(capacidad_cola=_bajo("PER-05"), cola_por_cara=None)),
+              (f"{_alto('PER-05')} autos por zona", _p(capacidad_cola=_alto("PER-05"), cola_por_cara=None)))),
         _Eje("PER-06", "Disciplina de cola", "", ("PER-06",),
              (("una fila por cara", _p(disciplina_cola="por_cara")),)),
         _Eje("TIE-06", "Paciencia en la cola del surtidor", "", ("TIE-06",),
@@ -437,6 +437,7 @@ def correr_sensibilidad(
 #: Datos con rango o alternativas que NO son eje, y por qué (cada motivo es verificable).
 NO_ES_EJE: dict[str, str] = {
     "MOD-01": "es el caso clásico (otro modelo), no un valor incierto: se elige en la barra lateral",
+    "PER-07": "reemplaza a PER-05: la cola es de 3 lugares por cara (el eje PER-05 sigue variando la capacidad por zona)",
     "MOD-02": "elige entre la simulación con datos reales (sin azar) y la que tiene azar: no es un valor",
     "INV-12": "condición de arranque de la simulación con datos reales (tanques llenos); el modo con azar usa INV-10",
     "DEM-00": "cambia el tratamiento del azar de la demanda (esperada vs. Monte Carlo), no un valor",

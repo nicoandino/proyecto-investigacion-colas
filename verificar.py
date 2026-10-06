@@ -55,6 +55,9 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   31. Etapa 3: capacidad de cola de 3 lugares por cara, la cola no la supera, el tablero graba todos
+       los días, litros por producto coherentes con el motor y peso del año completo.
+
    30. Etapa 2: períodos del menú (días, meses, estaciones, año), cortes de GNC según el
        período, ediciones (demanda, doble pico, GNC, playeros) y precio por litro.
 
@@ -155,7 +158,7 @@ def main() -> int:
     salidas = t.atendidos_surtidor + perdidos
     en_sistema = t.llegadas - salidas
     caras_total = sum(g.caras for g in p.grupos)
-    holgura = caras_total + len(p.grupos) * (p.capacidad_cola or 0)
+    holgura = caras_total + sum(p.capacidad_de(g.id) or 0 for g in p.grupos)
     controlar(
         0 <= en_sistema <= holgura,
         "Llegadas = atendidos + Σ perdidos (por motivo) + los que quedaron adentro",
@@ -173,7 +176,7 @@ def main() -> int:
             cg.atendidos + cg.perdidos_espera + cg.perdidos_cola_llena
             + cg.perdidos_sin_combustible + cg.perdidos_corte_gnc
         )
-        if not 0 <= adentro <= g.caras + (p.capacidad_cola or 0):
+        if not 0 <= adentro <= g.caras + (p.capacidad_de(g.id) or 0):
             grupos_bien = False
             peor_grupo = f"{g.id}: {adentro} adentro"
     controlar(
@@ -795,16 +798,17 @@ def main() -> int:
         f"{len(cuadros):,} cuadros revisados | incoherentes: {incoherentes}",
     )
     limite_cola = all(
-        g[3] <= p_anim.capacidad_cola for c in cuadros for g in c.grupos
+        g[3] <= p_anim.capacidad_de(p_anim.grupos[i].id) for c in cuadros for i, g in enumerate(c.grupos)
     )
     progresos = [t[3] for c in cuadros for t in c.tanques]
     controlar(
         limite_cola and all(-1.0 <= x <= 1.0 for x in progresos),
         "La cola visible respeta la capacidad y el progreso del camión está entre 0 y 1",
-        f"cola máxima {max(g[3] for c in cuadros for g in c.grupos)} de {p_anim.capacidad_cola}",
+        f"cola máxima {max(g[3] for c in cuadros for g in c.grupos)} (capacidad por zona "
+        f"{[p_anim.capacidad_de(g.id) for g in p_anim.grupos]})",
     )
     from ui.animacion import reproductor_html
-    peso_mb = len(reproductor_html(traza_anim, p_anim, 3, "").encode("utf-8")) / 1e6
+    peso_mb = len(reproductor_html(traza_anim, p_anim, {}, "").encode("utf-8")) / 1e6
     controlar(
         peso_mb < 3.0,
         "El HTML del reproductor pesa menos de 3 MB (un día, un cuadro cada 0,5 min)",
@@ -1083,7 +1087,7 @@ def main() -> int:
             cg.atendidos + cg.perdidos_espera + cg.perdidos_cola_llena
             + cg.perdidos_sin_combustible + cg.perdidos_corte_gnc
         )
-        cierra = cierra and 0 <= adentro <= gr.caras + (p_jul.capacidad_cola or 0)
+        cierra = cierra and 0 <= adentro <= gr.caras + (p_jul.capacidad_de(gr.id) or 0)
     controlar(
         c8.migrados_gnc_a_nafta + c8.perdidos_corte_gnc == c8.gnc_afectados
         and 0.3 < c8.migrados_gnc_a_nafta / c8.gnc_afectados < 0.7
@@ -1217,7 +1221,7 @@ def main() -> int:
             + c.perdidos_corte_gnc
         )
         dentro = c.llegadas - c.atendidos_surtidor - perdidos_e
-        holgura_e = sum(g.caras for g in p_e.grupos) + len(p_e.grupos) * (p_e.capacidad_cola or 0)
+        holgura_e = sum(g.caras + (p_e.capacidad_de(g.id) or 0) for g in p_e.grupos)
         cierran = cierran and 0 <= dentro <= holgura_e
         peor = max(peor, dentro)
     controlar(
@@ -1704,6 +1708,67 @@ def main() -> int:
         and e_caro.ingreso_gnc == e_base.ingreso_gnc,
         "El precio por litro mueve el margen $ por $: Súper +$50 suma 50 × litros vendidos de Súper",
         f"{litros_super:,.0f} L de Súper ⇒ +{50.0 * litros_super:,.0f} $ de margen",
+    )
+
+    # ------------------------------------------------------------------ 27
+    separador("27. Rediseño, etapa 3: cola de 3 lugares por cara y datos del tablero")
+    from sim.periodo import anio_completo as _anio, por_dias as _pdias
+    from ui.animacion import MAXIMO_CUADROS, dt_para, reproductor_html as _html
+
+    base_27 = ParametrosSimulacion().datos_reales()
+    caps = {g.id: base_27.capacidad_de(g.id) for g in base_27.grupos}
+    controlar(
+        caps == {"A": 12, "B": 6, "C": 18}
+        and ParametrosSimulacion.clasico().capacidad_de("A") is None,
+        "Cada cara tiene 3 lugares de cola: A 12 · B 6 · C 18 (el caso clásico no tiene cola finita)",
+        str(caps),
+    )
+
+    # Con el doble de demanda en el pico y azar, la cola se llena: nunca pasa de su capacidad
+    p_cola, _ = aplicar_edicion(
+        con_periodo(base_27, _pdias(10, 7, 1)), ParametrosEconomicos(),
+        Edicion(nivel_demanda="alta", doble_pico=True),
+    )
+    ind_cola, traza_cola = simular(
+        dataclasses.replace(p_cola, animar_todo=True, dt_traza=12.0), semilla=3, con_traza=True
+    )
+    max_cola = {
+        g.id: max(c.grupos[i][3] for c in traza_cola.cuadros) for i, g in enumerate(p_cola.grupos)
+    }
+    controlar(
+        all(max_cola[g.id] <= caps[g.id] for g in p_cola.grupos)
+        and ind_cola.c_total.perdidos_cola_llena > 0,
+        "La cola nunca pasa de sus 3 lugares por cara y, con demanda alta, se llena (cola_llena > 0)",
+        f"cola máxima {max_cola} · rechazados por cola llena: {ind_cola.c_total.perdidos_cola_llena}",
+    )
+
+    # El tablero: todos los días, litros por producto que coinciden con el motor y peso razonable
+    p_t = dataclasses.replace(con_periodo(base_27, _pdias(20, 1, 1)), animar_todo=True, dt_traza=12.0)
+    ind_t, traza_t = simular(p_t, semilla=1, con_traza=True)
+    ult = traza_t.cuadros[-1]
+    lit_ok = all(
+        0 <= ind_t.c_producto_total[pr.id].litros_vendidos - ult.litros_producto[k]
+        <= 0.01 * ind_t.c_producto_total[pr.id].litros_vendidos + 1.0
+        for k, pr in enumerate(p_t.productos)
+    ) and all(
+        b.litros_producto[k] >= a.litros_producto[k] - 1e-9
+        for a, b in zip(traza_t.cuadros, traza_t.cuadros[1:]) for k in range(5)
+    )
+    controlar(
+        lit_ok and len(traza_t.cuadros) == int(p_t.duracion // 12.0),
+        "El tablero graba los 20 días y los litros por producto de cada cuadro crecen hasta el total del motor",
+        f"{len(traza_t.cuadros):,} cuadros · litros del último cuadro: "
+        + ", ".join(f"{x:,.0f}" for x in ult.litros_producto),
+    )
+
+    p_y = dataclasses.replace(con_periodo(base_27, _anio()), animar_todo=True, dt_traza=dt_para(365))
+    _, traza_y = simular(p_y, semilla=1, con_traza=True)
+    peso_y = len(_html(traza_y, p_y, {}, "").encode("utf-8")) / 1e6
+    controlar(
+        dt_para(30) == 12.0 and dt_para(365) == 36.0 and len(traza_y.cuadros) <= MAXIMO_CUADROS
+        and peso_y < 8.0,
+        "El año completo se anima con un cuadro cada 36 min y el HTML pesa menos de 8 MB",
+        f"{len(traza_y.cuadros):,} cuadros · {peso_y:.2f} MB",
     )
 
     # ------------------------------------------------------------------

@@ -176,3 +176,79 @@ def grafico_litros_por_mes(
     fig.update_layout(title=titulo, yaxis_title="Litros por día", **_LAYOUT)
     fig.update_yaxes(rangemode="tozero")
     return fig
+
+
+def _millones(valor: float) -> str:
+    """Pesos en millones con coma decimal y el signo antes del $: -$1,50 M."""
+    signo = "-" if valor < 0 else ""
+    return f"{signo}${abs(valor) / 1e6:,.2f} M".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def grafico_cascada_economica(
+    ingresos: list[tuple[str, float]], costos: list[tuple[str, float]], titulo: str
+) -> go.Figure:
+    """Cascada del mes: ingresos (suben) → costos (bajan) → margen operativo."""
+    nombres = [n for n, _ in ingresos] + ["Ingresos"] + [n for n, _ in costos] + ["Margen operativo"]
+    valores = [v for _, v in ingresos] + [0.0] + [-v for _, v in costos] + [0.0]
+    medidas = (
+        ["relative"] * len(ingresos) + ["total"] + ["relative"] * len(costos) + ["total"]
+    )
+    fig = go.Figure(
+        go.Waterfall(
+            x=nombres,
+            y=valores,
+            measure=medidas,
+            text=[
+                _millones(v) if m == "relative" else ""
+                for v, m in zip(valores, medidas)
+            ],
+            textposition="outside",
+            increasing=dict(marker=dict(color=LIBRE)),
+            decreasing=dict(marker=dict(color=NARANJA)),
+            totals=dict(marker=dict(color=AMARILLO, line=dict(color=TINTA_TENUE, width=1))),
+            connector=dict(line=dict(color=TINTA_TENUE, width=1)),
+            hovertemplate="%{x}: %{y:,.0f} $<extra></extra>",
+        )
+    )
+    fig.update_layout(title=titulo, yaxis_title="Pesos por mes", showlegend=False, **_LAYOUT)
+    fig.add_hline(y=0, line_color=TINTA_TENUE, line_width=1)
+    return fig
+
+
+def grafico_delta_margen(conclusiones, titulo: str) -> go.Figure:
+    """Δ del margen operativo mensual de cada escenario contra S0, con el IC 95 % de la diferencia.
+
+    Verde = suma margen significativamente, rojo = resta, gris = no se distingue del azar.
+    """
+    nombres, valores, errores, colores, rotulos = [], [], [], [], []
+    for c in conclusiones:
+        d = c.d_margen
+        nombres.append(c.nombre)
+        valores.append(d.promedio / 1e6)
+        errores.append(d.semiamplitud / 1e6)
+        if not c.significativa:
+            colores.append(GRIS)
+            rotulos.append(f"{d.promedio / 1e6:+,.2f} M (azar)")
+        elif d.promedio > 0:
+            colores.append(LIBRE)
+            rotulos.append(f"{d.promedio / 1e6:+,.2f} M (suma)")
+        else:
+            colores.append(ROJO)
+            rotulos.append(f"{d.promedio / 1e6:+,.2f} M (resta)")
+    fig = go.Figure(
+        go.Bar(
+            y=[f"{n}<br><sub>{r}</sub>" for n, r in zip(nombres, rotulos)],
+            x=valores,
+            orientation="h",
+            error_x=dict(type="data", array=errores, color=TINTA_TENUE, thickness=1.5),
+            marker_color=colores,
+            hovertemplate="%{x:+,.2f} millones de $ por mes<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title=titulo,
+        xaxis_title="Millones de $ por mes respecto de S0",
+        **{**_LAYOUT, "height": max(360, 80 + 44 * len(nombres)), "margin": dict(l=60, r=30, t=60, b=50)},
+    )
+    fig.update_yaxes(autorange="reversed")
+    return fig

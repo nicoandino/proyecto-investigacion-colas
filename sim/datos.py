@@ -295,7 +295,8 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "baja",
                     "DATOS §7 (Surtidores.com.ar, mercado por volumen)", "datos_operacionales",
                     "C6",
-                    (("mix de flota", None, "nota 03"), ("G2/G3 75/25", None, "ONBOARDING")),
+                    (("mix de flota", None, "nota 03"), ("G2/G3 75/25", 0.75, "ONBOARDING"),
+                     ("sólo G2 (100/0)", 1.0, "SUR-03 alternativa")),
                     "Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 (normalizado)", None, None),
           (("super", 28.0), ("vpower", 19.5), ("diesel_g2", 29.3), ("diesel_g3", 23.2))),
         ("DEM-05", ("Clientes GNC (% de las llegadas)", "%", "B", "estimacion", "baja",
@@ -397,6 +398,14 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "heredado",
                     "", (), "Triangular(15, 30, 60) — media 35 L", None, None),
           (15.0, 30.0, 60.0)),
+        ("VEH-07", ("Presets de litros por carga (C12): media baja y alta", "× tanque", "B",
+                    "supuesto", "sin_dato",
+                    "orquestador C12 (nota 03: se carga ≈ 30 % del tanque; llenar es raro)",
+                    "orquestador",
+                    "C12", (), "Triangular(mín, moda, máx) × tanque: bajo (0,1 · 0,3 · 0,5), media "
+                               "0,3 · alto (0,6 · 0,8 · 1,0), media 0,8; el default tiene media 0,5",
+                    None, None),
+          (("bajo", (0.1, 0.3, 0.5)), ("alto", (0.6, 0.8, 1.0)))),
         ("VEH-00", ("Tipo de vehículo por producto (matriz)", "%", "B", "supuesto",
                     "sin_dato",
                     "orquestador (diseño 'producto primero', §7.2)", "orquestador",
@@ -651,18 +660,25 @@ REGISTRO: tuple[Dato, ...] = tuple(
         # ------------------------------------------------------- I. Economía
         ("ECO-01", ("Margen por litro", "$/L", "E", "heredado", "sin_dato",
                     "proyecto hipotético", "heredado",
-                    "", (), "≈ 4,7 % del Súper a $2.141; candidatas CECHA/FECRA; "
-                           "parametrizar también como % del precio", None, None),
+                    "", (("prueba −50 %", 50.0, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba +50 %", 150.0, "rango de prueba de sensibilidad (no es dato)")),
+                    "≈ 4,7 % del Súper a $2.141; candidatas CECHA/FECRA; "
+                    "parametrizar también como % del precio. Los extremos son un rango de "
+                    "prueba para el tornado, no un dato", 50.0, 150.0),
           100.0),
         ("ECO-02", ("Margen por compra en minimarket", "$/compra", "E", "heredado",
                     "sin_dato",
                     "proyecto hipotético", "heredado",
-                    "", (), "el shop = 5–10 % de los ingresos de la estación (DATOS)",
-                    None, None),
+                    "", (("prueba −50 %", 1_250.0, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba +50 %", 3_750.0, "rango de prueba de sensibilidad (no es dato)")),
+                    "el shop = 5–10 % de los ingresos de la estación (DATOS); extremos de "
+                    "prueba para el tornado", 1_250.0, 3_750.0),
           2_500.0),
         ("ECO-03", ("Margen por m³ de GNC", "$/m³", "E", "heredado", "sin_dato",
                     "proyecto hipotético", "heredado",
-                    "", (), "mismo placeholder que ECO-01", None, None),
+                    "", (("prueba −50 %", 50.0, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba +50 %", 150.0, "rango de prueba de sensibilidad (no es dato)")),
+                    "mismo placeholder que ECO-01", 50.0, 150.0),
           100.0),
         ("ECO-04", ("Sueldos (playero / cajero / encargado)", "$/mes", "E",
                     "estimacion", "media",
@@ -683,13 +699,18 @@ REGISTRO: tuple[Dato, ...] = tuple(
           (18_000_000.0, 250_000.0)),
         ("ECO-06", ("Flete del camión", "$/viaje", "E", "heredado", "sin_dato",
                     "proyecto hipotético (fijo); $/km sin dato", "heredado",
-                    "", (), "$150.000 es implausible para ≈ 1.000 km con 30.000 L: "
-                           "consultar transportistas. La app avisa si origen = Dock Sud "
-                           "y $/km = 0", None, None),
+                    "", (("prueba ×0,5", 75_000.0, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba ×10", 1_500_000.0, "rango de prueba de sensibilidad (no es dato): el fijo de $150.000 es "
+                                                      "implausible para ≈ 1.000 km")),
+                    "$150.000 es implausible para ≈ 1.000 km con 30.000 L: "
+                    "consultar transportistas. La app avisa si origen = Dock Sud "
+                    "y $/km = 0. Los extremos (sólo del fijo) son de prueba", 75_000.0, 1_500_000.0),
           (150_000.0, 0.0)),
         ("ECO-07", ("Almacenamiento", "$/litro-mes", "E", "heredado", "sin_dato",
                     "proyecto hipotético", "heredado",
-                    "", (), "", None, None),
+                    "", (("prueba −50 %", 12.5, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba +50 %", 37.5, "rango de prueba de sensibilidad (no es dato)")),
+                    "extremos de prueba para el tornado", 12.5, 37.5),
           25.0),
         ("ECO-08", ("Precios (referencia, informativos)", "$", "B", "dato", "media",
                     "DATOS §7, sept-2026 (GNC oct-2025)", "datos_operacionales",
@@ -702,6 +723,22 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "", (), "año = 3 × Σ de los 4 meses representativos; "
                            "rotular 'estimación'", None, None),
           "año = 3 × Σ de los 4 meses representativos"),
+
+        ("ECO-10", ("Cobertura de francos (personas por puesto cubierto 24 h)", "×", "E",
+                    "supuesto", "sin_dato",
+                    "7 días de operación ÷ 5 días trabajados por persona", "orquestador",
+                    "C5", (("sin francos", 1.0, "puestos = personas"),
+                           ("6 de 7 días", 7.0 / 6.0, "jornada de 6 días")),
+                    "una persona no cubre los 7 días: el costo de personal se multiplica por "
+                    "este factor (ONBOARDING habla de 21 personas)", 1.0, 1.75),
+          1.4),
+        ("ECO-11", ("Puestos fijos por día que el motor no modela (encargado · tienda)",
+                    "puestos-turno", "E", "estimacion", "baja",
+                    "DATOS §4 (encargado 1 y tienda 1 en mañana y tarde)",
+                    "datos_operacionales",
+                    "C5", (), "sólo entran como costo de personal; el sueldo de tienda es el "
+                              "del cajero", None, None),
+          (2.0, 2.0)),
 
         # --------------------- Filas que cubren los campos del motor (N14) ----
         ("REC-01", ("Surtidores del motor (configuración clásica)", "surtidores", "B",
@@ -849,6 +886,13 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosEconomicos.inversion_surtidor": "ECO-05",
     "ParametrosEconomicos.operativo_surtidor_mensual": "ECO-05",
     "ParametrosEconomicos.sueldo_cajero_mensual": "ECO-04C",
+    "ParametrosEconomicos.sueldo_playero_mensual": "ECO-04",
+    "ParametrosEconomicos.sueldo_encargado_mensual": "ECO-04",
+    "ParametrosEconomicos.margen_gnc": "ECO-03",
+    "ParametrosEconomicos.flete_por_km": "ECO-06",
+    "ParametrosEconomicos.cobertura_francos": "ECO-10",
+    "ParametrosEconomicos.puestos_encargado": "ECO-11",
+    "ParametrosEconomicos.puestos_tienda": "ECO-11",
     "ParametrosEconomicos.costo_pedido": "ECO-06",
     "ParametrosEconomicos.costo_almacenamiento_litro_mes": "ECO-07",
 }

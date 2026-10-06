@@ -54,6 +54,11 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  FASE 8 DEL ORQUESTADOR (economía real)
+   26. Ingresos − costos = margen (y contra un cálculo independiente), la venta perdida no se
+       resta, personal desde la dotación (S2/S9), flete = fijo + $/km × km, anualización
+       3 × Σ de los 4 meses y margen por litro de equilibrio.
+
   FASE 7 DEL ORQUESTADOR (estaciones del año y escenarios S0–S12)
    25. N12 con las 4 estaciones (invierno > verano), 4 estaciones × 4 réplicas ≤ 90 s,
        calendario real, litros del mes, quincena normalizada (N18), catálogo S0–S12 con
@@ -1124,6 +1129,7 @@ def main() -> int:
         para_mes,
     )
     from sim.runner import correr_replicas
+    from dataclasses import replace as replace_dc
 
     # N12 + compuerta de tiempo: 4 estaciones × 4 réplicas ≤ 90 s
     forzado = reemplazar(p, gnc=ParametrosGNC(episodios_en_horizonte=True))
@@ -1260,6 +1266,140 @@ def main() -> int:
         cerrado_ok and lambda_igual and p_s10.autos_por_dia < p_n.autos_por_dia,
         "S10: de 22 a 06 h no llega nadie y las demás horas siguen igual de cargadas",
         f"clientes por día {p_n.autos_por_dia:.0f} → {p_s10.autos_por_dia:.0f} (la demanda nocturna se pierde)",
+    )
+
+    # ------------------------------------------------------------------ 22
+    separador("22. Fase 8: economía real (reconciliación, personal, anualización)")
+    from sim.config import ParametrosEconomicos
+    from sim.economia_real import (
+        CAMPOS,
+        anualizar,
+        conclusiones,
+        decision_s6,
+        economia_de,
+        economia_mensual,
+        flete_por_pedido,
+        km_por_viaje,
+        margen_de_equilibrio_por_litro,
+        personas_turno_playeros,
+        resumir_economia,
+    )
+
+    eco = ParametrosEconomicos()
+    p_eco = para_mes(p, 7)
+    reps_eco = correr_replicas(p_eco, replicas=3)
+    lista_eco = [economia_mensual(r, p_eco, eco) for r in reps_eco]
+
+    # Reconciliación: ingresos − costos = margen, y las partes suman los totales
+    def cierra_cuentas(e) -> bool:
+        return (
+            abs(e.ingreso_total - (e.ingreso_combustible + e.ingreso_gnc + e.ingreso_minimarket)) < 1e-6
+            and abs(e.costo_total - (e.flete + e.almacenamiento + e.personal_total)) < 1e-6
+            and abs(e.personal_total - (e.personal_playeros + e.personal_cajeros
+                                        + e.personal_encargado + e.personal_tienda)) < 1e-6
+            and abs(e.margen_operativo - (e.ingreso_total - e.costo_total)) < 1e-6
+            and abs(e.ingreso_total - sum(v for _, v in e.ingreso_por_producto)
+                    - e.ingreso_minimarket) < 1e-6
+        )
+
+    # Cálculo independiente del margen, directo desde la réplica
+    r0, e0 = reps_eco[0], lista_eco[0]
+    dias_e0 = e0.dias_mes
+    margen_directo = (
+        sum(v * dias_e0 * (eco.margen_gnc if k == "gnc" else eco.margen_por_litro)
+            for k, v in r0.litros_vendidos_por_producto)
+        + r0.compras_dia * dias_e0 * eco.margen_compra
+        - sum(v for _, v in r0.pedidos_por_producto) * dias_e0 * flete_por_pedido(p_eco, eco)
+        - sum(v for _, v in r0.nivel_por_producto) * eco.costo_almacenamiento_litro_mes
+        - e0.personal_total
+    )
+    controlar(
+        all(cierra_cuentas(e) for e in lista_eco) and abs(margen_directo - e0.margen_operativo) < 1e-6,
+        "Ingresos − costos = margen operativo, y coincide con el cálculo independiente",
+        f"margen de julio {e0.margen_operativo:,.0f} $ = {margen_directo:,.0f} $ (3 réplicas, partes suman los totales)",
+    )
+
+    # La venta perdida NO se resta: si se triplica el margen del minimarket y se anula la
+    # pérdida de una réplica, el margen sólo cambia por el ingreso, no por la venta perdida.
+    import dataclasses
+
+    sin_perdida = dataclasses.replace(
+        reps_eco[0], perdidos_cola_dia=0.0, perdidos_cola_llena_dia=0.0,
+        perdidos_sin_combustible_dia=0.0, perdidos_corte_gnc_dia=0.0, perdidos_caja_dia=0.0,
+    )
+    e_sin = economia_mensual(sin_perdida, p_eco, eco)
+    controlar(
+        e_sin.margen_operativo == e0.margen_operativo
+        and e_sin.venta_perdida_total < 1e-9 < e0.venta_perdida_total,
+        "La venta perdida es costo de oportunidad: anularla no cambia el margen operativo",
+        f"venta perdida {e0.venta_perdida_total:,.0f} $ → {e_sin.venta_perdida_total:,.0f} $; "
+        f"margen igual ({e0.margen_operativo:,.0f} $)",
+    )
+
+    # Personal desde la dotación: 1·2·2 = 5 personas-turno; S2 +1 suma 5 h de 1 playero; S9 resta
+    cat_eco = {e.nombre: e for e in catalogo(p_eco)}
+    pe_base = personas_turno_playeros(p_eco)
+    pe_s2 = personas_turno_playeros(cat_eco["S2 · Playeros en el pico +1"].aplicar(p_eco))
+    pe_s9 = personas_turno_playeros(cat_eco["S9 · Autoservicio (−1 playero por turno)"].aplicar(p_eco))
+    controlar(
+        abs(pe_base - 5.0) < 1e-9 and abs(pe_s2 - (5.0 + 5.0 / 8.0)) < 1e-9 and abs(pe_s9 - 3.0) < 1e-9,
+        "El costo de personal sale de la dotación: base 5 personas-turno, S2 +1 suma 5/8, S9 baja a 3",
+        f"base {pe_base:g} · S2 +1 {pe_s2:g} · S9 {pe_s9:g}",
+    )
+    # S9 ahorra personal y la diferencia sale en la conclusión
+    res_eco = correr_catalogo(
+        p, 7, replicas=3,
+        nombres=("S2 · Playeros en el pico +1", "S6 · Stock extra (s × 1,5)",
+                 "S9 · Autoservicio (−1 playero por turno)"),
+    )
+    conc = {c.id: c for c in conclusiones(res_eco, eco)}
+    controlar(
+        conc["S9"].d_personal.promedio < 0 < conc["S2"].d_personal.promedio
+        and conc["S9"].d_venta_perdida.promedio > 0 > conc["S2"].d_venta_perdida.promedio,
+        "S9 ahorra personal pero pierde más ventas; S2 +1 cuesta personal y pierde menos ventas",
+        f"S9: personal {conc['S9'].d_personal.promedio / 1e6:+.2f} M, venta perdida "
+        f"{conc['S9'].d_venta_perdida.promedio / 1e6:+.2f} M | S2 +1: personal "
+        f"{conc['S2'].d_personal.promedio / 1e6:+.2f} M, venta perdida "
+        f"{conc['S2'].d_venta_perdida.promedio / 1e6:+.2f} M",
+    )
+    d6 = decision_s6(res_eco, eco)
+    controlar(
+        d6 is not None and "playero_menos_stock" in d6 and isinstance(d6["mejor"], str),
+        "S6 compara el playero extra con el stock extra en $/mes",
+        f"{d6['mejor']}" if d6 else "sin datos",
+    )
+
+    # Flete = fijo + $/km × km; con $/km > 0 el origen lejano cuesta más que el cercano
+    luj_eco = replace_dc(p_eco, red=replace_dc(p_eco.red, origen="LUJAN"))
+    eco_km = replace_dc(eco, flete_por_km=100.0)
+    controlar(
+        flete_por_pedido(p_eco, eco) == eco.costo_pedido
+        and flete_por_pedido(p_eco, eco_km) > flete_por_pedido(luj_eco, eco_km) > eco.costo_pedido
+        and abs(km_por_viaje(p_eco) - 2 * 991.3) < 2.0,
+        "Flete = fijo + $/km × km de ida y vuelta (Dock Sud ≈ 1.982 km; Luján mucho menos)",
+        f"Dock Sud {km_por_viaje(p_eco):,.0f} km · Luján {km_por_viaje(luj_eco):,.0f} km",
+    )
+
+    # Anualización: 3 × Σ de los 4 meses, réplica a réplica
+    est_eco = correr_estaciones(p, replicas=2)
+    anual = anualizar(est_eco, eco)
+    por_mes = [economia_de(r, eco) for r in est_eco]
+    esperado = [3.0 * sum(m[k].margen_operativo for m in por_mes) for k in range(2)]
+    controlar(
+        abs(anual["margen_operativo"].promedio - sum(esperado) / 2) < 1e-6
+        and abs(anual["ingreso_total"].promedio - anual["costo_total"].promedio
+                - anual["margen_operativo"].promedio) < 1e-6 < 1.0,
+        "El año estimado es 3 × Σ de los 4 meses y también reconcilia (ingresos − costos = margen)",
+        f"margen anual {anual['margen_operativo'].promedio / 1e6:,.1f} M $ "
+        f"(± {anual['margen_operativo'].semiamplitud / 1e6:,.1f} M, estimación)",
+    )
+    eq = margen_de_equilibrio_por_litro(lista_eco[0], eco)
+    eco_eq = replace_dc(eco, margen_por_litro=eq)
+    margen_eq = economia_mensual(reps_eco[0], p_eco, eco_eq).margen_operativo
+    controlar(
+        abs(margen_eq) < 1.0 and eq > eco.margen_por_litro,
+        "El margen por litro de equilibrio hace el margen operativo igual a 0",
+        f"equilibrio ${eq:,.0f}/L (hoy ${eco.margen_por_litro:,.0f}/L) → margen {margen_eq:,.2f} $",
     )
 
     # ------------------------------------------------------------------

@@ -130,6 +130,17 @@ def _esc(
     )
 
 
+def cambios_cierre_nocturno(p: ParametrosSimulacion) -> dict[str, object]:
+    """Cambios de S10 (y del eje C1 del tornado): perfil en 0 de 22 a 06 h y litros del mes
+    reducidos a la parte abierta, así las horas abiertas conservan su tasa de llegadas."""
+    factores = p.perfil.factores
+    abierto = tuple(0.0 if h in HORAS_CERRADO else f for h, f in enumerate(factores))
+    return {
+        "perfil": PerfilHorario(abierto),
+        "litros_mes": p.litros_mes * sum(abierto) / sum(factores),
+    }
+
+
 def catalogo(p: ParametrosSimulacion) -> list[Escenario]:
     """Los escenarios del caso real (§7.7) armados sobre `p` (que ya es el mes a comparar).
 
@@ -244,15 +255,13 @@ def catalogo(p: ParametrosSimulacion) -> list[Escenario]:
     ))
 
     # --- S10: cierre nocturno 22–06 ----------------------------------------------------------
-    factores = p.perfil.factores
-    abierto = tuple(0.0 if h in HORAS_CERRADO else f for h, f in enumerate(factores))
-    parte_abierta = sum(abierto) / sum(factores)
+    cierre = cambios_cierre_nocturno(p)
     lista.append(_esc(
         p, "S10", "S10 · Cierre nocturno 22–06",
-        f"La estación no atiende de 22 a 06 h: pierde el {1 - parte_abierta:.0%} de la demanda "
-        "(la de esas horas); las demás horas siguen igual de cargadas.",
+        f"La estación no atiende de 22 a 06 h: pierde el {1 - cierre['litros_mes'] / p.litros_mes:.0%} "
+        "de la demanda (la de esas horas); las demás horas siguen igual de cargadas.",
         "efecto del horario",
-        perfil=PerfilHorario(abierto), litros_mes=p.litros_mes * parte_abierta,
+        **cierre,
     ))
 
     # --- S11: estacionalidad turística -------------------------------------------------------

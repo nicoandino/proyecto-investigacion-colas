@@ -1053,8 +1053,18 @@ class ParametrosEconomicos:
     operativo_surtidor_mensual: float = valor("ECO-05")[1]
     sueldo_cajero_mensual: float = valor("ECO-04C")
 
+    margen_gnc: float = valor("ECO-03")                    # $ de ganancia bruta por m³ de GNC
+
+    # Personal (§7.9): sueldo mensual con adicionales y puestos que el motor no modela
+    sueldo_playero_mensual: float = valor("ECO-04")[0]
+    sueldo_encargado_mensual: float = valor("ECO-04")[2]
+    cobertura_francos: float = valor("ECO-10")             # personas por puesto cubierto los 7 días
+    puestos_encargado: float = valor("ECO-11")[0]          # puestos-turno por día (mañana y tarde)
+    puestos_tienda: float = valor("ECO-11")[1]
+
     # Costos de inventario
-    costo_pedido: float = valor("ECO-06")[0]               # $ de flete por cada camión cisterna
+    costo_pedido: float = valor("ECO-06")[0]               # $ de flete fijo por cada camión cisterna
+    flete_por_km: float = valor("ECO-06")[1]               # $ por km de ida y vuelta (sin dato: 0)
     costo_almacenamiento_litro_mes: float = valor("ECO-07")  # $ por litro promedio en tanque, por mes
 
     def __post_init__(self) -> None:

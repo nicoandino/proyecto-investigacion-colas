@@ -54,6 +54,10 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  FASE 10 DEL ORQUESTADOR (cierre)
+   28. N19: clientes líquidos × litros medios por cliente = litros del día, y los litros medios
+       por cliente salen de la mezcla y las cargas de cada producto.
+
   FASE 9 DEL ORQUESTADOR (sensibilidad)
    27. El listado cubre todos los supuesto/heredado/estimación y las 20 contradicciones, la
        cadena de demanda sobrevive a cambiar vehículos o mezcla, el tornado es coherente
@@ -1502,6 +1506,30 @@ def main() -> int:
         len({tuple(top_margen), tuple(top_espera), tuple(top_servicio)}) > 1,
         "El ranking no es constante: cambia según la métrica",
         f"margen {top_margen} | espera {top_espera} | servicio {top_servicio}",
+    )
+
+    # ------------------------------------------------------------------ 24
+    separador("24. Fase 10: cadena de demanda litros → clientes (N19)")
+    from sim.sensibilidad import _armonica
+
+    p_n19 = para_mes(p, 7)
+    errores_n19 = [
+        abs(
+            p_n19.autos_por_dia_fecha(d) * (1.0 - p_n19.pct_gnc) * p_n19.litros_medios_por_cliente
+            / p_n19.litros_del_dia(d) - 1.0
+        )
+        for d in range(1, p_n19.dias + 1)
+    ]
+    controlar(
+        max(errores_n19) < 0.001,
+        "N19: clientes líquidos por día × litros medios por cliente = litros del día (±0,1 %)",
+        f"error máximo en los {p_n19.dias} días de julio: {max(errores_n19):.2e}",
+    )
+    controlar(
+        abs(_armonica(p.productos) / p.litros_medios_por_cliente - 1.0) < 0.001,
+        "Los litros medios por cliente (DEM-11 = 35,7 L) salen de la mezcla y las cargas de cada producto",
+        f"1 ÷ Σ(% de litros ÷ carga media) = {_armonica(p.productos):.3f} L contra "
+        f"{p.litros_medios_por_cliente} L del Registro",
     )
 
     # ------------------------------------------------------------------

@@ -1,176 +1,87 @@
-# TASK.md — Plan de trabajo
+# TASK.md — Qué está hecho y qué falta
 
-Leyenda: `[ ]` pendiente · `[~]` en progreso · `[x]` hecho
+Leyenda: `[x]` hecho · `[ ]` pendiente. **Versión final de la Fase 10 (6/10/2026).** Reemplaza al plan
+anterior, que describía el simulador hipotético (un solo producto, Fase 2 "determinista", etc.).
 
-Hito **DEMO** = lo que se muestra mañana en clase.
-Hito **FINAL** = entrega completa del TP.
+La especificación y los controles están en `ORQUESTADOR_SIMULADOR.md`; el cierre detallado de cada
+fase (qué se hizo, compuerta, resultados y deuda) está en su **§9**.
+
+---
+
+## Lo hecho (fases 0–10 del orquestador, un commit por fase)
+
+### Fase 0 — Corregir la Fase 2 heredada
+- [x] Demanda desde **litros/mes ÷ litros medios por cliente** (se acabó "litros = autos"; control N16: 270.000 L/mes ⇒ 270.000 ± 3 %)
+- [x] Calendario real con `fecha_inicio` (un solo mapa horizonte → fecha y días), "determinista" → "demanda esperada", calentamiento de 2 días, réplicas e IC se mantienen
+- [x] `clasico()` reproduce los **números dorados** (control N1)
+
+### Fase 1 — Registro de datos y tema Shell
+- [x] `sim/datos.py`: Registro con valor, unidad, fuente, nivel, tipo, confianza y alternativas; 20 contradicciones (C1–C20); N14 "cero huérfanos"
+- [x] `ui/tema.py`: paleta Shell única, plantilla Plotly, CSS; N15 (ningún hex fuera del tema, contraste WCAG)
+- [x] Insignias por dato (🟢 dato · 🟡 estimación · 🔵 observación · 🟠 supuesto · ⚪ heredado), pestaña **Datos y fuentes** con filtros y CSV
+
+### Fase 2 — Núcleo del motor real
+- [x] 3 zonas de caras (12), 5 productos con "producto primero", playeros por turno, cola finita, GNC sin tanque
+- [x] Conservación por grupo y motivo (N2), Little por grupo (N4), playeros ≤ turno y ≤ caras (N5)
+
+### Fase 3 — Animación del playón
+- [x] Zonas, playeros, cola que desborda a la avenida, minimarket, tanques por producto, camión en ruta, GNC; saltos (hora pico, quiebre, descarga, corte)
+
+### Fase 4 — Política de reposición por producto
+- [x] Barrido de (s, Q) de los 4 tanques a la vez (13 puntos), mejor política por tanque, "Usar las mejores políticas"
+
+### Fase 5 — Red de abastecimiento
+- [x] Dijkstra (`heapq`), cortes E1–E4 y sorteados, demora → plazo; pestaña **Red y rutas** (N6: 221,8 km / 399,8 km con RN 143 cortada)
+
+### Fase 6 — GNC
+- [x] Episodios de corte total en jun–ago, 3 compresores, migración a Súper o pérdida (`corte_gnc`); pestaña **GNC** con los episodios sombreados (N7, N8)
+
+### Fase 7 — Estaciones del año y escenarios S0–S12
+- [x] `correr_estaciones` (ene·abr·jul·oct) y catálogo S0, S2–S12 con números aleatorios comunes y **diferencias pareadas** con IC 95 % (N12)
+
+### Fase 8 — Economía real
+- [x] Estado de resultados mensual (ingresos − costos = margen), personal desde la dotación, flete = fijo + $/km, año estimado (ECO-09), decisión en $/mes por escenario y S6; la venta perdida no se resta
+
+### Fase 9 — Sensibilidad
+- [x] Tornado: 26 ejes y 56 variantes (cada contradicción con valores alternativos + datos con rango); listado de **todos** los supuesto/heredado/estimación
+
+### Fase 10 — Verificación final y documentación
+- [x] `verificar.py` 100/100 · QA visual completo de las 14 pestañas (escritorio y celular) y de la animación en 3 instantes · rendimiento medido
+- [x] `CLAUDE.md`, `TASK.md`, `README.md`, `ONBOARDING_PARA_AGENTES.md` reescritos; `FASE2_IMPLEMENTACION.md` y `DATOS_OPERACIONALES…md` corregidos (fe de erratas)
+- [x] Criterios D0–D11 con su evidencia (`ORQUESTADOR_SIMULADOR.md` §9, cierre de la Fase 10)
 
 ---
 
-## Fase 0 — Setup  ✅ DEMO
-- [x] Leer la propuesta y extraer requisitos (`docs/propuesta_...docx`)
-- [x] Decidir stack: Python 3.14 + SimPy + Streamlit + Plotly
-- [x] Crear `.venv` e instalar dependencias
-- [x] Escribir `CLAUDE.md` (contexto) y `TASK.md` (este archivo)
-- [x] `requirements.txt` y estructura de carpetas
-- [x] Copiar la propuesta a `docs/`
+## Lo que falta (en orden de impacto)
 
-## Fase 1 — Motor de simulación (`sim/`)  ✅ DEMO
-- [x] `config.py`: dataclasses `ParametrosSimulacion`, `Escenario`, `ParametrosEconomicos`
-- [x] `distribuciones.py`: streams con semilla; Exponencial, Triangular, Bernoulli, Uniforme
-- [x] `modelo.py`: proceso de llegadas (Poisson)
-- [x] `modelo.py`: recurso surtidores con cola FIFO + servicio Triangular
-- [x] `modelo.py`: derivación Bernoulli 30% al minimarket
-- [x] `modelo.py`: recurso cajas con cola FIFO + servicio
-- [x] `modelo.py`: abandono por umbral de paciencia (surtidor y caja)
-- [x] `estadisticas.py`: espera promedio por cola (por cliente)
-- [x] `estadisticas.py`: longitud de cola promedio en el tiempo (área/tiempo)
-- [x] `estadisticas.py`: utilización de surtidores y cajas (área ocupada / capacidad·tiempo)
-- [x] `estadisticas.py`: atendidos, perdidos, tiempo en sistema
-- [x] `estadisticas.py`: período de calentamiento (reset de indicadores)
-- [x] `runner.py`: correr una réplica → `ResultadoReplica`
-- [x] `runner.py`: correr R réplicas → promedio + desvío + IC 95% (t de Student)
-- [x] `runner.py`: correr los 4 escenarios con números aleatorios comunes
-- [x] `traza.py`: log de eventos → cuadros de animación a Δt fijo
-- [x] `economia.py`: ingresos, ventas perdidas, costo incremental, beneficio neto, payback
-- [x] `verificar.py`: 12 controles de correctitud del motor (ver Fase 5)
+### Datos de la propia estación (lo único que cambia las conclusiones)
+Hoy **todo es estimación o supuesto**. Orden de prioridad (detalle en `ORQUESTADOR §12`):
+- [ ] **Demanda real:** litros/mes por producto (última facturación) y conteo de clientes por franja, un día hábil y uno de fin de semana — cierra C2, C3, C7, C16, C17
+- [ ] **Dotación por turno** (playeros, cajeros, encargado), horario real de la playa y del shop, ¿autoservicio? — cierra C1, C5, C15
+- [ ] **Litros por carga y tiempo en la cara**, cronometrando 5–10 vehículos por producto — cierra C11, C12
+- [ ] **GNC:** contrato (firme o interrumpible), compresores, cortes de los últimos inviernos, migración a nafta — cierra C8, C9
+- [ ] **Economía:** margen por litro y por compra, flete real por km (el de $150.000 es implausible), sueldos vigentes — cierra C18 y ECO-*
+- [ ] **Mix diésel G2/G3** y % de clientes que entran al shop — cierra C4, C6
+- [ ] **Estacionalidad real:** ventas mensuales de la Secretaría de Energía — cierra C10
 
-## Fase 2 — UI y animación  ✅ DEMO
-- [x] `app.py`: layout general, barra lateral de parámetros, pestañas
-- [x] Panel de parámetros: N surtidores, M cajas, tasa de llegada, triangulares, % compra,
-      paciencia, duración, calentamiento, réplicas, semilla
-- [x] `ui/animacion.py`: estado de la estación → SVG (surtidores, autos en cola, minimarket, caja)
-- [x] Reproductor de animación: play / pausa / reiniciar, control de velocidad, reloj de simulación
-- [x] Contadores en vivo durante la animación (atendidos, perdidos, en cola)
-- [x] Pestaña Indicadores: tarjetas con los 4 indicadores obligatorios
-- [x] `ui/graficos.py`: serie de tiempo de longitud de cola
-- [x] `ui/graficos.py`: barras comparativas entre escenarios
-- [x] Pestaña Escenarios: tabla comparativa Base / A / B / C
-- [x] Pestaña Economía: cuadro de inversión, beneficio neto y payback
-- [x] Pestaña Conclusión: recomendación generada a partir de los números
+### Para el informe del TP
+- [ ] Redactar la conclusión con los números del simulador (`reports/qa/` tiene capturas de cada pestaña)
+- [ ] Exportar tablas y gráficos que se quieran pegar en el informe
+- [ ] Confirmar con el profesor que acepta el simulador propio en lugar de Simul8/FlexSim
 
-## Fase 3 — Modelo determinista real (Oct 2026)  🚀 IMPLEMENTANDO
-Transición del modelo académico a caso real de Shell San Rafael con tres cambios:
-### 3.1 — Datos consolidados  ✅
-- [x] Investigación paralela: 8 agentes en 80+ fuentes (Secretaría Energía, FECRA, ENARGAS, etc.)
-- [x] Documento `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`: 40+ parámetros con confianza
-- [x] Tabla ejecutiva con rango, fuente y URL para cada parámetro
-
-### 3.2 — Determinismo en demanda (sin Monte Carlo)  ✅
-- [x] Nueva clase `Estacionalidad` en config.py con índices por mes
-- [x] `ParametrosSimulacion.modo_determinista` y `demanda_base_mensual`
-- [x] Método `autos_por_dia_fecha(dia)` que calcula demanda con estacionalidad
-- [x] `distribuciones.py`: método `.determinista()` retorna autos sin azar
-- [x] `modelo.py`: `correr_dias()` elige entre `.empirica()` y `.determinista()`
-- [x] CLAUDE.md § Fase 2 con arquitectura y fórmulas
-
-### 3.3 — Horizonte variable  ✅
-- [x] `ParametrosSimulacion.horizonte` enum: "dia", "semana", "mes", "estacion", "anio"
-- [x] Mapeo automático horizonte → días (1, 7, 30, 90, 365)
-- [x] `app.py`: Radio button para seleccionar horizonte (solo en determinista)
-- [x] Sección "Corrida" adapta días y deshabilita calentamiento en determinista
-
-### 3.4 — UI Fase 2  ✅
-- [x] Nuevo expander "Fase 2: Modelo determinista" en sidebar
-- [x] Toggle `modo_determinista` muestra/oculta tabla Monte Carlo
-- [x] En determinista: slider `demanda_base_mensual` + radio `horizonte`
-- [x] Deshabilita "días simulados" en determinista (se fija automáticamente)
-
-### 3.5 — Pendiente: Validación de campo
-- [ ] **CRÍTICO**: Contactar gerente de estación para validar:
-  - Demanda real (litros/mes actual)
-  - Personal por turno
-  - Horario exacto de operación
-  - Tipos de diésel específicos
-  - Tasa de entrada al minimarket (30% es supuesto)
-  - Capacidad GNC (restricción por compresor)
-- [ ] Realizar observación de un día completo si es posible (contar autos, medir tiempos)
-- [ ] Documentar las confirmaciones en anexo de DATOS_OPERACIONALES...
-
-### 3.6 — Análisis de sensibilidad (post-validación)
-- [ ] Variar demanda ±20% (impacto en colas, esperas, quiebres)
-- [ ] Variar personal ±1 (impacto en laborales vs. servicio)
-- [ ] Cortes RN-143/144 (invierno): simular con demanda reducida
-- [ ] Gráficos de tornado (pareto de sensibilidad)
-
-## Fase 4 — Cierre del TP  ⬜ FINAL
-- [ ] Resultado de validación de campo (si se realiza)
-- [ ] Boxplot de la dispersión entre réplicas por escenario
-- [ ] Exportar resultados a CSV / Excel para pegar en el informe
-- [ ] Exportar la tabla comparativa y los gráficos como imagen
-- [ ] Redactar la conclusión económica final en el informe
-
-## Fase 5 — Presentación  ✅ DEMO (parcial)
-- [x] `README.md` con instrucciones de instalación y uso
-- [x] Guion de demo: qué mostrar y en qué orden (5 minutos) — está en el README
-- [x] Respuestas a las preguntas probables del profesor — están en el README
-      (¿por qué exponencial? ¿por qué warm-up? ¿por qué réplicas? ¿por qué triangular?)
-- [ ] Hoja resumen con los supuestos del modelo (actualizada con Fase 2)
-
-## Fase 6 — Validación y verificación  ✅ DEMO (parcial)
-Todo esto corre con `.venv/Scripts/python verificar.py` — 22 controles.
-- [x] Conservación: llegadas = atendidos + perdidos + los que quedaron adentro
-- [x] La misma semilla da exactamente el mismo resultado
-- [x] **Ley de Little (L = λ·W)**: la longitud de cola medida por área coincide con la que
-      predicen las esperas — diferencia del 0,01 %. Valida entre sí a los dos colectores
-      estadísticos (el temporal y el por cliente)
-- [x] El tiempo de surtidor ocupado coincide con atendidos × tiempo medio de carga
-- [x] La utilización nunca supera el 100%
-- [x] Monotonía: más llegadas empeoran la espera; más surtidores la mejoran
-- [x] Agregar un cajero no altera en nada a los surtidores: prueba de que los números
-      aleatorios comunes están funcionando
-- [x] Menos paciencia produce más abandonos
-- [ ] Comparar contra **M/M/c teórico** (Lq, Wq, ρ): requiere agregar la opción de carga
-      exponencial sólo a los fines de validar
-
-## Fase 6 — Demanda realista + Monte Carlo  ✅ HECHO
-Reemplaza el bloque de "hora pico" por un mes de operación real.
-- [x] `PerfilHorario`: 24 factores de intensidad (pico mañana, valle mediodía, pico tarde)
-- [x] `DemandaDiaria`: tabla de frecuencias empírica de autos por día, editable en la app
-- [x] Método Monte Carlo del apunte, los 5 pasos: frecuencias → probabilidad → acumulada →
-      intervalos de números aleatorios → sorteo. Los intervalos se muestran en pantalla
-- [x] Llegadas no homogéneas: Poisson con λ(t) según la hora, exacto por falta de memoria
-- [x] La corrida pasa a ser de N días (30 por defecto), con 1 día de calentamiento
-- [x] Indicadores por franja horaria: la hora pico ya no se supone, se descubre
-- [x] Animación de un día elegido (no del mes entero)
-- [x] Pestaña Demanda: tabla de los 5 pasos, registro día por día, perfil y dispersión
-
-## Fase 7 — Inventario de combustible acoplado  ✅ HECHO
-Segundo subsistema, acoplado al de colas: el tanque.
-- [x] Litros por carga como variable aleatoria (Triangular)
-- [x] Tanque con capacidad, nivel inicial y consumo por cada carga
-- [x] Política (s, Q) sobre la posición de inventario (existencia + lo que viene en camino)
-- [x] Camión cisterna con **plazo de entrega estocástico**
-- [x] Quiebre de stock: sin combustible no se atiende a nadie hasta que llega el camión
-- [x] Indicadores: nivel de servicio, días con quiebre, litros no vendidos, pedidos,
-      nivel promedio y mínimo del tanque, tiempo sin combustible
-- [x] Costos de inventario: flete por pedido + almacenamiento + venta perdida
-- [x] Pestaña Inventario: gráfico de dientes de sierra del nivel del tanque
-- [x] Barrido de políticas: grilla s × Q → costo total mensual, con la mejor destacada
-- [x] Botón "Usar esta política" para llevarla a la configuración
-- [x] El margen pasa a ser **por litro** (antes era por carga)
-- [x] El tanque aparece en la animación, con el punto de pedido y el camión en viaje
-- [x] Verificación: conservación de litros (exacta), tanque nunca negativo ni sobre capacidad
-- [x] La conclusión compara las DOS decisiones (capacidad vs. reposición) en $/mes
-
----
+### Deuda técnica conocida (no bloquea la entrega)
+- [ ] **Anulación por relevamiento:** poder pisar un `Dato` desde la app o un CSV (⇒ tipo `observacion`) — hoy el Registro se exporta pero no se importa
+- [ ] Botón **Verificación** dentro de la app que corra los controles (hoy se corren con `python verificar.py`)
+- [ ] Camión **consolidado** (un viaje con varios productos y un solo flete; N2 etapa 2)
+- [ ] Quienes ya esperan en la cola del GNC cuando empieza el corte **no migran** (se pierden)
+- [ ] Margen por litro **igual para todos los productos** (no distingue Súper de V-Power ni diésel)
+- [ ] El tornado es de **un solo mes** y varía **un eje por vez** (sin interacciones)
+- [ ] Comparación contra **M/M/c teórico** (control N13, opcional)
+- [ ] La app tiene **14 pestañas** (el orquestador proponía ≤ 7 con sub-pestañas); hay que decidir si se agrupan
 
 ## Decisiones tomadas
-- **No usamos Simul8**: desarrollamos el simulador propio (pedido del alumno).
-- **No escalable a propósito**: sin base de datos, sin API, sin login. Ver `CLAUDE.md` § Alcance.
-- Unidad de tiempo **minutos**, moneda **pesos**, en todo el proyecto.
-- El motor (`sim/`) no depende de Streamlit: se puede correr sin UI.
-- Los resultados se reportan con **IC 95% sobre réplicas**, nunca con una sola corrida.
-- **Un solo producto** (nafta súper): varios combustibles multiplican tanques sin cambiar
-  la naturaleza del problema.
-- **Día completo de 24 h** y corrida de 30 días: la economía sale en $/mes sin extrapolar.
-- La animación se dibuja en JavaScript del lado del cliente (ver `CLAUDE.md`).
-
-## Pendiente de definir con el profesor / el grupo
-- [ ] Valores reales de costos: ¿cuánto sale instalar un surtidor? ¿sueldo del cajero?
-- [ ] Margen de ganancia por carga de combustible y por compra en el minimarket
-- [ ] Duración de la hora pico y cuántos días al mes se considera
-- [ ] ¿El abandono se modela solo en el surtidor o también en la caja? (hoy: en ambos, configurable)
-- [ ] **Confirmar con el profesor que acepta un simulador propio** en lugar de Simul8/FlexSim
-- [ ] Datos reales para la tabla de frecuencias de demanda diaria
-- [ ] Costo real del flete del camión y del capital inmovilizado en combustible
+- **No usamos Simul8:** motor propio (pedido del grupo).
+- **No escalable a propósito:** sin base de datos, login, API ni Docker. Ver `CLAUDE.md` § Alcance.
+- **Unidades:** minutos, pesos, litros (m³ para el GNC). El motor (`sim/`) no depende de Streamlit.
+- Resultados con **IC 95 % sobre réplicas**, nunca una sola corrida; comparaciones con **números aleatorios comunes**.
+- Un **commit por fase**, en castellano, en la rama `claude/simulator-graphic-orchestrator-wu2xh4`, **sin Pull Request**.

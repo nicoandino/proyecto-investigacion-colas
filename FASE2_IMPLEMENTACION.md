@@ -1,7 +1,22 @@
-# Fase 2 Implementación — Modelo Determinista con Datos Verificados
+# Fase 2 Implementación (HISTÓRICO, superado) — "Modelo determinista con datos verificados"
 
-> ⚠️ **AVISO (5/10/2026):** Este documento tiene errores: el ejemplo "120.000 L ⇒ 4.000 autos/día" mezcla litros con autos (el motor simula 4,2 M L/mes), "no se necesitan réplicas" y "calentamiento innecesario" son falsos, y un "mes" siempre simula enero. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
+> **ESTADO: SUPERADO — documento histórico, corregido en la Fase 10 (6/10/2026).**
+> Describe lo que hizo la Fase 2 de otro agente el 5/10/2026. Esa implementación **tenía errores de fondo**
+> que se corrigieron en las fases 0–2 del orquestador. **Para trabajar, leer `ONBOARDING_PARA_AGENTES.md` y
+> `ORQUESTADOR_SIMULADOR.md`; donde discrepen, mandan ellos.** El resto de este archivo se conserva
+> como registro de lo que se hizo y se marcó con **❌ FALSO** / **✅ CORRECTO HOY** lo que no vale.
 
+### Fe de erratas
+
+| Lo que dice este documento | Por qué está mal | Qué vale hoy |
+|---|---|---|
+| "Modelo **determinista**, sin Monte Carlo en la demanda" y "no se necesitan réplicas" | Sólo el **total diario** era fijo: las llegadas siguen siendo Poisson y los tiempos de servicio aleatorios. Hay varianza, así que hacen falta **réplicas e IC 95 %**. | Se llama **demanda esperada** (`modo_demanda = "esperada"`). Réplicas e IC se mantienen. El Monte Carlo se conserva para el producto y el tipo de vehículo. |
+| "Calentamiento innecesario / deshabilitado en determinista" | El tanque arranca al 75 % y las colas vacías: hay **transitorio**. Con calentamiento 0 contamina los indicadores. | **Calentamiento de 2 días** en todos los modos. |
+| `autos_por_dia = demanda_base_mensual / 30`; "120.000 L ⇒ 4.000 autos/día" | **Mezcla litros con autos** (error ×35). Simulaba 4,2 M L/mes en vez de 120.000. | `clientes/día = (litros_mes ÷ días del mes) ÷ litros medios por cliente` (35,7 L). **270.000 L/mes ⇒ ≈ 252 clientes líquidos/día** (control N16). |
+| "Un mes" = 30 días desde enero; la estacionalidad funciona por horizonte | `mes = ((dia-1)//30)+1` recibe el día de la corrida, no del calendario: **siempre simulaba enero**. El campo `horizonte` no se usaba en el motor. | `fecha_inicio` real y **una sola** función `dias_y_fecha(horizonte, mes)`; cada día se mapea a su mes y a su día de la semana (control N17). |
+| Estacionalidad "enero=100 … junio=55" como tabla del modelo | Es un proxy de **ocupación hotelera**, no de ventas de combustible, y no coincidía con su fuente. | **Neutra (1,00) por defecto**; presets "leve ±6 %" y "proxy turístico" (S11). |
+| "Datos únicamente de fuentes verificadas", "confianza Alta" | Las etiquetas "Alta" son del compilador y sobreestiman. | Registro con **nivel, tipo y confianza**, jerarquía de evidencia y las alternativas que perdieron (`ORQUESTADOR §4`). |
+| Parámetros `modo_determinista`, `demanda_base_mensual` (120.000 L) | Nombres engañosos y valor sin respaldo. | `modo_demanda`, `litros_mes` (**270.000**, estimación baja-media, con 150.000 y 400.000 como extremos de sensibilidad). |
 
 ## Resumen Ejecutivo
 
@@ -252,7 +267,7 @@ Cada día: sortea autos de tabla empírica
 Número aleatorio (01-100) se muestra en pestaña Demanda
 ```
 
-### Modo Determinista (Fase 2 — nueva)
+### Modo "Determinista" (Fase 2 — nombre engañoso; hoy: demanda esperada)
 
 ```
 Toggle ON (determinista=True)
@@ -261,28 +276,26 @@ Slider: demanda_base_mensual (30k-300k L)
 Radio: horizonte (día, semana, mes, estación, año)
   ↓
 Mapeo automático horizonte → días (1/7/30/90/365)
-Calentamiento deshabilitado
+Calentamiento deshabilitado   ❌ FALSO: hoy es de 2 días en todos los modos
   ↓
-Cada día (n): autos = base/30 × índice(mes)/promedio
+Cada día (n): autos = base/30 × índice(mes)/promedio   ❌ FALSO: mezcla litros con autos
   ↓
 Número aleatorio siempre 50 (determinista)
 ```
 
 ### Ejemplo: Demanda en una simulación de mes
 
-```
-demanda_base_mensual = 120,000 L
-horizonte = "mes"
-días = 30
+❌ **El ejemplo original era incorrecto** (decía "120.000 L ⇒ 4.000 autos/día = 4.324 autos en enero"; eso
+son litros por día tomados como autos). Con la cadena corregida:
 
-día 1 (enero):   4,000 autos  = 4,000 × 100/92.5 = 4,324 autos
-día 30 (enero):  4,000 autos  = 4,000 × 100/92.5 = 4,324 autos
-día 31 (feb):    4,000 autos  = 4,000 × 60/92.5 =  2,594 autos
-día 60 (feb):    4,000 autos  = 4,000 × 60/92.5 =  2,594 autos
-...
-día 151 (junio): 4,000 autos  = 4,000 × 55/92.5 =  2,378 autos (mínimo)
-...
 ```
+litros_mes = 270.000 L          horizonte = "mes" (julio, 31 días)
+litros/día = 270.000 ÷ 31 × índice del mes (neutro = 1,00) × factor de tipo de día (normalizado)
+           ≈ 8.710 L/día
+clientes líquidos/día = 8.710 ÷ 35,7 L por cliente ≈ 244   (+ 3 % de clientes GNC ⇒ ≈ 252 llegadas/día)
+```
+
+Comprobación (control N16): el motor simula **270.000 L/mes ± 3 %**.
 
 ---
 
@@ -296,7 +309,7 @@ Documento de referencia con:
   - Valor/Rango
   - Unidad
   - Nivel de confianza (Alta/Media/Baja)
-  - Fuente verificada con URL
+  - Fuente declarada con URL (**no verificada** salvo lo marcado en el Registro `sim/datos.py`)
   - Observaciones y supuestos
 - **80+ fuentes** consultadas:
   - Secretaría de Energía Argentina
@@ -313,15 +326,15 @@ Documento de referencia con:
 
 | Parámetro | Valor | Confianza | Fuente |
 |-----------|-------|-----------|--------|
-| Demanda base | 100–150k L/mes | Media | Extrapolación Shell nacional |
+| Demanda base | 100–150k L/mes (hoy se adopta **270.000**, ver C2) | Baja | Extrapolación Shell nacional |
 | Pico mañana | 7:30–10:30 | Alta | YPF micropricing |
 | Pico tarde | 16:00–18:00 | Alta | YPF micropricing |
 | Estacionalidad enero | 100 (índice) | Media | Ocupación hotelera |
 | Estacionalidad junio | 55 (índice) | Baja | Transición + cortes RN |
 | Tiempos carga | 5 min (media) | Media | Papers académicos |
-| Mix combustibles | Nafta 23%, Diésel 24%+19%, etc. | Alta | Surtidores.com.ar |
-| Parque GNC | 11.2% | Alta | ENARGAS |
-| Salarios playero | 1,545,472 ARS (oct 2026) | Alta | FECRA |
+| Mix combustibles | Nafta 23%, Diésel 24%+19%, etc. (es el mercado nacional **por volumen**, no el de la estación) | Media | Surtidores.com.ar |
+| Parque GNC | 11.2% del parque (los clientes GNC de la estación se adoptan en 3 %, ver C8) | Media | ENARGAS |
+| Salarios playero | 1,545,472 ARS básico (≈ 1.680.000 con adicionales); la URL dice enero-2026 | Media | FECRA |
 
 ---
 
@@ -331,9 +344,9 @@ Documento de referencia con:
 
 **CRÍTICO:** Antes de presentar resultados, validar con el gerente de la estación:
 
-- [ ] Demanda real actual (litros/mes) — comparar con estimación 100–150k
+- [ ] Demanda real actual (litros/mes) — comparar con la estimación (hoy 270.000; extremos 150.000 y 400.000)
 - [ ] Personal por turno (mañana/tarde/noche) — verificar 5–6 / 5–6 / 2–3
-- [ ] Horario exacto de operación (¿06:00–22:00 o diferente?)
+- [ ] Horario exacto de operación (Shell API dice 24 h; DATOS decía 06–22; ver C1)
 - [ ] Tipos de diésel disponibles (¿G2 y G3? ¿qué mix?)
 - [ ] Tasa de entrada al minimarket (30% es supuesto)
 - [ ] Capacidad GNC (¿limitada por compresor en invierno?)
@@ -375,7 +388,7 @@ Luego en la UI:
 2. Ajustar slider "Demanda base mensual" (ej. 120,000)
 3. Seleccionar horizonte (ej. "mes")
 4. Botón "Correr simulación"
-5. Ver que la demanda es determinista (número aleatorio = 50)
+5. Ver que la demanda del día es fija (número aleatorio = 50). ❌ Ojo: las llegadas dentro del día siguen siendo aleatorias
 
 ### Verificar que el modo Monte Carlo sigue funcionando
 

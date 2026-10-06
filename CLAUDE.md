@@ -1,285 +1,141 @@
-# CLAUDE.md — Simulador de Estación de Servicio
+# CLAUDE.md — Simulador de la Shell de San Rafael
 
-> ⚠️ **AVISO (5/10/2026):** Este archivo describe el alcance anterior y contiene afirmaciones **incorrectas** sobre la "Fase 2" ("datos únicamente de fuentes verificadas", "la fórmula es exacta", réplicas/calentamiento innecesarios): el modo determinista mezcla litros con autos y siempre simula enero. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
-
+> **Versión final (6/10/2026, Fase 10).** Reemplaza al `CLAUDE.md` de la Fase 2, que tenía afirmaciones
+> falsas ("datos únicamente de fuentes verificadas", "la fórmula es exacta", "no hacen falta réplicas").
+> Si este archivo discrepa de `ORQUESTADOR_SIMULADOR.md`, **manda el orquestador**.
 
 ## Qué es esto
 
-Software de simulación de eventos discretos (DES) desarrollado a medida para el
-Trabajo Práctico de **Investigación Operativa (4to año, segundo semestre)**.
+Simulador de **eventos discretos** (Python + SimPy + Streamlit + Plotly), hecho a medida para el TP de
+**Investigación Operativa** (4º año), de **una estación real**: la **Shell de Av. Balloffet 1810 esq.
+Av. Los Sauces, San Rafael, Mendoza**. Grupo Andino–Assenza. No usamos Simul8: el motor es propio.
 
-La propuesta original (`docs/propuesta_simulacion_estacion_servicio.docx`) planteaba
-usar **Simul8**. Decisión tomada: **no usamos Simul8**, construimos nuestro propio
-simulador.
+El producto del TP es un **informe del caso**; el simulador ilustra escenarios. Tiene que ser
+**defendible**: cada dato se muestra con su fuente, su nivel y su confianza, y **casi todos son
+estimaciones o supuestos** porque no hay datos de la propia estación (se dice en la app).
 
-### Versión actual: Fase 2 (Octubre 2026)
-
-**Transición a caso real:** El modelo pasó de ser una simulación académica hipotética a un
-**estudio de caso real de la estación Shell de San Rafael, Mendoza** con tres cambios
-arquitectónicos:
-
-1. **Modelo determinista** (sin Monte Carlo on-the-fly): La demanda se calcula a partir de
-   una demanda base mensual y índices de estacionalidad, sin sorteos de demanda por día.
-2. **Datos únicamente de fuentes** (no campo): Todos los parámetros provienen de
-   `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`, consolidado desde 80+ fuentes
-   verificadas (Secretaría de Energía, FECRA, ENARGAS, papers académicos, etc.).
-3. **Horizonte variable** (día/semana/mes/estación/año): Se puede simular desde un solo
-   día hasta un año completo, con ajustes de estacionalidad según la época.
-
-### Consigna del profesor
-
-> "Puede ser sobre el tema que deseen, que corra en algún software (Simul8, flexsim,
-> etc… cualquier otro) y que tenga **alguna complejidad**, preferiblemente que contemple
-> **aspectos económicos**. Colas, transporte, Montecarlo, etc."
-
-El proyecto usa **las tres unidades** que se dieron en clase:
+Consigna del profesor: *"cualquier tema, que corra en algún software, con alguna complejidad,
+preferiblemente aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 | Unidad de la materia | Dónde aparece |
 |---|---|
-| **Modelos de colas** | Red de dos colas (surtidores y caja), disciplina FIFO, Wq, Lq, W, L, ρ, utilización, abandono |
-| **Simulación Monte Carlo** | (Opcional, Fase 1) La demanda de cada día se sortea de una tabla de frecuencias empírica, con los 5 pasos del apunte |
-| **Transporte / inventario** | Tanque de combustible con política (s, Q) y camión cisterna con plazo de entrega aleatorio |
+| **Colas** | 3 zonas de caras (nafta, diésel, GNC) con playeros por turno, cola finita, abandono, caja del minimarket; Wq, Lq, ρ, Little |
+| **Monte Carlo** | Producto y tipo de vehículo de cada cliente (5 pasos, tablas visibles); variación día a día opcional |
+| **Inventario / transporte / redes** | Un tanque por producto líquido con política (s, Q); camión desde Dock Sud o Luján por una red con cortes de ruta (Dijkstra) |
 
-**Fase 2 (actual):** Determinismo en demanda (no Monte Carlo), datos verificados de fuente,
-horizonte variable. El azar sigue presente en tiempos de servicio y plazos de entrega.
+### Las preguntas que responde (todo en pesos por mes)
+1. ¿Alcanza la dotación de playeros en el pico? ¿Conviene un playero más, o más stock? (S2, S6, S9)
+2. ¿Cuál es la mejor política de reposición de cada tanque, con camión desde Dock Sud y rutas que se cortan? (S4, S5, S7)
+3. ¿Cuánto se pierde cuando se corta el GNC en invierno y adónde va esa demanda? (S3)
+4. ¿Qué dato incierto mueve más la conclusión, y por lo tanto hay que relevar primero? (tornado)
 
-### Las dos preguntas que responde
+## Estado
 
-1. ¿Conviene agregar un surtidor y/o un cajero?
-2. ¿Cuál es la mejor política de reposición de combustible?
+**Fases 0–10 del orquestador cerradas.** `python verificar.py` → **100/100 OK** (los 22 controles originales
++ los N1–N19 del orquestador y los de cada fase). Detalle y deuda: `ORQUESTADOR_SIMULADOR.md` §9 y `TASK.md`.
 
-Las dos compiten por la misma plata y se comparan con el mismo criterio: pesos por mes.
+## Reglas de oro (no romper)
 
-## Alcance — LEER ANTES DE AGREGAR CUALQUIER COSA
+1. **`ParametrosSimulacion.clasico()` reproduce los números dorados** del orquestador §14.1 (control N1).
+   Es el caso degenerado (3 surtidores, 1 producto, 1 tanque): demuestra que el motor nuevo no rompió el viejo.
+2. **Streams RNG nuevos sólo AL FINAL de `STREAMS`**; nunca reordenar ni reutilizar uno (rompe los dorados y los números aleatorios comunes).
+3. **Ningún número sin pasar por el Registro** (`sim/datos.py`): valor, unidad, fuente, nivel, tipo, confianza, alternativas. Todo campo de los parámetros tiene su `Dato` (control N14).
+4. **Litros ≠ m³ ≠ autos.** Los clientes por día se **derivan** de litros/mes ÷ litros medios por cliente; nunca "litros ÷ 30 = autos". El GNC se mide en m³.
+5. `sim/` **nunca** importa `streamlit` ni `ui/`; **sin `print()` en `sim/`**.
+6. **Ningún hex de color fuera de `ui/tema.py`** (control N15). Amarillo nunca como texto sobre blanco. Sin logo de Shell.
+7. Si cambia la **firma** de un módulo, **reiniciar Streamlit** (recarga `app.py` pero conserva el módulo viejo). `fileWatcherType = "poll"` en `.streamlit/config.toml` **no se quita**.
+8. `Escenario` guarda **cambios declarativos** `((campo, valor), …)`, no lambdas (`st.cache_data` los serializa con pickle).
+9. Un commit por fase, en castellano. **Sin Pull Request** salvo que lo pidan.
 
-Este proyecto **no es escalable a propósito**. Es un entregable académico, no un producto.
+## Alcance — qué NO se hace (no es escalable a propósito)
 
-**NO hacer** (aunque parezca "buena práctica"):
-
-- Base de datos, autenticación, usuarios, multi-tenant, API REST, Docker.
-- Plugins, capas de abstracción "para el futuro", inyección de dependencias.
-- ~~Varios tipos de combustible~~ **SUPERADO (5/10/2026): SÍ se hace** (5 productos, un tanque por producto líquido). Ver `ORQUESTADOR_SIMULADOR.md` §2.3.
-- ~~GNC, turnos de empleados~~ **SUPERADO: SÍ se hacen** (GNC con cortes invernales; playeros por turno). Siguen prohibidos: lavadero, camiones como clientes masivos, fallas de equipos, horas extra/ausentismo.
-- Multiprocessing para acelerar: no vale la fragilidad que trae en Windows + Streamlit.
-
-**SÍ hacer**: que lo que hay esté **completo, correcto, visible y defendible frente al
-profesor**. Rigor estadístico antes que cantidad de funcionalidades.
+Base de datos, login, API REST, Docker, plugins, capas "para el futuro", **multiprocessing**,
+lavadero, camiones como clientes masivos, horas extra/ausentismo. (Se superó la vieja prohibición de
+"varios combustibles" y "GNC": hoy están **dentro** del alcance.)
 
 ## Stack
 
-| Capa | Tecnología | Por qué |
-|------|-----------|---------|
-| Motor de simulación | **SimPy 4** | Librería DES estándar en ámbito académico |
-| Cálculo y datos | **NumPy**, **pandas** | Promedios, réplicas, tablas |
-| Interfaz | **Streamlit** | Web app sin escribir HTML del lado del servidor |
-| Gráficos | **Plotly** | Gráficos interactivos |
-| Animación | **SVG generado en JavaScript** | Ver "Decisiones de arquitectura" |
-
-Python **3.14.4**, entorno virtual en `.venv/`.
+Python 3.14 · **SimPy 4** · NumPy/pandas · **Streamlit** · **Plotly** · animación en **JavaScript/SVG** dibujada por el navegador.
+Entorno virtual en `.venv/`.
 
 ## Estructura
 
 ```
-Proyecto/
-├── CLAUDE.md              # este archivo (contexto para Claude)
-├── TASK.md                # checklist de tareas
-├── README.md              # cómo correrlo + guion de demo
-├── requirements.txt
-├── app.py                 # interfaz Streamlit (única entrada del programa)
-├── verificar.py           # 22 controles de correctitud del motor
-├── sim/                   # MOTOR: Python puro, sin dependencia de Streamlit
-│   ├── config.py          # parámetros, perfil horario, tabla empírica, tanque, escenarios
-│   ├── distribuciones.py  # RNG con semilla, streams separados, muestreo empírico
-│   ├── modelo.py          # procesos SimPy: días, llegadas, colas, tanque, reposición
-│   ├── estadisticas.py    # colectores (por cliente, temporales y por hora)
-│   ├── economia.py        # análisis económico de capacidad y de inventario
-│   ├── traza.py           # cuadros de animación, serie del tanque, registro Monte Carlo
-│   └── runner.py          # réplicas, IC 95 %, escenarios y barrido de políticas
-├── ui/                    # solo presentación
-│   ├── animacion.py       # reproductor de la animación (HTML + SVG dibujado en JS)
-│   ├── graficos.py        # figuras Plotly
-│   └── textos.py          # etiquetas, ayudas y textos largos
-└── docs/
-    └── propuesta_simulacion_estacion_servicio.docx
+app.py                  Streamlit (única entrada): 14 pestañas
+verificar.py            100 controles (correr antes de commitear)
+sim/                    MOTOR — Python puro, sin Streamlit
+  datos.py              REGISTRO de datos (108 filas) + MAPA_PARAMETROS (N14) + contradicciones C1–C20
+  config.py             dataclasses frozen: parámetros, grupos, productos, red, GNC, economía, calendario
+  distribuciones.py     RNG con semilla, un stream por fuente de azar, muestreo empírico
+  modelo.py             procesos SimPy: llegadas, "producto primero", playeros por turno, caras, GNC, tanques, camión
+  estadisticas.py       colectores (por cliente, temporales, por hora, por grupo y producto)
+  traza.py              cuadros de animación y series
+  runner.py             réplicas, IC 95 % (t de Student), barrido de políticas por producto
+  red.py                Dijkstra (heapq), cortes E1–E4, demora → plazo
+  gnc.py                episodios de corte invernales (calendario)
+  escenarios.py         estaciones del año y catálogo S0–S12, diferencias pareadas
+  economia.py           análisis económico del caso clásico y del barrido de políticas
+  economia_real.py      estado de resultados mensual, personal, flete, año estimado, decisión en $/mes
+  sensibilidad.py       tornado: 26 ejes, 56 variantes, listado de todos los datos inciertos
+ui/                     PRESENTACIÓN
+  tema.py               paleta Shell (única fuente de colores), plantilla Plotly, CSS
+  animacion.py          reproductor del playón (columnar → SVG en el navegador)
+  graficos*.py          figuras Plotly (colas/inventario, red, GNC, escenarios y tornado)
+  datos_ui.py           insignias, tabla del Registro, CSV, esquema de la estación
+  textos.py             etiquetas, ayudas y textos largos
+reports/                scripts de QA con Playwright + capturas por fase
+research_notes/         notas de investigación verificadas
 ```
 
-**Regla de oro de arquitectura**: `sim/` nunca importa `streamlit` ni `ui/`. Así el motor
-se puede correr desde un script o un notebook, y se puede testear solo.
+## El modelo en una pantalla
 
-## Modelo del sistema
-
-```
-  Monte Carlo: cada día se sortea la demanda de una tabla de frecuencias empírica
-        │
-        ▼
-  Perfil horario: esos autos se reparten en las 24 h (pico mañana, valle, pico tarde)
-        │
-        ▼
-  ┌──────────────┐                                  ┌──────────┐
-  │ Cola surtidor│ ─► N surtidores ─┬─► 70% se va    │Cola caja │─► M cajas ─► salida
-  └──────────────┘   (Triangular)   └─► 30% ────────►└──────────┘  (Triangular)
-        │ abandono                                        │ abandono
-        ▼ (espera > paciencia)                            ▼
-   cliente perdido                                  compra perdida
-        ▲
-        │ si no hay combustible, el auto ni siquiera hace la cola
-  ┌─────┴─────────────────────────────────────────────┐
-  │ TANQUE: cada carga descuenta litros.              │
-  │ Si la posición de inventario ≤ s ──► pide Q litros│
-  │ El camión tarda un plazo aleatorio en llegar.     │
-  └───────────────────────────────────────────────────┘
-```
-
-- **Entidad**: auto/cliente. **Atributos**: litros a cargar, si compra o no, sus tiempos.
-- **Recursos**: surtidores (N), cajas (M), tanque (litros).
-- **Una réplica = un mes** (30 días por defecto), con 1 día de calentamiento.
-
-### Escenarios de capacidad
-
-Base (lo que hay hoy), A (+1 surtidor), B (+1 cajero), C (ambos).
-
-### Política de inventario
-
-Se barre una grilla de (punto de pedido s, cantidad a pedir Q) y se elige la de menor
-**costo total = flete + almacenamiento + faltante**.
-
-## Convenciones de código
-
-- **Todo en castellano**: nombres, docstrings, interfaz. Es un TP que se defiende en
-  castellano; que el código se lea igual que el informe.
-- **Unidades**: tiempo en **minutos** (el día tiene 1440), volumen en **litros**, dinero
-  en **pesos**. Sin excepciones ni conversiones implícitas.
-- `@dataclass(frozen=True)` para parámetros; nada de diccionarios sueltos pasando de
-  función en función.
-- Reproducibilidad: **toda** la aleatoriedad viene de `sim/distribuciones.py` con semilla
-  explícita. Misma semilla ⇒ mismo resultado, siempre.
-- Streams RNG separados por fuente (llegadas, carga, compra, decisión, litros, demanda,
-  entrega) para poder usar **números aleatorios comunes** entre escenarios.
-- Los atributos del auto se sortean **al llegar**, no al ser atendido: así el auto
-  número 57 es idéntico en los cuatro escenarios.
-- Sin `print()` en `sim/`: el motor devuelve datos, la interfaz los muestra.
+- **Demanda:** `litros_mes` (270.000) ÷ días del mes × estacionalidad (neutra por defecto) × tipo de día (fin de semana ×1,30, **normalizado** para conservar los litros del mes) ÷ litros medios por cliente (35,7 L) ⇒ ≈ 252 clientes líquidos/día + 3 % de clientes GNC. Llegadas Poisson no homogéneas con el perfil horario (picos 07–10 y 16–18).
+- **Cliente "producto primero":** se sortea producto (Súper, V-Power, Diésel G2, G3, GNC) y tipo de vehículo; litros ~ `Triangular(0,2·T ; 0,3·T ; 1,0·T)`. Todo se sortea **al llegar**.
+- **Playón:** zona A nafta (4 caras), B diésel (2), C GNC (6). Servidores = `mín(caras libres, playeros en turno)` (playeros 1·2·2). Cola finita por zona, paciencia, caja del minimarket (20 % entra).
+- **GNC:** 3 compresores limitan las cargas simultáneas; en jun–ago hay episodios de **corte total** (contrato interrumpible); el cliente pasa a Súper (30 %) o se pierde.
+- **Inventario:** un tanque por líquido, política (s, Q) por producto, un camión independiente por producto; plazo = base `Triangular(24,36,48)` h + demora por corte de ruta.
+- **Pérdidas con motivo fijo:** `sin_combustible` · `abandono_espera` · `cola_llena` · `corte_gnc` · `abandono_caja`; los migrados a nafta se cuentan aparte.
 
 ## Rigor estadístico
 
-- **Calentamiento**: la estación arranca vacía y con el tanque lleno, que no es su estado
-  habitual. Ese transitorio se simula pero no se mide.
-- **Réplicas independientes** con semillas distintas. Se informa **promedio ± IC 95 %**
-  (t de Student; la tabla está en `runner.py` para no depender de scipy).
-- **Números aleatorios comunes** entre escenarios, para que la comparación sea justa.
-- **Promedios temporales** (área/tiempo) para cola, utilización y nivel de tanque; los
-  promedios por cliente son otra cosa y se calculan aparte.
-- `verificar.py`: 22 controles, incluidas la **ley de Little** y la **conservación de
-  litros**, que dan exactos.
-
-## Fase 2: Determinismo, fuentes verificadas, horizonte variable
-
-### Cambios arquitectónicos (octubre 2026)
-
-**1. Modelo determinista (sin Monte Carlo en demanda)**
-
-Fase 1 sorteaba la demanda de cada día de una tabla empírica. Fase 2 calcula la demanda
-de forma determinista a partir de:
-
-- `demanda_base_mensual`: Litros/mes (ej., 120.000 L base)
-- `estacionalidad`: Índices por mes (enero=100, julio=85, junio=55, etc.)
-- Día del año: Se calcula autos_por_día = base/30 × índice(mes)/promedio_índices
-
-La fórmula es exacta (sin azar en demanda). Los autos llegan según el perfil horario
-(Poisson no homogéneo), así que hay variabilidad dentro del día, solo no día-a-día.
-
-Ventaja: No se necesitan réplicas para convergencia; cada horizonte tiene un comportamiento
-predecible. Se pueden correr períodos más largos sin incertidumbre de Monte Carlo.
-
-**2. Datos únicamente de fuentes verificadas**
-
-Todos los parámetros de operación están en `DATOS_OPERACIONALES_ESTACION_SHELL_SAN_RAFAEL.md`:
-
-- Demanda: Extrapolada desde datos nacionales Shell (600k L/mes/estación) × participación local
-- Perfil horario: De datos YPF micropricing (7:30–10:30 pico mañana, 16–18 pico tarde)
-- Tiempos: Papers académicos (UTN, UNLP), observaciones de sector
-- Personal: FECRA convenio SOESGyP (oct 2026), salarios validados
-- Estacionalidad: Ocupación hotelera (proxy), cortes RN-143/144 (invierno)
-- Mix combustible: Surtidores.com.ar datos de sector
-- Parque automotor: AFAC, ENARGAS
-
-Cada parámetro tiene **confianza** (Alta/Media/Baja) y **URL de fuente**. Valores
-anotados como "SUPUESTO" requieren validación con la estación real.
-
-**3. Horizonte variable**
-
-El usuario elige simular:
-- **Día (1)**: Un día representativo, para ver patrones horarios finos
-- **Semana (7)**: Una semana, para capturar variación fin de semana vs. hábil
-- **Mes (30)**: Un mes de operación, acumulación de eventos, política (s, Q)
-- **Estación (90)**: Trimestre, rango de estacionalidad (ej., invierno junio–agosto)
-- **Año (365)**: Ciclo completo, máxima estacionalidad, decisiones anuales
-
-Los `dias` de simulación se fijan automáticamente según el horizonte; no hay menú de
-"días simulados" en determinista. El calentamiento es innecesario (no hay transiente
-de Monte Carlo).
-
-### Implementación
-
-- **config.py**: Nueva clase `Estacionalidad` con índices [1..12]
-- **config.py**: `ParametrosSimulacion` nuevos campos:
-  - `modo_determinista: bool`
-  - `demanda_base_mensual: float`
-  - `horizonte: str` ("dia", "semana", "mes", "estacion", "anio")
-  - Métodos `.autos_por_dia()` y `.autos_por_dia_fecha(dia)` adaptativos
-- **distribuciones.py**: Nuevo método `.determinista(autos_por_dia)` → tupla (autos, 50)
-- **modelo.py**: `correr_dias()` elige entre `.empirica()` y `.determinista()`
-- **app.py**: Nuevo expander "Fase 2: Modelo determinista"
-  - Toggle `modo_determinista`
-  - Si activo: radio button `horizonte` + slider `demanda_base_mensual`
-  - Si no: muestra tabla de demanda Monte Carlo (Fase 1)
-  - Sección "Corrida" desactiva "días simulados" en determinista (se fija por horizonte)
-
-## Decisiones de arquitectura (y por qué)
-
-1. **La animación se dibuja en JavaScript, no en Python.** Con el reproductor del lado del
-   servidor cada cuadro costaba unos 0,8 s (ida y vuelta por websocket más volver a montar
-   el componente) y la película iba a los saltos. Ahora Python manda los cuadros como JSON
-   y el navegador los dibuja. Es la única parte con JS y sólo dibuja: no simula nada.
-2. **`st.html` no sirve para SVG**: Streamlit lo sanea y lo descarta entero. Hay que usar
-   `st.components.v1.html`, que lo monta dentro de un iframe.
-3. **Los importes se escapan antes de pasarlos a Markdown** (`escapar_pesos`): dos signos
-   `$` en la misma línea hacen que Streamlit lo interprete como fórmula LaTeX.
-4. **No se puede escribir en `st.session_state` de un widget ya instanciado.** El botón
-   "Usar esta política" guarda la sugerencia en otra clave, y se aplica al principio de
-   `leer_parametros()`, antes de crear los controles.
-5. **La animación graba un solo día.** Los 30 días serían más de 80.000 cuadros. El nivel
-   del tanque, en cambio, se muestrea cada 10 minutos durante todo el mes.
-6. **El combustible se descuenta al EMPEZAR a cargar**, no al terminar: si no, varios
-   autos cargando a la vez pasan cada uno el control de stock y entre todos sacan más
-   litros de los que hay. Lo detectó el control de conservación de litros.
-7. **Las llegadas usan la tasa de la hora en curso** y se vuelve a sortear al cruzar de
-   hora (es exacto por la falta de memoria de la exponencial). Antes se usaba
-   adelgazamiento (thinning), que descartaba la mitad de los sorteos y era más lento.
-8. **La conclusión se arma antes que las pestañas**, así que después del barrido de
-   políticas hay que llamar a `st.rerun()` o queda desactualizada.
-
-## Rendimiento
-
-Una réplica de 30 días tarda unos **0,5 s**. La corrida completa (4 escenarios × 4
-réplicas) tarda **12 a 15 s**, y el barrido de políticas (13 × 2 réplicas) unos **16 s**,
-por eso va aparte con su propio botón. Todo pasa por `st.cache_data`: volver a una pestaña
-no vuelve a calcular.
-
-Si hace falta acelerar: bajar los días simulados o la cantidad de réplicas. **No** meter
-multiprocessing.
+- **Calentamiento de 2 días** (el tanque arranca al 75 %): se simula y no se mide.
+- **Réplicas independientes** con semillas distintas; **promedio ± IC 95 %** (t de Student, tabla en `runner.py`).
+- **Números aleatorios comunes** entre escenarios; las comparaciones usan la **diferencia pareada** réplica a réplica (IC mucho más angosto).
+- **Promedios temporales** (área/tiempo) para colas, utilización y niveles.
+- Controles de `verificar.py`: ley de Little, conservación de clientes (por grupo y motivo) y de litros (por producto), unidades de la demanda (N16), calendario (N17), normalización (N18), monotonías (N11), Dijkstra = enumeración de caminos, ingresos − costos = margen, etc.
 
 ## Cómo correrlo
 
 ```bash
-.venv/Scripts/streamlit run app.py     # la aplicación
-.venv/Scripts/python verificar.py      # los 22 controles del motor
+.venv/Scripts/streamlit run app.py          # la aplicación (http://localhost:8501)
+.venv/Scripts/python verificar.py           # 100 controles (≈ 2 min); debe terminar en "Todos los controles pasaron"
 ```
 
-`.streamlit/config.toml` usa `fileWatcherType = "poll"` porque el watcher por eventos no
-detecta los cambios de `sim/` y `ui/` en esta ruta (tiene espacios y acentos). Aun así,
-**si se cambia la firma de un módulo hay que reiniciar el servidor**: Streamlit recarga el
-script principal pero se queda con la versión vieja del módulo importado.
+En Windows con salida a un archivo: `PYTHONIOENCODING=utf-8 PYTHONUTF8=1`.
 
-## Estado
+## Rendimiento (medido el 6/10/2026)
 
-Ver `TASK.md`.
+Una réplica de un mes ≈ 0,4 s · de un año ≈ 5 s · 4 estaciones × 4 réplicas ≈ 7 s · catálogo S0–S12 (19 escenarios × 4 réplicas) ≈ 34 s · tornado con 2 réplicas ≈ 40 s. Todo lo pesado va detrás de un botón y con `st.cache_data`. **No** meter multiprocessing.
+
+## Decisiones de arquitectura (y por qué)
+
+1. **La animación se dibuja en JavaScript**, no en Python: Python manda JSON columnar y el navegador dibuja el SVG (`st.components.v1.html`; `st.html` descarta el SVG).
+2. **Los importes se escapan** antes de pasarlos a Markdown (`escapar_pesos`): dos `$` en una línea se leen como LaTeX.
+3. **No se escribe en `st.session_state` de un widget ya creado:** "Usar esta política" guarda la sugerencia en otra clave y se aplica al principio de `leer_parametros()`.
+4. **La conclusión se arma antes de las pestañas:** tras un barrido hay que llamar a `st.rerun()`.
+5. **El combustible se descuenta al EMPEZAR a cargar**, del tanque de su producto (si no, varios autos pasan el control de stock a la vez y sacan más de lo que hay).
+6. **Un stream de plazo y de corte de ruta por producto:** si no, el sorteo de un tanque dependía de cuántos pedidos hizo otro y no se podían medir las políticas por separado.
+7. **La venta perdida es un costo de oportunidad:** se informa aparte y no se resta del margen.
+8. **Todo corre por réplica y recién después se promedia** (también la economía), para tener IC y diferencias pareadas.
+
+## Documentos
+
+| Archivo | Para qué |
+|---|---|
+| `ORQUESTADOR_SIMULADOR.md` | **Especificación completa**, fases, compuertas, controles y cierre de cada fase (§9) |
+| `ONBOARDING_PARA_AGENTES.md` | Arranque rápido para un agente nuevo |
+| `README.md` | Cómo correrlo, guion de demo y respuestas al profesor |
+| `TASK.md` | Qué está hecho y qué falta |
+| `CASO_SHELL_SAN_RAFAEL.md` | Contexto del caso y plan de investigación |
+| `DATOS_OPERACIONALES_…md` | Compilado de datos **con errores corregidos en la Fe de erratas inicial**; el valor adoptado de cada dato está en el Registro |
+| `FASE2_IMPLEMENTACION.md` | Historia de la Fase 2 (superada; trae su corrección) |

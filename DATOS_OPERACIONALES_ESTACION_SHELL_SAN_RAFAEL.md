@@ -1,11 +1,31 @@
 # Datos Operacionales — Estación Shell San Rafael
 
-> ⚠️ **AVISO (5/10/2026):** Este compilado es útil pero **sobreestima la confianza** y se contradice (horario 06–22 vs. 24 h oficial de Shell; "autos/día" que en realidad son litros/día; personal; mezcla de diésel). Las contradicciones y el valor adoptado de cada una están en `ORQUESTADOR §4.2`. Para el trabajo vigente leer `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; **donde discrepen, mandan ellos** (errores catalogados en `ORQUESTADOR §3` y `§4`).
+> **Corregido en la Fase 10 (6/10/2026).** Este compilado es **útil como mapa de fuentes**, pero tiene
+> errores de fondo que se listan abajo y se marcan en el texto con **[CORREGIDO]**. Para el valor
+> **adoptado** de cada dato, su fuente y sus alternativas, la autoridad es el **Registro** (`sim/datos.py`,
+> pestaña *Datos y fuentes* de la app) y `ORQUESTADOR_SIMULADOR.md` §4.2 (20 contradicciones resueltas).
+> Para trabajar: `ONBOARDING_PARA_AGENTES.md` y `ORQUESTADOR_SIMULADOR.md`; donde discrepen, mandan ellos.
+
+### Fe de erratas
+
+| Dónde | Lo que dice | Qué está mal | Qué vale hoy |
+|---|---|---|---|
+| Cabecera | "Todos los datos tienen fuente verificada, nivel de confianza y URL" | Hay cifras sin URL, resúmenes de buscador y supuestos del propio compilador | Cada dato lleva **nivel, tipo y confianza**; las "Alta" de este archivo son del compilador y **sobreestiman** (jerarquía de evidencia: `ORQUESTADOR §4.1`) |
+| §1 Demanda | "2.000–5.000 autos/día", "3.300–5.000 autos/día @ 50 L" | Son **litros por día**, no autos (error ≈ ×35–50) | 270.000 L/mes ⇒ 9.000 L/día ⇒ **≈ 252 clientes/día** (÷ 35,7 L por cliente). C2, C3 |
+| §1 Demanda | 100–150 k L/mes como base | Fuente débil (extrapolación nacional) | **270.000 L/mes** (estimación baja-media); 150 k y 400 k como extremos. C2 |
+| §2 Perfil | "Madrugada = 1/40 del pico", "Alta" | Su propia tabla de 24 factores da madrugada **1,0** y pico **3,5** (= 1/3,5); la fuente (descuentos nocturnos de YPF) no es un perfil | Tabla de 24 factores (picos 07–10 y 16–18). C16 |
+| §2 | "Fin de semana +24–50 %", "quincena +100 %" con confianza Alta | Fuente débil (congestión, limitación de camiones) | Fin de semana ×1,30 **normalizado al mes**; quincena sólo en el escenario S12. C17 |
+| §4 Personal | "5–6 personas" por turno | Son **personas** (encargado 1 + playeros 2 + cajero 1 + tienda 1), no playeros | Playeros **1 · 2 · 2** (noche · mañana · tarde); 1 caja. C5 |
+| §4 Salarios | "FECRA oct-2026", Alta | La URL dice **enero-2026**; son costos con adicionales | Estimación de confianza media, vigencia a verificar. C18 |
+| §5 Horario | "06–22, NO 24 h; operación nocturna **cerrada al público**" | Lo contradice la API oficial de Shell (`twenty_four_hour`) y el propio turno noche del documento | **24 h**; el cierre nocturno es el escenario S10. C1 |
+| §7 Mezcla | "Súper 23 %, V-Power 16 %, G2 24 %, G3 19 %" como mezcla de la estación | Es el mercado **nacional por volumen** | Mezcla en litros normalizada a los 4 líquidos (28,0 · 19,5 · 29,3 · 23,2 %); GNC como 3 % de los clientes. C6, C7 |
+| §8 Vehículos | Tanque de camión 300 L "Alta" | No hay dato argentino | **Supuesto** (rango 120–600 L). C13 |
+| §8 Litros por carga | "Litros/carga promedio" ≈ tanque lleno | Sin fuente; la nota 03 indica ≈ 30 % del tanque | Triangular(0,2·T; 0,3·T; 1,0·T), media 0,5·T. C12 |
 
 ## Consolidado de Investigación Profunda | Octubre 2026
 
-> **Documento de referencia para Fase 2 (Modelo Determinista)**  
-> Todos los datos tienen fuente verificada, nivel de confianza y URL.  
+> **Compilado de fuentes** (histórico; ver la fe de erratas arriba).  
+> Los datos llevan fuente declarada, pero **no todas fueron verificadas en el original**.  
 > **Supuestos y rangos** claramente marcados.
 
 ---
@@ -17,11 +37,11 @@
 | **DEMANDA** | | | | | |
 | Demanda anual estimada | 60–200 | k litros/mes | Media | Extrapolación nacional | Rango: baja–alta para Shell en zona |
 | Demanda promedio (estimado) | 100–150 | k litros/mes | Media | Datos shell + participación | **SUPUESTO: requiere validación |
-| Autos/día (estimado) | 2,000–5,000 | autos/día | Media | Demanda ÷ litros promedio | Basado en 50L/auto promedio |
+| Autos/día (estimado) | ~~2,000–5,000~~ → **≈ 90–140 clientes/día** con 100–150 k L/mes (≈ 250 con 270 k) | clientes/día | Baja | Litros/mes ÷ días ÷ 35,7 L por cliente | **[CORREGIDO]** eran litros/día, no autos |
 | **PERFIL HORARIO** | | | | | |
 | Pico mañana | 7:30–10:30 | h | Alta | YPF micropricing + observación | Máxima demanda del día |
 | Pico tarde | 16:00–18:00 | h | Alta | YPF micropricing | Segundo pico, casi igual |
-| Madrugada (00–06) | 1/40 del pico | ratio | Alta | YPF datos reales | Demanda mínima |
+| Madrugada (00–06) | ~~1/40 del pico~~ → ≈ 1/3,5 del pico (factor 1,0 vs 3,5 de su tabla) | ratio | Baja | YPF (descuentos nocturnos; no es un perfil) | **[CORREGIDO]** C16 |
 | Fin de semana | +24 a +50% | % vs hábil | Alta | Datos de tránsito | Mayor variabilidad |
 | Cambio de quincena | +100%+ | % vs promedio | Alta | Datos de congestión | Picos muy pronunciados |
 | **TIEMPOS DE SERVICIO** | | | | | |
@@ -41,7 +61,7 @@
 | **HORARIO Y SERVICIOS** | | | | | |
 | Horario de operación | 06:00–22:00 | h | Media | Patrón típico Shell | **VERIFICAR específicamente |
 | Shell Select (tienda) | 06:00–22:00 | h | Media | Datos Shell | Cierra con estación |
-| Operación 24h | NO | — | Alta | Datos yPF/Shell | Excepcionales; no es norma |
+| Operación 24h | ~~NO~~ → **Sí** (Shell API `twenty_four_hour`); cierre nocturno = escenario S10 | — | Media | API oficial de Shell | **[CORREGIDO]** C1 |
 | Autoservicio (Decreto 46/2025) | Sí, opcional | — | Alta | Resolución 147/2025 | Permitido en Mendoza |
 | Servicios | Aire, agua, lavado, diesel a granel | — | Media | Datos corporativos Shell | Tienda Shell Select 140m² |
 | **ESTACIONALIDAD** | | | | | |
@@ -106,7 +126,7 @@ Considerando:
 - **Escenario alto:** 150–200 k litros/mes (5,000–6,650/día)
 
 **Recomendación para modelo:**
-- Usar **100–150 k litros/mes como base** (3,300–5,000 autos/día @ 50L promedio)
+- Usar **100–150 k litros/mes como base** (≈ 3.300–5.000 **litros** por día; **[CORREGIDO]** no son autos: ÷ 35,7 L ⇒ ≈ 90–140 clientes/día). El modelo adopta **270.000 L/mes**
 - Marcado como **SUPUESTO** en el modelo
 - Variar con índice estacional (ver §6)
 - **Validar con datos de la estación real**
@@ -295,7 +315,7 @@ TOTAL MES (aprox):         $20,160,000 ARS
 |-----------|---------|-----------|------|
 | **Surtidores (bombas)** | 06:00–22:00 | Media | Patrón típico Shell; **verificar específicamente** |
 | **Shell Select (tienda)** | 06:00–22:00 | Media | Cierra con la estación |
-| **Operación nocturna** | 22:00–06:00 | Alta | **CERRADO AL PÚBLICO** (excepcional: 24h) |
+| **Operación nocturna** | 22:00–06:00 | Baja | ~~CERRADO AL PÚBLICO~~ **[CORREGIDO]** la API oficial de Shell dice 24 h (C1); el cierre es el escenario S10 |
 | **Personal guardia noche** | 22:00–06:00 | Media | Mínimo (no atiende clientes) |
 
 ### Servicios Disponibles

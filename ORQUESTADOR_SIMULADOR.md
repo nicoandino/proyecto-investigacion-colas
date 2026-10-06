@@ -1,5 +1,7 @@
 # ORQUESTADOR v2 — Simulador de la Shell de San Rafael (de hipotético a caso real)
 
+> **ESTADO FINAL (6/10/2026): fases 0–10 cerradas.** Cada fase tiene su bloque de cierre en el §9 (qué se hizo, compuerta, resultados a no sobreinterpretar y deuda); el cierre de la Fase 10 trae los criterios D0–D11 con su evidencia. Lo que sigue es el relevamiento en la estación (§12) y el informe. Las tablas de auditoría de §3 describen el estado **previo** a las fases 0–2.
+
 > **Para quién es este archivo:** un agente de código que arranca en frío. Leelo **entero** antes de tocar nada. Es la fuente de verdad del trabajo **gráfico y práctico** que falta. **Si este archivo contradice a `CLAUDE.md`, `TASK.md`, `FASE2_IMPLEMENTACION.md`, `DATOS_OPERACIONALES_…md` o `ONBOARDING_PARA_AGENTES.md`, gana este archivo** (los otros tienen errores documentados en §3 y §4).
 >
 > **Versión:** v2.0 · **Fecha:** 5/10/2026 · **Reemplaza a:** v1.0 (escrita antes de que existieran los datos operacionales y el código de "Fase 2").
@@ -603,6 +605,31 @@ Tornado con **cada C1–C19 como eje**. **Gate:** lista **todos** los `supuesto`
 
 ### Fase 10 — Verificación final y documentación
 Todos los controles · QA visual completo (§10.4) · rendimiento. Reescribir `CLAUDE.md` (alcance, §2.3), `TASK.md`, `README.md` (guion de demo del caso real y respuestas al profesor: *¿por qué datos supuestos? ¿cómo se validó? ¿qué es "heredado"? ¿por qué 270.000 L?*), **corregir** `FASE2_IMPLEMENTACION.md`, `DATOS_OPERACIONALES…md` y `ONBOARDING…md` con §3 y §4. Los `.docx` no se tocan salvo pedido (describen el modelo viejo). **Gate:** D0–D11 completos.
+
+> **FASE 10 CERRADA (6/10/2026).**
+> - **Documentación:** `CLAUDE.md`, `TASK.md`, `README.md` (con guion de demo de 7 minutos y respuestas al profesor) y `ONBOARDING_PARA_AGENTES.md` (v3) **reescritos**; `FASE2_IMPLEMENTACION.md` y `DATOS_OPERACIONALES…md` **corregidos** con una fe de erratas al principio y marcas **[CORREGIDO]** / ❌ en el texto (se conserva el original tachado para no perder la trazabilidad). Se quitaron los avisos provisorios de la primera línea porque los errores ya están corregidos.
+> - **Compuerta:** `verificar.py` **100/100** (≈ 2 min) · N1 dorados exactos · **QA visual completo** (`reports/qa_fase10_completo.py`, capturas en `reports/qa/fase10/`): las 14 pestañas y las 4 sub-pestañas de Indicadores en escritorio (1440 px) y las 14 en celular (390 px), más la animación en 3 instantes (madrugada, hora pico, corte de GNC) = **31 vistas con 0 excepciones, 0 desbordes horizontales de la página y 0 errores de consola**. Las tablas anchas scrollean por dentro en celular.
+> - **Rendimiento** (medido): réplica de un mes ≈ 0,4 s (tope 1,5 s) · un año ≈ 4,9 s por réplica (B7: una corrida por escenario) · 4 estaciones × 4 réplicas ≈ 6,8 s (tope 90 s) · catálogo S0–S12 (19 × 4) ≈ 34 s · tornado con 2 réplicas ≈ 40 s.
+>
+> **Criterios D0–D11 (§1) con su evidencia:**
+>
+> | # | Estado | Evidencia |
+> |---|---|---|
+> | D0 | ✅ | N16: 270.000 L/mes ⇒ 272.308 simulados (+0,9 %); control 21: los 4 meses dan 270.000 ± 4 %; con carga media 0,8 × T, 8.873 L/día contra ≈ 8.710 (+1,9 %) |
+> | D1 | ✅ | 12 caras en 3 zonas, playeros por turno; N2 (conservación por zona y motivo), N4 (Little), N5 (simultáneos ≤ playeros y ≤ caras) |
+> | D2 | ✅ | 5 productos, tanque por líquido, GNC sin tanque con compresores; N3 (litros por producto, m³ del GNC) |
+> | D3 | ✅ | `sim/red.py`; N6 (221,8 km / 399,8 km), Dijkstra = enumeración de caminos, N11 |
+> | D4 | ✅ | corte total por episodios + migración; N7, N8, N12 |
+> | D5 | ✅ | `dias_y_fecha` única, calendario real, estacionalidad elegible; N17, N18; pestaña Estaciones |
+> | D6 | ⚠️ parcial | Registro de 108 datos con valor, unidad, fuente, nivel, tipo, confianza y alternativas, insignias y **CSV** (botón de descarga); N14 cero huérfanos. **Falta la anulación por relevamiento** (importar un CSV/tabla que pise un `Dato` ⇒ `observacion`, §8.4) |
+> | D7 | ✅ | N15: ningún hex fuera de `ui/tema.py`, contraste WCAG, 5 productos distinguibles |
+> | D8 | ✅ | 3 zonas, 12 caras, playeros, cola por zona con lugares, rechazados que pasan de largo por la avenida, minimarket, tanques por producto, camión en ruta, GNC; control 17 y capturas |
+> | D9 | ✅ | control 23: 26 ejes y 56 variantes; el listado cubre los 72 supuesto/heredado/estimación y las 20 contradicciones. Seis contradicciones **no tienen eje, con motivo escrito** (C3 corrección de unidades, C7 se ve con C6 y C8, C14 no se modela, C15 es la variante de C5, C19 los precios no entran al modelo, C20 no afecta la operación) |
+> | D10 | ✅ | 100 controles: los 22 originales + N1–N12, N14–N19 y los de cada fase. **N13 (M/M/c) es opcional y no se hizo** |
+> | D11 | ✅ | esta fase |
+>
+> - **Desvíos respecto del plan original (§8.2, §9):** la app tiene **14 pestañas** en vez de ≤ 7 con sub-pestañas (cada fase sumó la suya); **no hay** pestaña/botón *Verificación* dentro de la app (los controles se corren con `python verificar.py`); la 6b (flujo máximo de la red de gas) se omitió por falta de datos de capacidad; el camión **consolidado** (N2 etapa 2) no se hizo.
+> - **Qué falta de verdad:** datos de la propia estación (`§12`). Todo número del modelo es estimación o supuesto, y los pesos usan márgenes y flete heredados sin fuente. Con ellos el margen operativo da ≈ −$3,8 M/mes (empate en ≈ $116/L): **la conclusión económica depende de un dato que hoy no tenemos**. La lista priorizada y la deuda técnica están en `TASK.md`.
 
 **Orden recomendado:** F0 → **F1** → F2 → F3 → F4 → F5 → F6 → F7 → F8 → F9 → F10. Si hay que recortar: **mantener F0, F1, F2, F4, F5, F6**; recortar F9 (parcial) y 6b. (Prioridad del CASO: demanda y perfil, abastecimiento y red, GNC; personal y economía fina pueden quedar con supuestos marcados.)
 

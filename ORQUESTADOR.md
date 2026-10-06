@@ -70,7 +70,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 |---|---|---|
 | **0** | Limpieza de documentos (hecha, `0eaae74`) | un solo md de contexto y uno de datos |
 | **1 · Motor ✅** | Modo `real` (determinista) y modo `editado` (con azar); tanques llenos al día 0; registro de pedidos de camión (día de pedido y de llegada, ruta, km, costo); grabación de todos los días | `clasico()` sigue dando los dorados; el modo real da siempre lo mismo; conservación de clientes y litros |
-| **2 · Menú inicial** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
+| **2 · Menú inicial ✅** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
 | **3 · Animación** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
 | **4 · Indicadores y Demanda** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
 | **5 · Inventario, Red y GNC** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | idem |
@@ -113,3 +113,25 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
   anticipó), nivel de servicio 98,7 %, 22 pedidos de camión y quiebres por falta de combustible en 19 % de los días con la
   política (s, Q) por defecto.
 - **Pendiente para la Etapa 3:** la cola de **3 lugares por cara** cambia PER-05 (hoy 8 por zona) y por lo tanto los resultados.
+
+## 7. Etapa 2 cerrada (6/10/2026)
+
+- `sim/periodo.py` (nuevo, sin Streamlit): `Periodo` (por días, por meses, por estación, año completo), si **incluye
+  invierno** y las fechas de los cortes de GNC previstas, y `Edicion` / `aplicar_edicion` (playeros, demanda poca / media /
+  alta = 150 / 270 / 400 mil L del Registro DEM-01, el doble en la hora pico DEM-13, % de clientes GNC, precio por litro,
+  semilla). Una edición **usa azar**; la simulación principal no.
+- Temporadas (CAL-08): verano dic–feb (90 días, cruza el año), otoño mar–may (92), invierno jun–ago (92), primavera
+  sep–nov (91): suman los 365 días.
+- **Precio por litro:** `ParametrosEconomicos.precios` (ECO-08) y `delta_precio`: el margen sube $ por $ con el precio
+  (costo fijo, sin elasticidad: la demanda no reacciona al precio). Se rotula como supuesto.
+- `app.py`: flujo nuevo **Inicio → Simular → Resultados → Editar**. La barra lateral de parámetros **ya no se usa** (los
+  datos son los del Registro); el caso clásico queda sólo para las verificaciones. Se sacaron las pestañas *Estaciones* (entra
+  en el menú) y *Sensibilidad* (el tornado, por ahora fuera). Quedan 12 pestañas. Al final de los resultados: **Editar
+  simulación** y, si se editó, **Volver a los datos reales**. Aviso visible de "con datos reales (sin azar)" o "EDITADA (con azar)".
+- La pestaña GNC dice **"No hay datos de cortes de GNC en este período"** si no incluye invierno.
+- **Compuerta:** `verificar.py` 112/112 (control 26) · dorados exactos · QA Playwright (`reports/qa_etapa2_menu.py`, capturas
+  en `reports/qa/etapa2/`): las 4 formas de elegir el período, 7 pestañas con resultados, Editar y Volver a real, **0
+  excepciones y 0 errores de consola**. Tiempos: 90 días 6 s · 180 días 8 s · año completo 13 s.
+- **Pendiente para las etapas siguientes:** la animación sigue siendo de un día (etapa 3); los indicadores todavía muestran
+  "± IC" con 0 réplicas y decimales (etapa 4); la pestaña Demanda todavía muestra el Monte Carlo y no hay pestaña "Qué se
+  sorteó" (etapa 4); Escenarios, Economía y Conclusión no distinguen aún lo verificable de lo supuesto (etapa 6).

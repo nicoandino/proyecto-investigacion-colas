@@ -1073,6 +1073,7 @@ class ParametrosEconomicos:
     """
 
     # Ingresos
+    precios: tuple[tuple[str, float], ...] = valor("ECO-08")   # $ por litro (GNC: por m³); editables
     margen_por_litro: float = valor("ECO-01")              # $ de ganancia bruta por litro vendido
     margen_compra: float = valor("ECO-02")                 # $ de ganancia bruta por compra en minimarket
 
@@ -1094,6 +1095,18 @@ class ParametrosEconomicos:
     costo_pedido: float = valor("ECO-06")[0]               # $ de flete fijo por cada camión cisterna
     flete_por_km: float = valor("ECO-06")[1]               # $ por km de ida y vuelta (sin dato: 0)
     costo_almacenamiento_litro_mes: float = valor("ECO-07")  # $ por litro promedio en tanque, por mes
+
+    def delta_precio(self, producto: str) -> float:
+        """Cuánto cambió el precio del producto contra el de referencia (ECO-08), en $ por litro.
+
+        Para que el precio afecte la plata se supone un **costo fijo** (precio de referencia −
+        margen heredado): subir el precio $50 sube el margen $50 por litro. La demanda **no**
+        reacciona al precio (sin elasticidad): es un supuesto y se avisa en la app.
+        """
+        clave = "premium" if producto == "vpower" else producto
+        actual = dict(self.precios).get(clave)
+        referencia = dict(valor("ECO-08")).get(clave)
+        return 0.0 if actual is None or referencia is None else float(actual) - float(referencia)
 
     def __post_init__(self) -> None:
         if self.margen_por_litro < 0 or self.margen_compra < 0:

@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 111 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 44
+**Resumen:** 113 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 46
 
 ## La estación
 
@@ -71,6 +71,7 @@
 | DEM-09 | Eventos (opcionales) | Vendimia, Las Leñas, Carnaval, vacaciones de invierno (escenarios, no default) | — | 🟢 dato | San Rafael | baja | DATOS §6 | — |
 | DEM-10 | Cierre de ruta y demanda | la cuantificación es un escenario, no un default | — | 🟠 supuesto | San Rafael | sin_dato | DATOS §6 | — |
 | DEM-11 | Litros medios por cliente líquido | 35.7 | L/cliente | 🟡 estimación | San Rafael | media | cadena de demanda §14.2 (mezcla DEM-04 × cargas medias §5-D) | — |
+| DEM-13 | Duplicar la demanda en la hora pico (Editar simulación) | 2.0 | × | 🟠 supuesto | San Rafael | sin_dato | pedido del grupo (6/10/2026) | — |
 | DEM-12 | Cambio de quincena (S12): factor y días del mes | (2.0, (16, 17, 18)) | × · día del mes | 🟠 supuesto | San Rafael | sin_dato | DATOS §2 (+100 % 1–3 días/mes; limitación de camiones, fuente débil); los días 16–18 (cambio de quincena) son una elección del grupo | +50 % = (1.5, (16, 17, 18)) · fin de mes = (2.0, (1, 2, 3)) |
 
 ## Vehículos y litros por carga
@@ -182,6 +183,7 @@
 | CAL-03 | Días de calentamiento | 2 | días | 🟠 supuesto | la estación | sin_dato | orquestador (B4) | — |
 | CAL-04 | Día animado | 2 | día | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 | CAL-05 | Intervalo de la traza | 0.5 | min | 🟠 supuesto | la estación | sin_dato | orquestador | — |
+| CAL-08 | Temporadas del menú inicial | (('Verano', (12, 3)), ('Otoño', (3, 3)), ('Invierno', (6, 3)), ('Primavera', (9, 3))) | mes de inicio · meses | 🟠 supuesto | la estación | sin_dato | estaciones meteorológicas del hemisferio sur (elección del grupo) | — |
 | CAL-07 | Grabar la animación de todos los días | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): se anima todo el período, un día cada 5 s | — |
 | CAL-06 | Horizonte | mes | — | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 

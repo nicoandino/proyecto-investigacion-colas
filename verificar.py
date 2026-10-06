@@ -55,6 +55,9 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   30. Etapa 2: períodos del menú (días, meses, estaciones, año), cortes de GNC según el
+       período, ediciones (demanda, doble pico, GNC, playeros) y precio por litro.
+
    29. Etapa 1: simulación con datos reales sin azar (mismo resultado con cualquier semilla,
        llegadas y mezcla exactas, camión = plazo medio, GNC con fechas fijas, animación de todos los días).
 
@@ -1609,6 +1612,98 @@ def main() -> int:
         and traza_dr.cuadros[-1].t >= p_dr.duracion - 15.0,
         "La animación graba TODOS los días (un cuadro cada 15 min)",
         f"{len(traza_dr.cuadros)} cuadros para {p_dr.dias} días",
+    )
+
+    # ------------------------------------------------------------------ 26
+    separador("26. Rediseño, etapa 2: el período a simular y las ediciones")
+    from sim.config import ParametrosEconomicos
+    from sim.periodo import (
+        TEMPORADAS,
+        Edicion,
+        anio_completo,
+        aplicar_edicion,
+        con_periodo,
+        cortes_gnc_previstos,
+        litros_de_nivel,
+        por_dias,
+        por_meses,
+        por_temporada,
+    )
+
+    pd30 = por_dias(30, 1, 15)
+    pm = por_meses(1, 3)
+    dias_temporadas = {n: por_temporada(n).dias for n in TEMPORADAS}
+    controlar(
+        pd30.dias == 30 and pd30.fin.isoformat() == "2026-02-13" and pm.dias == 90
+        and pm.fin.isoformat() == "2026-03-31"
+        and dias_temporadas == {"Verano": 90, "Otoño": 92, "Invierno": 92, "Primavera": 91}
+        and sum(dias_temporadas.values()) == 365 and anio_completo().dias == 365
+        and por_temporada("Verano").fin.isoformat() == "2027-02-28",
+        "Los períodos del menú suman bien: por días, por meses, 4 estaciones (365 días) y el año",
+        f"30 días desde el 15/ene → {pd30.fin}; ene–mar {pm.dias} días; estaciones {dias_temporadas}",
+    )
+
+    g_def = ParametrosSimulacion().gnc
+    controlar(
+        por_temporada("Invierno").incluye_invierno and por_dias(180, 1, 1).incluye_invierno
+        and anio_completo().incluye_invierno and not por_temporada("Verano").incluye_invierno
+        and not pm.incluye_invierno
+        and len(cortes_gnc_previstos(anio_completo(), g_def)) == 2
+        and cortes_gnc_previstos(por_temporada("Verano"), g_def) == [],
+        "Si el período llega al invierno entran los cortes de GNC (2 episodios fijos); en verano no hay",
+        f"año: {cortes_gnc_previstos(anio_completo(), g_def)}",
+    )
+
+    base_per = ParametrosSimulacion().datos_reales()
+    afect = {
+        nombre: simular(con_periodo(base_per, per), semilla=1)[0].c.gnc_afectados
+        for nombre, per in (("enero a marzo", pm), ("180 días desde enero", por_dias(180, 1, 1)))
+    }
+    controlar(
+        afect["enero a marzo"] == 0 and afect["180 días desde enero"] > 0,
+        "Simulado: enero a marzo no tiene clientes de GNC afectados y 180 días desde enero sí",
+        str(afect),
+    )
+
+    # Ediciones: nivel de demanda, el doble en la hora pico, GNC, playeros y precio
+    eco0 = ParametrosEconomicos()
+    p_med, _ = aplicar_edicion(base_per, eco0, Edicion())
+    p_alta, _ = aplicar_edicion(base_per, eco0, Edicion(nivel_demanda="alta"))
+    p_pico, _ = aplicar_edicion(base_per, eco0, Edicion(doble_pico=True))
+    pico = [7, 8, 9, 16, 17]
+    fuera = [h for h in range(24) if h not in pico]
+
+    def clientes_hora(pp, h):
+        return pp.autos_por_dia * pp.perfil.fracciones[h]
+
+    ok_pico = all(
+        abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 2.0) < 1e-9 for h in pico
+    ) and all(abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 1.0) < 1e-9 for h in fuera)
+    controlar(
+        not p_med.determinista and p_med.litros_mes == 270_000.0
+        and p_alta.litros_mes == litros_de_nivel("alta") == 400_000.0
+        and litros_de_nivel("poca") == 150_000.0 and ok_pico,
+        "Editar: poca/media/alta salen del Registro (150/270/400 mil L), el doble en el pico duplica "
+        "esas horas y deja igual las demás, y la edición usa azar",
+        f"clientes por día: media {p_med.autos_por_dia:.0f} · alta {p_alta.autos_por_dia:.0f} · "
+        f"alta con doble pico {aplicar_edicion(base_per, eco0, Edicion(nivel_demanda='alta', doble_pico=True))[0].autos_por_dia:.0f}",
+    )
+
+    # Precio por litro: subir el Súper $50 sube el margen exactamente $50 por litro vendido
+    r_precio, _ = correr_replica(con_periodo(base_per, por_meses(1, 1)), semilla=1)
+    p_mes1 = con_periodo(base_per, por_meses(1, 1))
+    e_base = economia_mensual(r_precio, p_mes1, eco0)
+    e_caro = economia_mensual(
+        r_precio, p_mes1, dataclasses.replace(
+            eco0, precios=tuple((k, v + 50.0 if k == "super" else v) for k, v in eco0.precios)
+        ),
+    )
+    litros_super = dict(r_precio.litros_vendidos_por_producto)["super"] * e_base.dias_mes
+    controlar(
+        abs((e_caro.margen_operativo - e_base.margen_operativo) - 50.0 * litros_super) < 1e-6
+        and e_caro.ingreso_gnc == e_base.ingreso_gnc,
+        "El precio por litro mueve el margen $ por $: Súper +$50 suma 50 × litros vendidos de Súper",
+        f"{litros_super:,.0f} L de Súper ⇒ +{50.0 * litros_super:,.0f} $ de margen",
     )
 
     # ------------------------------------------------------------------

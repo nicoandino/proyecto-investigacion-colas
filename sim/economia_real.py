@@ -116,7 +116,9 @@ def economia_mensual(
 
     # --- Ingresos: margen de cada producto (litros o m³ por día × días del mes)
     por_producto = tuple(
-        (producto, vendido * dias * (eco.margen_gnc if producto == "gnc" else eco.margen_por_litro))
+        (producto, vendido * dias * (
+            (eco.margen_gnc if producto == "gnc" else eco.margen_por_litro) + eco.delta_precio(producto)
+        ))
         for producto, vendido in r.litros_vendidos_por_producto
     )
     ingreso_gnc = sum(v for k, v in por_producto if k == "gnc")

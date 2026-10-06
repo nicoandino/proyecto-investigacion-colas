@@ -188,15 +188,49 @@ INDICADORES_GNC: tuple[Metrica, ...] = (
                   "no las 6 caras, limita cuántos autos cargan GNC a la vez."),
 )
 
+# --- Ruta del camión (Fase 5, usadas en la comparación de la Fase 7) -----------------
+INDICADORES_RUTA: tuple[Metrica, ...] = (
+    Metrica("viajes_demorados_pct", "Camiones que encontraron un corte", "%", 1,
+            ayuda="Porcentaje de los pedidos cuyo viaje se topó con una ruta cortada y sufrió "
+                  "una demora (espera o desvío, la menor)."),
+    Metrica("demora_ruta_promedio", "Demora de ruta por viaje", "h", 2,
+            ayuda="Horas que el corte le suma al plazo de entrega, promedio de TODOS los viajes "
+                  "(incluye los que no se demoran)."),
+)
+
 TODAS: tuple[Metrica, ...] = (
     INDICADORES_COLAS
     + INDICADORES_CLIENTES
     + INDICADORES_INVENTARIO
     + INDICADORES_COMPLEMENTARIOS
     + INDICADORES_GNC
+    + INDICADORES_RUTA
 )
 
 POR_CLAVE: dict[str, Metrica] = {m.clave: m for m in TODAS}
+
+#: Las columnas de la tabla comparativa del catálogo S0–S12 (Fase 7).
+COMPARACION_CATALOGO: tuple[Metrica, ...] = (
+    POR_CLAVE["llegadas_dia"],
+    POR_CLAVE["espera_pico"],
+    POR_CLAVE["tasa_abandono"],
+    POR_CLAVE["nivel_servicio"],
+    POR_CLAVE["porcentaje_dias_quiebre"],
+    POR_CLAVE["viajes_demorados_pct"],
+    POR_CLAVE["migrados_gnc_dia"],
+    POR_CLAVE["util_playeros"],
+)
+
+#: Todos los indicadores que se pueden graficar como diferencia contra S0.
+INDICADORES_DIFERENCIA: tuple[Metrica, ...] = COMPARACION_CATALOGO + (
+    POR_CLAVE["perdidos_cola_dia"],
+    POR_CLAVE["perdidos_cola_llena_dia"],
+    POR_CLAVE["perdidos_sin_combustible_dia"],
+    POR_CLAVE["perdidos_corte_gnc_dia"],
+    POR_CLAVE["plazo_entrega"],
+    POR_CLAVE["demora_ruta_promedio"],
+    POR_CLAVE["litros_vendidos_dia"],
+)
 
 #: Las que se muestran en la tabla comparativa de escenarios.
 COMPARACION: tuple[Metrica, ...] = (

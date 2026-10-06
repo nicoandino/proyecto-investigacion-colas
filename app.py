@@ -34,6 +34,16 @@ from sim.config import (
     inventario_real,
     turnos_de,
 )
+from sim.escenarios import (
+    ESTACIONES,
+    MESES,
+    catalogo,
+    correr_catalogo,
+    correr_estaciones,
+    diferencia_pareada,
+    es_significativa,
+    para_mes,
+)
 from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
 from sim.distribuciones import Aleatorio
 from sim.gnc import calendario_de_episodios, episodios_con_fechas
@@ -68,7 +78,7 @@ from sim.red import (
     dias_de_mes_en_corrida,
     muestrear_plazos,
 )
-from ui import animacion, graficos, graficos_gnc, graficos_red
+from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red
 from ui.datos_ui import (
     csv_registro,
     esquema_estacion_html,
@@ -78,12 +88,14 @@ from ui.datos_ui import (
 from ui.tema import css_global
 from ui.textos import (
     COMPARACION,
+    COMPARACION_CATALOGO,
     DESCRIPCION_METODO,
     DESCRIPCION_MODELO,
     DESCRIPCION_MONTECARLO,
     INDICADORES_CLIENTES,
     INDICADORES_COLAS,
     INDICADORES_COMPLEMENTARIOS,
+    INDICADORES_DIFERENCIA,
     INDICADORES_GNC,
     INDICADORES_INVENTARIO,
     POR_CLAVE,
@@ -120,6 +132,18 @@ def correr_estacion_real_cacheado(
 @st.cache_data(show_spinner=False, max_entries=4)
 def barrer_politicas_real_cacheado(p: ParametrosSimulacion, replicas: int, semilla: int):
     return barrer_politicas_real(p, replicas=replicas, semilla_base=semilla)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def correr_estaciones_cacheado(p: ParametrosSimulacion, replicas: int, semilla: int):
+    return correr_estaciones(p, replicas=replicas, semilla_base=semilla)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def correr_catalogo_cacheado(
+    p: ParametrosSimulacion, mes: int, replicas: int, semilla: int, nombres: tuple[str, ...]
+):
+    return correr_catalogo(p, mes, replicas=replicas, semilla_base=semilla, nombres=nombres)
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -1584,32 +1608,8 @@ def tabla_escenarios(resultados: list[ResultadoEscenario]) -> pd.DataFrame:
 
 
 def pestania_escenarios() -> None:
+    """Comparación de capacidad del caso clásico (el caso real usa `pestania_comparar`)."""
     resultados = st.session_state.resultados
-    p = st.session_state.parametros
-
-    if p.estacion_real:
-        st.subheader("Escenario Base de la estación real")
-        st.info(
-            "Por ahora hay un único escenario: la estación **como está** (12 caras, "
-            "playeros 1 · 2 · 2, una caja). El catálogo de escenarios del caso real "
-            "(playeros en el pico, corte de GNC, corte de ruta, autoservicio, etc.) llega "
-            "en la Fase 7. Para ver la comparación de capacidad del proyecto original "
-            "(+1 surtidor, +1 cajero), elegí el **caso clásico** en la barra lateral.",
-            icon="⚖️",
-        )
-        st.dataframe(tabla_escenarios(resultados), hide_index=True)
-        st.caption(
-            "Cada celda es el promedio de las réplicas ± la semiamplitud del intervalo de "
-            "confianza del 95 %."
-        )
-        opciones = {m.etiqueta: m for m in COMPARACION}
-        elegida = st.selectbox("Indicador a mirar", list(opciones), index=0)
-        metrica = opciones[elegida]
-        st.plotly_chart(
-            graficos.grafico_dispersion_replicas(resultados, metrica), key="g_caja"
-        )
-        st.plotly_chart(graficos.grafico_atendidos_vs_perdidos(resultados), key="g_atend")
-        return
 
     st.subheader("Comparación de escenarios de capacidad")
     st.caption(
@@ -2287,6 +2287,253 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
 
 
 # =============================================================================
+# Pestaña: estaciones del año (Fase 7, §7.8)
+# =============================================================================
+PRESETS_ESTACIONALIDAD = {
+    "La de la barra lateral": None,
+    "Neutra (default)": ESTACIONALIDAD_NEUTRA,
+    "Leve (±6 %)": ESTACIONALIDAD_LEVE,
+    "Proxy turístico": ESTACIONALIDAD_PROXY,
+}
+
+#: Segundos por réplica de un mes (medido: ≈ 1,3 s); sólo para estimar el tiempo de espera.
+SEGUNDOS_POR_REPLICA = 1.3
+
+
+def _litros_por_dia_de_cada_mes(p: ParametrosSimulacion) -> list[float]:
+    """Litros por día esperados en cada mes (estacionalidad y calendario real, sin simular)."""
+    salida = []
+    for mes in range(1, 13):
+        p_mes = para_mes(p, mes)
+        salida.append(
+            sum(p_mes.litros_del_dia(d) for d in range(1, p_mes.dias + 1)) / p_mes.dias
+        )
+    return salida
+
+
+def _celda(resumen, metrica: Metrica) -> str:
+    """'promedio ± semiamplitud del IC 95 %' con la unidad de la métrica."""
+    return (
+        f"{metrica.valor_mostrado(resumen.promedio):,.{metrica.decimales}f} "
+        f"± {metrica.valor_mostrado(resumen.semiamplitud):,.{metrica.decimales}f}"
+    )
+
+
+def pestania_estaciones(p: ParametrosSimulacion) -> None:
+    st.subheader("Estaciones del año: verano · otoño · invierno · primavera")
+    if not p.estacion_real:
+        st.info("Las estaciones del año son del caso real. Elegí la **estación real** en la "
+                "barra lateral.", icon="🍂")
+        return
+    st.markdown(
+        "Cuatro corridas del **mes real completo** (enero, abril, julio y octubre) con su "
+        "calendario: días del mes, fines de semana y, en invierno, los episodios de corte de "
+        "GNC y los cortes de ruta de jun–ago. Con la estacionalidad **neutra** (la que "
+        "tiene el modelo hasta conseguir la serie mensual de la Secretaría de Energía, C10) "
+        "todos los meses venden los mismos litros: las diferencias vienen sólo del calendario, "
+        "del GNC y de la ruta, y eso es lo correcto."
+    )
+
+    c1, c2, c3 = st.columns([2, 1, 2])
+    nombre_preset = c1.selectbox(
+        "Estacionalidad de la demanda", list(PRESETS_ESTACIONALIDAD), key="est_preset",
+        help="Neutra: todos los meses pesan igual (DEM-06, supuesto). Leve y proxy turístico "
+             "son alternativas del Registro; ninguna tiene serie real todavía.",
+    )
+    replicas = c2.slider("Réplicas por estación", 1, 6, 4, 1, key="est_rep")
+    c3.caption(f"Tiempo estimado: ≈ {4 * replicas * SEGUNDOS_POR_REPLICA:.0f} s "
+               f"(4 estaciones × {replicas} réplicas). Queda en caché.")
+    preset = PRESETS_ESTACIONALIDAD[nombre_preset]
+    p_est = p if preset is None else replace(p, estacionalidad=preset)
+
+    st.plotly_chart(
+        graficos_escenarios.grafico_litros_por_mes(
+            _litros_por_dia_de_cada_mes(p_est), MESES, {m for _, _, m in ESTACIONES},
+            "Litros por día esperados de cada mes (en amarillo, los 4 meses que se simulan)",
+        ),
+        key="g_litros_mes",
+    )
+
+    semilla = st.session_state.semilla_usada
+    if st.button("🍂 Correr las 4 estaciones", type="primary", key="btn_estaciones"):
+        with st.spinner(f"Simulando 4 estaciones × {replicas} réplicas…"):
+            resultados = correr_estaciones_cacheado(p_est, replicas, semilla)
+        st.session_state.estaciones = (p_est, resultados)
+    guardado = st.session_state.get("estaciones")
+    if not guardado:
+        st.info("Apretá **Correr las 4 estaciones** para simular el año por estaciones.", icon="▶")
+        return
+    p_usado, resultados = guardado
+    if p_usado != p_est:
+        st.info("Cambiaste parámetros o la estacionalidad: lo que se ve es la última corrida.",
+                icon="🔄")
+
+    filas = []
+    for r in resultados:
+        fila = {"Estación": r.escenario.nombre, "Días": r.parametros.dias}
+        for m in (POR_CLAVE["llegadas_dia"], POR_CLAVE["litros_vendidos_dia"],
+                  POR_CLAVE["espera_pico"], POR_CLAVE["nivel_servicio"],
+                  POR_CLAVE["tasa_abandono"], POR_CLAVE["porcentaje_dias_quiebre"],
+                  POR_CLAVE["gnc_afectados_dia"], POR_CLAVE["migrados_gnc_dia"],
+                  POR_CLAVE["viajes_demorados_pct"], POR_CLAVE["plazo_entrega"]):
+            unidad = m.unidad_mostrada
+            fila[f"{m.etiqueta} ({unidad})" if unidad else m.etiqueta] = _celda(r.resumen[m.clave], m)
+        filas.append(fila)
+    st.markdown("##### Resultados por estación (promedio ± IC 95 % de las réplicas)")
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+    g1, g2 = st.columns(2)
+    g1.plotly_chart(
+        graficos_escenarios.grafico_barras_ic(
+            resultados, "espera_pico", "Espera en la hora pico, por estación", "min", 2),
+        key="g_est_espera",
+    )
+    g2.plotly_chart(
+        graficos_escenarios.grafico_barras_ic(
+            resultados, "nivel_servicio", "Nivel de servicio (litros pedidos que se vendieron)",
+            "%", 1, escala=100.0),
+        key="g_est_servicio",
+    )
+    st.plotly_chart(graficos_escenarios.grafico_perdidos_por_motivo(resultados),
+                    key="g_est_perdidos")
+
+    esperas = {r.escenario.nombre: r.prom("espera_pico") for r in resultados}
+    mayor, menor = max(esperas, key=esperas.get), min(esperas, key=esperas.get)
+    migrados = {r.escenario.nombre: r.prom("migrados_gnc_dia") for r in resultados}
+    st.caption(
+        f"Lectura: la espera en la hora pico va de {esperas[menor]:.2f} min ({menor}) a "
+        f"{esperas[mayor]:.2f} min ({mayor}); los clientes de GNC que pasan a Súper por el "
+        f"corte son {max(migrados.values()):.2f} por día en el peor mes "
+        f"({max(migrados, key=migrados.get)}) y {min(migrados.values()):.2f} en el mejor. "
+        "Si dos barras se parecen, mirá las barras de error: el IC 95 % de las réplicas "
+        "dice cuánto de la diferencia puede ser azar."
+    )
+    if p_usado.gnc is not None and not p_usado.gnc.episodios_en_horizonte:
+        st.caption(
+            "Los episodios de GNC se sortean entre el 1/jun y el 31/ago, así que cada réplica "
+            "de julio puede o no tener uno. Para ver siempre el corte en invierno, tildá "
+            "*Forzar que los episodios caigan dentro del horizonte* (GNC y cortes de invierno)."
+        )
+
+
+# =============================================================================
+# Pestaña: comparar escenarios S0–S12 (Fase 7, §7.7)
+# =============================================================================
+def tabla_catalogo(p_mes: ParametrosSimulacion) -> pd.DataFrame:
+    """ID, nombre, qué cambia y qué pregunta contesta cada escenario del catálogo."""
+    return pd.DataFrame(
+        [
+            {"ID": e.id, "Escenario": e.nombre, "Qué cambia": e.descripcion,
+             "Pregunta": e.pregunta}
+            for e in catalogo(p_mes)
+        ]
+    )
+
+
+def tabla_comparacion_catalogo(resultados: list[ResultadoEscenario]) -> pd.DataFrame:
+    """Promedio ± IC de cada indicador y la diferencia pareada de la espera pico contra S0."""
+    base = resultados[0]
+    filas = []
+    for r in resultados:
+        fila = {"Escenario": r.escenario.nombre}
+        for m in COMPARACION_CATALOGO:
+            unidad = m.unidad_mostrada
+            fila[f"{m.etiqueta} ({unidad})" if unidad else m.etiqueta] = _celda(r.resumen[m.clave], m)
+        if r is base:
+            fila["Δ espera pico vs S0 (min)"] = "—"
+        else:
+            d = diferencia_pareada(base, r, "espera_pico")
+            fila["Δ espera pico vs S0 (min)"] = (
+                f"{d.promedio:+.2f} ± {d.semiamplitud:.2f}" + (" *" if es_significativa(d) else "")
+            )
+        filas.append(fila)
+    return pd.DataFrame(filas)
+
+
+def pestania_comparar(p: ParametrosSimulacion) -> None:
+    st.subheader("Comparar escenarios S0–S12")
+    st.markdown(
+        "Cada escenario cambia **una cosa** de la estación y se corre en el mismo mes con los "
+        "**mismos números aleatorios**: la réplica *i* de todos usa la misma semilla, así que "
+        "llegan los mismos autos y el camión sortea los mismos plazos. Por eso se puede restar "
+        "réplica a réplica: la **diferencia pareada** tiene un intervalo de confianza mucho "
+        "más angosto que comparar dos promedios por separado."
+    )
+    c1, c2 = st.columns([1, 1])
+    mes = c1.selectbox(
+        "Mes de la comparación", list(range(1, 13)), index=6, key="cmp_mes",
+        format_func=lambda m: MESES[m - 1].capitalize(),
+        help="Julio por defecto: es donde tienen sentido el corte de GNC (S3) y los cortes de "
+             "ruta (S4). S0 y todos los demás se corren en el mismo mes.",
+    )
+    replicas = c2.slider("Réplicas por escenario", 2, 8, 4, 1, key="cmp_rep")
+    p_mes = para_mes(p, mes)
+    lista = catalogo(p_mes)
+
+    with st.expander("El catálogo: qué cambia cada escenario y qué pregunta contesta"):
+        st.dataframe(tabla_catalogo(p_mes), hide_index=True)
+        st.caption(
+            "S1 (día típico por estación) es la pestaña **Estaciones del año**. S6 compara "
+            "**S2 +1** (un playero más en el pico) contra **S6** (más stock): el costo en "
+            "$/mes de cada opción llega con la economía real (Fase 8)."
+        )
+    elegidos = st.multiselect(
+        "Escenarios a correr (S0 siempre se corre: es la referencia)",
+        [e.nombre for e in lista[1:]], default=[e.nombre for e in lista[1:]], key="cmp_sel",
+    )
+    n_corridas = 1 + len(elegidos)
+    st.caption(f"Tiempo estimado: ≈ {n_corridas * replicas * SEGUNDOS_POR_REPLICA:.0f} s "
+               f"({n_corridas} escenarios × {replicas} réplicas). Queda en caché.")
+
+    semilla = st.session_state.semilla_usada
+    if st.button("🧪 Correr los escenarios", type="primary", key="btn_comparar"):
+        with st.spinner(f"Simulando {n_corridas} escenarios × {replicas} réplicas…"):
+            resultados = correr_catalogo_cacheado(p, mes, replicas, semilla, tuple(elegidos))
+        st.session_state.comparacion = (p, mes, resultados)
+    guardado = st.session_state.get("comparacion")
+    if not guardado:
+        st.info("Elegí el mes y apretá **Correr los escenarios**.", icon="▶")
+        return
+    p_usado, mes_usado, resultados = guardado
+    if p_usado != p:
+        st.info("Cambiaste parámetros: lo que se ve es la última corrida.", icon="🔄")
+
+    st.markdown(f"##### Resultados en {MESES[mes_usado - 1]} (promedio ± IC 95 % de las réplicas)")
+    st.dataframe(tabla_comparacion_catalogo(resultados), hide_index=True,
+                 height=38 * (len(resultados) + 1))
+    st.caption(
+        "* = la diferencia contra S0 es significativa: su IC 95 % (de las diferencias réplica "
+        "a réplica) no contiene el 0. Sin asterisco, el efecto no se distingue del azar con "
+        "estas réplicas."
+    )
+
+    base = resultados[0]
+    opciones = {m.etiqueta: m for m in INDICADORES_DIFERENCIA}
+    elegida = st.selectbox("Indicador a comparar contra S0", list(opciones), index=1,
+                           key="cmp_indicador")
+    m = opciones[elegida]
+    st.plotly_chart(
+        graficos_escenarios.grafico_diferencias(
+            base, resultados, m.clave, m.etiqueta, m.unidad_mostrada, m.mejor_bajo,
+            max(m.decimales, 1), escala=100.0 if m.porcentaje else 1.0),
+        key="g_cmp_dif",
+    )
+    st.plotly_chart(
+        graficos_escenarios.grafico_perdidos_por_motivo(resultados, horizontal=True),
+        key="g_cmp_perdidos",
+    )
+    st.caption(
+        "Cómo leerlo: verde = mejora significativa, rojo = empeora significativamente, gris = "
+        "no se distingue del azar. **Ojo con el stock:** los clientes que abandonan la cola "
+        "dejan de consumir, así que con menos playeros (S2 −1, S9) el tanque se vacía **menos** "
+        "y hay menos 'sin combustible'. No es una mejora: es la misma pérdida, que cambió de "
+        "motivo. Por eso conviene mirar la **tasa de abandono total** y las pérdidas apiladas. Y en S10 "
+        "el abandono baja porque la demanda nocturna **nunca llega** (no cuenta como abandono): "
+        "mirá los clientes por día y los litros vendidos."
+    )
+
+
+# =============================================================================
 # Pestaña: la estación (caso real)
 # =============================================================================
 def pestania_estacion() -> None:
@@ -2402,7 +2649,7 @@ def correr_todo(
 ) -> None:
     """Corre los escenarios (o la estación real) y la réplica con traza; guarda todo en la sesión."""
     if p.estacion_real:
-        # Un único "escenario Base" real; el catálogo S0–S12 llega en la Fase 7.
+        # Un único "escenario Base" real; el catálogo S0–S12 está en la pestaña Escenarios.
         resultados = [correr_estacion_real_cacheado(p, replicas, semilla)]
     else:
         resultados = correr_escenarios_cacheado(p, replicas, semilla)
@@ -2444,6 +2691,9 @@ def main() -> None:
         and st.session_state.parametros.estacion_real != p.estacion_real
     )
     if correr or "resultados" not in st.session_state or cambio_de_modelo:
+        # Las corridas del catálogo y de las estaciones eran de otros parámetros: se descartan.
+        st.session_state.pop("estaciones", None)
+        st.session_state.pop("comparacion", None)
         with st.spinner(
             f"Simulando {replicas} réplicas de {p.dias} días "
             f"{'de la estación real' if p.estacion_real else 'en 4 escenarios'}…"
@@ -2478,6 +2728,7 @@ def main() -> None:
             "🛢️ Inventario",
             "🗺️ Red y rutas",
             "🔥 GNC",
+            "🍂 Estaciones",
             "⚖️ Escenarios",
             "💰 Economía",
             "📝 Conclusión",
@@ -2500,14 +2751,19 @@ def main() -> None:
     with pestanias[6]:
         pestania_gnc(p_corrida)
     with pestanias[7]:
-        pestania_escenarios()
+        pestania_estaciones(p_corrida)
     with pestanias[8]:
-        pestania_economia(p_corrida, st.session_state.parametros_eco)
+        if p_corrida.estacion_real:
+            pestania_comparar(p_corrida)
+        else:
+            pestania_escenarios()
     with pestanias[9]:
-        pestania_conclusion()
+        pestania_economia(p_corrida, st.session_state.parametros_eco)
     with pestanias[10]:
-        pestania_modelo(p_corrida)
+        pestania_conclusion()
     with pestanias[11]:
+        pestania_modelo(p_corrida)
+    with pestanias[12]:
         pestania_datos_fuentes()
 
     st.divider()

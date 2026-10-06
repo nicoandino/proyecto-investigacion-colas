@@ -42,7 +42,7 @@ from datetime import date
 
 import simpy
 
-from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion
+from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion, Triangular
 from sim.distribuciones import Aleatorio
 from sim.estadisticas import Indicadores
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
@@ -154,7 +154,7 @@ class EstacionDeServicio:
                 )
 
         # Playeros por turno: reservas ficticias con prioridad -1 ajustan la capacidad.
-        self.max_playeros = max(self.p.playeros_por_turno)
+        self.max_playeros = self.p.playeros_maximos
         self.playeros = simpy.PriorityResource(self.env, capacity=self.max_playeros)
         self.reservas_playeros: list[simpy.events.Event] = []
         self.env.process(self.controlar_turnos())
@@ -725,7 +725,14 @@ class EstacionDeServicio:
         self.ind.contar("pedidos_emitidos")
         self.ind.contar_producto(producto, "pedidos_emitidos")
 
-        plazo = self.az.triangular(info.plazo_entrega_minutos, f"entrega_{producto}")
+        plazo_base = info.plazo_entrega_minutos
+        if self.p.crisis is not None:
+            # S7: los pedidos emitidos dentro de la ventana tardan el plazo de crisis. Se sortea
+            # igual UNA vez del mismo stream, así los demás escenarios conservan sus números.
+            desde = (self.p.crisis_dia - 1) * MINUTOS_POR_DIA
+            if desde <= self.env.now < desde + self.p.crisis_dias * MINUTOS_POR_DIA:
+                plazo_base = Triangular(*(h * 60.0 for h in self.p.crisis))
+        plazo = self.az.triangular(plazo_base, f"entrega_{producto}")
         # Cortes de ruta (Fase 5): el plazo base ya incluye el viaje normal; si el camión
         # encuentra un corte, se le SUMA la demora (desvío o espera, la menor).
         demora = 0.0

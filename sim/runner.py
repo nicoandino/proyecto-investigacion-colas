@@ -299,30 +299,33 @@ def correr_replica(
 
 
 # --- N réplicas ---------------------------------------------------------------
+def resumen_de(valores: list[float]) -> Resumen:
+    """Promedio, desvío e IC 95 % (t de Student) de una lista de valores, uno por réplica."""
+    n = len(valores)
+    promedio = sum(valores) / n
+    if n > 1:
+        varianza = sum((v - promedio) ** 2 for v in valores) / (n - 1)
+        desvio = math.sqrt(varianza)
+        semiamplitud = t_critico(n - 1) * desvio / math.sqrt(n)
+    else:
+        desvio = 0.0
+        semiamplitud = 0.0
+    return Resumen(
+        promedio=promedio,
+        desvio=desvio,
+        semiamplitud=semiamplitud,
+        minimo=min(valores),
+        maximo=max(valores),
+        n=n,
+    )
+
+
 def resumir(replicas: list[ResultadoReplica]) -> dict[str, Resumen]:
     """Promedio, desvío e intervalo de confianza 95% de cada métrica."""
-    n = len(replicas)
-    resumen: dict[str, Resumen] = {}
-
-    for metrica in METRICAS:
-        valores = [float(getattr(r, metrica)) for r in replicas]
-        promedio = sum(valores) / n
-        if n > 1:
-            varianza = sum((v - promedio) ** 2 for v in valores) / (n - 1)
-            desvio = math.sqrt(varianza)
-            semiamplitud = t_critico(n - 1) * desvio / math.sqrt(n)
-        else:
-            desvio = 0.0
-            semiamplitud = 0.0
-        resumen[metrica] = Resumen(
-            promedio=promedio,
-            desvio=desvio,
-            semiamplitud=semiamplitud,
-            minimo=min(valores),
-            maximo=max(valores),
-            n=n,
-        )
-    return resumen
+    return {
+        metrica: resumen_de([float(getattr(r, metrica)) for r in replicas])
+        for metrica in METRICAS
+    }
 
 
 def correr_replicas(

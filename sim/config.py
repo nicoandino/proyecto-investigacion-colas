@@ -337,6 +337,28 @@ def turnos_de(playeros: tuple[int, int, int]) -> tuple[tuple[float, int], ...]:
     return ((0.0, noche), (6.0, manana), (14.0, tarde), (22.0, noche))
 
 
+def turnos_con_refuerzo(
+    playeros: tuple[int, int, int],
+    refuerzo: tuple[tuple[float, float, int], ...],
+) -> tuple[tuple[float, int], ...]:
+    """Los turnos de `turnos_de` más un refuerzo `((desde_h, hasta_h, extra), …)` (S2, §7.2).
+
+    `extra` puede ser negativo (sacar un playero en el pico); siempre queda al menos 1.
+    Los tramos contiguos con la misma dotación se funden (salvo en los bordes de los turnos).
+    """
+    base = turnos_de(playeros)
+    cortes = sorted({h for h, _ in base} | {d for d, _, _ in refuerzo} | {h for _, h, _ in refuerzo})
+    cortes = [c for c in cortes if 0.0 <= c < 24.0]
+    tramos: list[tuple[float, int]] = []
+    for desde in cortes:
+        vigente = [n for h, n in base if h <= desde][-1]
+        extra = sum(e for d, h, e in refuerzo if d <= desde < h)
+        n = max(1, vigente + extra)
+        if not tramos or tramos[-1][1] != n or desde in {h for h, _ in base}:
+            tramos.append((float(desde), n))
+    return tuple(tramos)
+
+
 def grupos_desde_registro() -> tuple[Grupo, ...]:
     """Las tres zonas: A nafta 4 caras · B diésel 2 · C GNC 6 (SUR-02..04)."""
     return (
@@ -686,6 +708,13 @@ class ParametrosSimulacion:
     red: ParametrosRed | None = ParametrosRed()   # None = el plazo no suma demoras de ruta
     gnc: ParametrosGNC | None = ParametrosGNC()   # None = sin cortes ni compresores
 
+    # --- Escenarios S7 y S12 (Fase 7): apagados por defecto -------------------
+    factor_quincena: float = valor("DEM-12")[0]            # S12: cuánto se multiplica el día
+    dias_quincena: tuple[int, ...] = ()                    # días del mes con pico de cobro (() = ninguno)
+    crisis: tuple[float, float, float] | None = None       # S7: plazo (h) de crisis; None = no hay
+    crisis_dia: int = valor("INV-11")[0]                   # día de la corrida en que arranca
+    crisis_dias: float = valor("INV-11")[1]                # cuántos días dura
+
     # --- Inventario (clásico: un solo tanque) ---------------------------------
     tanque: ParametrosTanque = ParametrosTanque()
 
@@ -831,17 +860,31 @@ class ParametrosSimulacion:
         fecha = date(ANO_REFERENCIA, mes_inicio, dia_inicio) + timedelta(days=dia - 1)
         return fecha.month, fecha.weekday()
 
-    def _factor_tipo_de_dia(self, mes: int, dia_semana: int) -> float:
-        """Factor del tipo de día, normalizado para conservar los litros del mes (§14.4)."""
+    def _factor_tipo_de_dia(self, mes: int, dia_semana: int, dia_mes: int = 0) -> float:
+        """Factor del tipo de día, normalizado para conservar los litros del mes (§14.4).
+
+        Con `dias_quincena` (S12) el día de pico de cobro pesa `factor_quincena` veces más y el
+        mes se vuelve a normalizar: el escenario concentra la demanda, no agrega volumen.
+        """
         total = dias_del_mes(mes)
         primero = date(ANO_REFERENCIA, mes, 1)
-        fines = sum(
-            1 for d in range(total) if (primero + timedelta(days=d)).weekday() >= 5
-        )
-        habiles = total - fines
         f = self.factor_fin_de_semana
-        nivel_habil = total / (habiles + f * fines)
-        return f * nivel_habil if dia_semana >= 5 else nivel_habil
+        if not self.dias_quincena:
+            fines = sum(
+                1 for d in range(total) if (primero + timedelta(days=d)).weekday() >= 5
+            )
+            habiles = total - fines
+            nivel_habil = total / (habiles + f * fines)
+            return f * nivel_habil if dia_semana >= 5 else nivel_habil
+
+        def peso(d: int) -> float:
+            fecha = primero + timedelta(days=d)
+            return (f if fecha.weekday() >= 5 else 1.0) * (
+                self.factor_quincena if fecha.day in self.dias_quincena else 1.0
+            )
+
+        nivel = total / sum(peso(d) for d in range(total))
+        return nivel * peso(dia_mes - 1)
 
     def litros_del_dia(self, dia: int) -> float:
         """Litros del día `dia` de la corrida (modo 'esperada').
@@ -850,13 +893,21 @@ class ParametrosSimulacion:
         (índice ÷ media, §14.4) × factor por tipo de día (normalizado, §14.4).
         """
         mes, dia_semana = self._fecha_del_dia(dia)
+        dia_mes = (
+            date(ANO_REFERENCIA, *self.fecha_inicio) + timedelta(days=dia - 1)
+        ).day
         indice = self.estacionalidad.indice_mes(mes)
         return (
             self.litros_mes
             / dias_del_mes(mes)
             * (indice / self.estacionalidad.promedio)
-            * self._factor_tipo_de_dia(mes, dia_semana)
+            * self._factor_tipo_de_dia(mes, dia_semana, dia_mes)
         )
+
+    @property
+    def playeros_maximos(self) -> int:
+        """Dotación más alta de cualquier tramo del día (la capacidad del recurso)."""
+        return max(max(n for _, n in self.turnos), max(self.playeros_por_turno))
 
     def autos_por_dia_fecha(self, dia: int) -> float:
         """Clientes del día `dia` de la corrida, con estacionalidad y tipo de día."""
@@ -924,8 +975,7 @@ class ParametrosSimulacion:
         if self.estacion_real:
             # Sólo los clientes de nafta y diésel usan playero (el GNC no, PER-04).
             lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia) * (1.0 - self.pct_gnc)
-            playeros_pico = max(self.playeros_por_turno)
-            return (lambda_pico * self.media_servicio_liquidos()) / playeros_pico
+            return (lambda_pico * self.media_servicio_liquidos()) / self.playeros_maximos
         lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia)
         return (lambda_pico * self.carga.media) / self.surtidores
 
@@ -953,15 +1003,23 @@ class ParametrosSimulacion:
 # =============================================================================
 @dataclass(frozen=True)
 class Escenario:
-    """Una configuración de recursos a comparar."""
+    """Una configuración a comparar: recursos (caso clásico) o cambios declarativos (S0–S12).
+
+    `cambios` es `((campo, valor), …)` sobre `ParametrosSimulacion` — datos, no lambdas, para
+    que `st.cache_data` pueda serializarlo con pickle (§11-9).
+    """
 
     nombre: str
     descripcion: str
     surtidores: int
     cajas: int
+    id: str = ""                                        # "S2", "S3", … (vacío en el clásico)
+    pregunta: str = ""                                  # la pregunta que contesta (§7.7)
+    cambios: tuple[tuple[str, object], ...] = ()
 
     def aplicar(self, p: ParametrosSimulacion) -> ParametrosSimulacion:
-        return replace(p, surtidores=self.surtidores, cajas=self.cajas)
+        base = replace(p, surtidores=self.surtidores, cajas=self.cajas)
+        return replace(base, **dict(self.cambios)) if self.cambios else base
 
 
 def escenarios_desde(p: ParametrosSimulacion) -> list[Escenario]:

@@ -54,6 +54,12 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  FASE 7 DEL ORQUESTADOR (estaciones del año y escenarios S0–S12)
+   25. N12 con las 4 estaciones (invierno > verano), 4 estaciones × 4 réplicas ≤ 90 s,
+       calendario real, litros del mes, quincena normalizada (N18), catálogo S0–S12 con
+       cierre de clientes (N2), refuerzo de playeros (N5), N11 con S2, diferencias pareadas,
+       crisis de abastecimiento (S7) y cierre nocturno (S10).
+
   FASE 6 DEL ORQUESTADOR (GNC)
    24. N7 (sin episodios no hay pérdidas; corte total sin migración pierde a todos), N8
        (migrados + perdidos = afectados), N12 (invierno > verano), formas del corte y
@@ -638,6 +644,7 @@ def main() -> int:
     # propio §8.1 (regla 5) y son los únicos que puede haber fuera de ui/tema.py.
     archivos_ui = [
         "app.py", "ui/graficos.py", "ui/graficos_red.py", "ui/graficos_gnc.py",
+        "ui/graficos_escenarios.py",
         "ui/animacion.py", "ui/datos_ui.py", "ui/textos.py",
     ]
     infractores = []
@@ -1100,6 +1107,159 @@ def main() -> int:
         "Con 1 compresor nunca cargan 2 autos GNC a la vez y la espera sube respecto de 6",
         f"espera en la zona C: 1 compresor {ind_c1.esperas_grupo['C'].promedio:.2f} min > "
         f"6 compresores {ind_c6.esperas_grupo['C'].promedio:.2f} min",
+    )
+
+    # ------------------------------------------------------------------ 21
+    separador("21. Fase 7: estaciones del año y catálogo S0–S12 (N12, N11, N18)")
+    import time
+
+    from sim.config import turnos_con_refuerzo, turnos_de
+    from sim.escenarios import (
+        HORAS_CERRADO,
+        catalogo,
+        correr_catalogo,
+        correr_estaciones,
+        diferencia_pareada,
+        es_significativa,
+        para_mes,
+    )
+    from sim.runner import correr_replicas
+
+    # N12 + compuerta de tiempo: 4 estaciones × 4 réplicas ≤ 90 s
+    forzado = reemplazar(p, gnc=ParametrosGNC(episodios_en_horizonte=True))
+    t0 = time.time()
+    est = correr_estaciones(forzado, replicas=4)
+    segundos = time.time() - t0
+    migrados = {r.escenario.id: r.prom("migrados_gnc_dia") for r in est}
+    controlar(
+        migrados["jul"] > 0 and migrados["ene"] == migrados["abr"] == migrados["oct"] == 0,
+        "N12: invierno con episodios ⇒ más migrados a nafta que verano, otoño y primavera",
+        " | ".join(f"{k} {v:.2f}" for k, v in migrados.items()) + " migrados por día",
+    )
+    controlar(
+        segundos <= 90.0,
+        "4 estaciones × 4 réplicas se corren en ≤ 90 s",
+        f"{segundos:.1f} s ({4 * 4} réplicas, {segundos / 16:.2f} s por réplica)",
+    )
+    controlar(
+        [r.parametros.dias for r in est] == [31, 30, 31, 31]
+        and [r.parametros.fecha_inicio for r in est] == [(1, 1), (4, 1), (7, 1), (10, 1)],
+        "Las estaciones simulan el mes real completo (31·30·31·31 días) desde el 1 de ene·abr·jul·oct",
+        f"días {[r.parametros.dias for r in est]}",
+    )
+    totales = [
+        (r.prom("litros_vendidos_dia") + r.prom("litros_no_vendidos_dia")) * r.parametros.dias
+        for r in est
+    ]
+    controlar(
+        all(abs(t / p.litros_mes - 1.0) < 0.04 for t in totales),
+        "Con estacionalidad neutra cada mes pide los litros del mes (270.000 ± 4 %)",
+        " | ".join(f"{t:,.0f} L" for t in totales),
+    )
+
+    # N18 con quincena: los litros del mes se conservan y el pico concentra la demanda
+    p_n = para_mes(p, 7)
+    p_q = reemplazar(p_n, dias_quincena=(16, 17, 18))
+    tot_n = sum(p_n.litros_del_dia(d) for d in range(1, p_n.dias + 1))
+    tot_q = sum(p_q.litros_del_dia(d) for d in range(1, p_q.dias + 1))
+    razon_pico = p_q.litros_del_dia(16) / p_n.litros_del_dia(16)
+    controlar(
+        abs(tot_q - tot_n) < 1e-6 * tot_n and 1.7 < razon_pico < 2.0
+        and p_q.litros_del_dia(5) < p_n.litros_del_dia(5),
+        "N18: la quincena conserva los litros del mes y concentra la demanda en sus días",
+        f"mes {tot_n:,.0f} L = {tot_q:,.0f} L | día 16: ×{razon_pico:.2f} | día 5: "
+        f"×{p_q.litros_del_dia(5) / p_n.litros_del_dia(5):.2f}",
+    )
+
+    # El catálogo: identificadores, nombres únicos y cada escenario es una corrida válida
+    cat = catalogo(p_n)
+    ids = {e.id for e in cat}
+    controlar(
+        ids == {"S0", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12"}
+        and len({e.nombre for e in cat}) == len(cat) and cat[0].id == "S0" and not cat[0].cambios,
+        "El catálogo trae S0, S2–S12 con nombres únicos (S1 es la pestaña de estaciones)",
+        f"{len(cat)} escenarios: {sorted(ids, key=lambda x: int(x[1:]))}",
+    )
+    por_nombre = {e.nombre: e for e in cat}
+
+    # Cada escenario cierra el balance de clientes (N2) en un horizonte corto
+    corto = reemplazar(p_n, dias=10, dia_animado=3)
+    cierran = True
+    peor = 0
+    for e in catalogo(corto):
+        p_e = e.aplicar(corto)
+        c = simular(p_e, semilla=85)[0].c_total
+        perdidos_e = (
+            c.perdidos_surtidor + c.perdidos_sin_combustible + c.perdidos_cola_llena
+            + c.perdidos_corte_gnc
+        )
+        dentro = c.llegadas - c.atendidos_surtidor - perdidos_e
+        holgura_e = sum(g.caras for g in p_e.grupos) + len(p_e.grupos) * (p_e.capacidad_cola or 0)
+        cierran = cierran and 0 <= dentro <= holgura_e
+        peor = max(peor, dentro)
+    controlar(
+        cierran,
+        "N2: todos los escenarios del catálogo cierran (llegadas = atendidos + perdidos + adentro)",
+        f"{len(catalogo(corto))} escenarios en 10 días; el máximo de clientes adentro al final fue {peor}",
+    )
+
+    # S2: el refuerzo y la capacidad del recurso
+    controlar(
+        turnos_con_refuerzo(p.playeros_por_turno, ((7.0, 10.0, 0), (16.0, 18.0, 0)))
+        == turnos_de(p.playeros_por_turno),
+        "Un refuerzo de 0 deja los turnos exactamente como están",
+    )
+    p_s2 = por_nombre["S2 · Playeros en el pico +2"].aplicar(p_n)
+    ind_s2, _ = simular(p_s2, semilla=83)
+    controlar(
+        ind_s2.playeros_en_turno.maximo == max(p.playeros_por_turno) + 2
+        and ind_s2.playeros_ocupados.maximo <= p_s2.playeros_maximos
+        and p_s2.playeros_maximos == max(p.playeros_por_turno) + 2,
+        "N5 con refuerzo: la capacidad sube con el pico y nadie atiende por encima de la dotación",
+        f"dotación máxima {ind_s2.playeros_en_turno.maximo:.0f} | ocupados máximo "
+        f"{ind_s2.playeros_ocupados.maximo:.0f}",
+    )
+
+    # N11 con S2 y diferencias pareadas (números aleatorios comunes)
+    nombres_s2 = ("S2 · Playeros en el pico -1", "S2 · Playeros en el pico +1")
+    res3 = correr_catalogo(p, 7, replicas=3, nombres=nombres_s2)
+    base3, menos, mas = res3
+    d_menos = diferencia_pareada(base3, menos, "espera_pico")
+    d_mas = diferencia_pareada(base3, mas, "espera_pico")
+    d_cero = diferencia_pareada(base3, base3, "espera_pico")
+    controlar(
+        d_menos.promedio > 0 > d_mas.promedio,
+        "N11: un playero menos en el pico sube la espera y uno más la baja",
+        f"S2 −1: {d_menos.promedio:+.2f} ± {d_menos.semiamplitud:.2f} min | S2 +1: "
+        f"{d_mas.promedio:+.2f} ± {d_mas.semiamplitud:.2f} min (diferencia pareada vs S0)",
+    )
+    controlar(
+        d_cero.promedio == 0.0 and d_cero.semiamplitud == 0.0 and not es_significativa(d_cero)
+        and base3.replicas == correr_replicas(p_n, replicas=3),
+        "S0 es la corrida de base sin tocar y su diferencia contra sí misma es exactamente 0",
+        "las réplicas de S0 coinciden con correr_replicas(mes) sin cambios",
+    )
+
+    # S7: durante la crisis los pedidos tardan más; S10: cierre nocturno
+    ind_s0, _ = simular(p_n, semilla=84)
+    ind_s7, _ = simular(por_nombre["S7 · Crisis de abastecimiento"].aplicar(p_n), semilla=84)
+    controlar(
+        ind_s7.plazo_entrega.promedio > ind_s0.plazo_entrega.promedio + 1.0
+        and ind_s7.plazo_entrega.maximo >= 72.0,
+        "S7: los pedidos de la ventana de crisis tardan 72 h o más y el plazo medio sube",
+        f"plazo medio {ind_s0.plazo_entrega.promedio:.1f} h → {ind_s7.plazo_entrega.promedio:.1f} h "
+        f"| máximo {ind_s7.plazo_entrega.maximo:.1f} h",
+    )
+    p_s10 = por_nombre["S10 · Cierre nocturno 22–06"].aplicar(p_n)
+    cerrado_ok = all(p_s10.perfil.fracciones[h] == 0.0 for h in HORAS_CERRADO)
+    lambda_igual = abs(
+        p_s10.autos_por_dia * p_s10.perfil.fracciones[8]
+        - p_n.autos_por_dia * p_n.perfil.fracciones[8]
+    ) < 1e-9
+    controlar(
+        cerrado_ok and lambda_igual and p_s10.autos_por_dia < p_n.autos_por_dia,
+        "S10: de 22 a 06 h no llega nadie y las demás horas siguen igual de cargadas",
+        f"clientes por día {p_n.autos_por_dia:.0f} → {p_s10.autos_por_dia:.0f} (la demanda nocturna se pierde)",
     )
 
     # ------------------------------------------------------------------

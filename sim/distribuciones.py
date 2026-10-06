@@ -43,6 +43,9 @@ STREAMS = (
     "corte_ruta_vpower",
     "corte_ruta_diesel_g2",
     "corte_ruta_diesel_g3",
+    # Fase 6: el calendario de episodios de corte de GNC y la migración a nafta.
+    "corte_gnc",
+    "migracion",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

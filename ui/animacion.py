@@ -52,6 +52,10 @@ def _columnas(cuadros: list[Cuadro], ids_grupos: list[str], ids_tanques: list[st
         "pLlena": [c.perdidos_cola_llena for c in cuadros],
         "pCaja": [c.perdidos_caja for c in cuadros],
         "gnc": [c.gnc_cortado for c in cuadros],
+        "comp": [c.compresores_ocupados for c in cuadros],
+        "compTot": [c.compresores_total for c in cuadros],
+        "migr": [c.migrados_gnc for c in cuadros],
+        "pCorte": [c.perdidos_corte_gnc for c in cuadros],
         "calent": [1 if c.en_calentamiento else 0 for c in cuadros],
         "g": {},
         "tk": {},
@@ -382,19 +386,21 @@ function dibujar(i) {
     s += pastilla(122, 36, 232, 22, P.fondo, P.libre, "MIDIENDO INDICADORES", P.tinta);
   }
   const marcadores = [
-    [F.atend[i], "cargaron", P.libre, false],
-    [F.compras[i], "compraron", P.libre, false],
-    [F.pEsp[i], "se cansaron", P.rojo, true],
-    [F.pLlena[i], "cola llena", P.rojo, true],
-    [F.pSin[i], "sin combustible", P.rojo, true],
-    [F.pCaja[i], "dejaron la caja", P.rojo, true],
+    [F.atend[i], "cargaron", P.libre],
+    [F.compras[i], "compraron", P.libre],
+    [F.pEsp[i], "se cansaron", P.rojo],
+    [F.pLlena[i], "cola llena", P.rojo],
+    [F.pSin[i], "sin stock", P.rojo],
+    [F.pCaja[i], "dejaron caja", P.rojo],
+    [F.pCorte[i], "corte GNC", P.rojo],
+    [F.migr[i], "pasaron a nafta", P.naranja],
   ];
-  let mx = 380;
-  for (const [valor, etiqueta, color, perdida] of marcadores) {
+  let mx = 364;
+  for (const [valor, etiqueta, color] of marcadores) {
     s += texto(mx, 33, valor, 22, { peso: 700 });
     s += `<rect x="${mx}" y="42" width="9" height="9" rx="2" fill="${color}"/>`;
     s += texto(mx + 14, 51, etiqueta, 12, { color: P.tenue });
-    mx += 134;
+    mx += etiqueta.length > 12 ? 118 : 100;
   }
 
   // ---------------- Avenida ----------------
@@ -525,8 +531,10 @@ function dibujar(i) {
             stroke="${P.borde}" stroke-width="1.5"/>`;
     s += texto(zGnc.x + 12, Y_PERSONAL + 21, "GNC", 13, { peso: 700, espaciado: 1 });
     if (hayCorte) s += pastilla(zGnc.x + 64, Y_PERSONAL + 8, 124, 24, P.rojo, P.rojo, "GNC CORTADO", P.fondo);
+    else if (F.gnc[i] === 2) s += pastilla(zGnc.x + 64, Y_PERSONAL + 8, 150, 24, P.amarilloSuave, P.naranja, "COMPRESORES AL 50 %", P.tinta);
     else s += pastilla(zGnc.x + 64, Y_PERSONAL + 8, 124, 24, P.fondo, P.libre, "DISPONIBLE", P.tinta);
-    s += texto(zGnc.x + 12, Y_PERSONAL + 46, "sin playero · los cortes llegan en la Fase 6", 12, { color: P.tenue });
+    s += texto(zGnc.x + 12, Y_PERSONAL + 46,
+               `${F.comp[i]} de ${F.compTot[i]} compresores en uso · sin playero`, 12, { color: P.tenue });
   }
 
   // ---------------- Minimarket ----------------
@@ -683,7 +691,7 @@ for (let i = 0; i < NCUADROS; i++) {
 let iQuiebre = -1;
 for (let i = 0; i < NCUADROS && iQuiebre < 0; i++) if (sinCombustible(i).length) iQuiebre = i;
 let iCorte = -1;
-for (let i = 0; i < NCUADROS && iCorte < 0; i++) if (F.gnc[i] === 1) iCorte = i;
+for (let i = 0; i < NCUADROS && iCorte < 0; i++) if (F.gnc[i] > 0) iCorte = i;
 
 function saltar(i) { pausar(); mostrar(i); }
 document.getElementById("saltoPico").addEventListener("click", () => saltar(iPico));
@@ -693,7 +701,7 @@ bQuiebre.title = iQuiebre < 0 ? "No hubo quiebre de stock este día" : "";
 bQuiebre.addEventListener("click", () => saltar(iQuiebre));
 const bCorte = document.getElementById("saltoCorte");
 bCorte.disabled = iCorte < 0;
-bCorte.title = iCorte < 0 ? "No hubo corte de GNC este día (los episodios llegan en la Fase 6)" : "";
+bCorte.title = iCorte < 0 ? "No hubo corte de GNC este día (probá con un día de invierno)" : "";
 bCorte.addEventListener("click", () => saltar(iCorte));
 document.getElementById("saltoDescarga").addEventListener("click", () => {
   const desde = Math.round(posicion);

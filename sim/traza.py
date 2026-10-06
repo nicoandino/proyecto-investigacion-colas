@@ -44,7 +44,11 @@ class Cuadro:
     playeros_ocupados: int = 0    # playeros atendiendo en este instante (estación real)
     playeros_en_turno: int = 0    # playeros que corresponden al turno (estación real)
     perdidos_cola_llena: int = 0  # no entraron porque la cola de su zona estaba llena (acumulado)
-    gnc_cortado: int = 0          # 1 si el GNC está cortado (episodios: Fase 6)
+    gnc_cortado: int = 0          # 0 normal · 1 GNC cortado · 2 compresores al 50 %
+    compresores_ocupados: int = 0     # cargas GNC en curso
+    compresores_total: int = 0        # compresores habilitados en este instante
+    migrados_gnc: int = 0             # clientes GNC que pasaron a Súper (acumulado)
+    perdidos_corte_gnc: int = 0       # clientes GNC que se fueron por el corte (acumulado)
     # Una foto por zona: (id, carriles, cola, largo de la cola, rechazados acumulados).
     #   carriles: un código por cara: -1 libre · 2·k cargando · 2·k+1 esperando al
     #   playero con la cara ocupada (k = índice del producto).
@@ -84,6 +88,11 @@ class DiaSimulado:
     litros_vendidos: float
     hubo_quiebre: bool
     en_calentamiento: bool
+    # GNC del día (Fase 6): atendidos, pasados a nafta, perdidos por el corte y minutos de corte
+    gnc_atendidos: int = 0
+    gnc_migrados: int = 0
+    gnc_perdidos: int = 0
+    gnc_corte_min: float = 0.0
 
     @property
     def numero_texto(self) -> str:

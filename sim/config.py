@@ -469,6 +469,37 @@ class ParametrosRed:
             raise ValueError(f"Escenario de corte desconocido: {self.escenario_corte}.")
 
 
+# =============================================================================
+# GNC: contrato, episodios de corte invernales, compresores y migración (sim/gnc.py)
+# =============================================================================
+@dataclass(frozen=True)
+class ParametrosGNC:
+    """El GNC de la estación: cuándo se corta, cuántos compresores hay y adónde van los clientes.
+
+    El corte es TOTAL y por episodios de varios días (no un "−50 %"); sólo lo sufre una
+    estación con contrato interrumpible. `carga_m3` del cliente GNC sale del tipo de
+    vehículo `auto_gnc` (cilindro de 14 m³, VEH-05) y el tiempo de carga de `carga_gnc`.
+    """
+
+    contrato: str = valor("GNC-01")                  # "interrumpible" | "firme"
+    episodios: int = valor("GNC-02")                 # episodios por invierno
+    dias_por_episodio: int = valor("GNC-06")
+    forma: str = valor("GNC-03")                     # "total_24h" | "ventana" | "parcial_50"
+    compresores: int = valor("SUR-06")               # cargas simultáneas posibles
+    migracion_a_nafta: float = valor("GNC-04")       # prob. de pasarse a Súper durante el corte
+    episodios_en_horizonte: bool = valor("GNC-07")   # herramienta: forzar el corte adentro
+
+    def __post_init__(self) -> None:
+        if self.contrato not in ("interrumpible", "firme"):
+            raise ValueError("contrato tiene que ser 'interrumpible' o 'firme'.")
+        if self.forma not in ("total_24h", "ventana", "parcial_50"):
+            raise ValueError("forma tiene que ser 'total_24h', 'ventana' o 'parcial_50'.")
+        if self.episodios < 0 or self.dias_por_episodio < 1 or self.compresores < 1:
+            raise ValueError("episodios ≥ 0, días por episodio ≥ 1 y compresores ≥ 1.")
+        if not 0.0 <= self.migracion_a_nafta <= 1.0:
+            raise ValueError("migracion_a_nafta tiene que estar entre 0 y 1.")
+
+
 #: Los cinco productos de la estación real.
 PRODUCTOS_REALES = productos_desde_registro()
 #: Las tres zonas de surtidores.
@@ -653,6 +684,7 @@ class ParametrosSimulacion:
     )
     inventario: tuple[InventarioProducto, ...] = INVENTARIO_REAL
     red: ParametrosRed | None = ParametrosRed()   # None = el plazo no suma demoras de ruta
+    gnc: ParametrosGNC | None = ParametrosGNC()   # None = sin cortes ni compresores
 
     # --- Inventario (clásico: un solo tanque) ---------------------------------
     tanque: ParametrosTanque = ParametrosTanque()
@@ -755,6 +787,7 @@ class ParametrosSimulacion:
             tabla_demanda_relativa=False,
             capacidad_cola=None,
             red=None,
+            gnc=None,
             tanque=ParametrosTanque(
                 capacidad=40_000.0,
                 nivel_inicial=30_000.0,

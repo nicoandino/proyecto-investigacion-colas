@@ -116,6 +116,7 @@ def _economia_de(
         r.prom("perdidos_cola_dia")
         + r.prom("perdidos_sin_combustible_dia")
         + r.prom("perdidos_cola_llena_dia")
+        + r.prom("perdidos_corte_gnc_dia")
     )
 
     ingreso_combustible = litros_dia * eco.margen_por_litro * DIAS_DEL_MES

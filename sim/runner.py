@@ -91,6 +91,13 @@ class ResultadoReplica:
     perdidos_cola_llena_dia: float = 0.0
     util_playeros: float = 0.0            # playeros ocupados ÷ playeros en turno (promedio temporal)
     viajes_demorados_pct: float = 0.0     # % de los camiones que encontraron un corte (Fase 5)
+    gnc_afectados_dia: float = 0.0        # clientes GNC que se toparon con el corte (Fase 6)
+    migrados_gnc_dia: float = 0.0         # ... y pasaron a Súper
+    perdidos_corte_gnc_dia: float = 0.0   # ... y se fueron sin cargar
+    m3_gnc_vendidos_dia: float = 0.0      # GNC vendido, en m³
+    m3_gnc_perdidos_dia: float = 0.0      # GNC que pidieron los que se fueron, en m³
+    dias_corte_gnc_pct: float = 0.0       # % de los días medidos con algún tramo de corte
+    util_compresores: float = 0.0         # compresores ocupados ÷ compresores
     demora_ruta_promedio: float = 0.0     # horas de demora por viaje (incluye los que no se demoran)
     espera_por_grupo: tuple[float, ...] = ()
     cola_por_grupo: tuple[float, ...] = ()
@@ -218,7 +225,10 @@ def correr_replica(
         compras_dia=c.compras_atendidas / dias,
         tasa_abandono=(
             100.0
-            * (c.perdidos_surtidor + c.perdidos_sin_combustible + c.perdidos_cola_llena)
+            * (
+                c.perdidos_surtidor + c.perdidos_sin_combustible + c.perdidos_cola_llena
+                + c.perdidos_corte_gnc
+            )
             / c.llegadas
             if c.llegadas
             else 0.0
@@ -232,6 +242,17 @@ def correr_replica(
         plazo_entrega=ind.plazo_entrega.promedio,
         porcentaje_dias_quiebre=100.0 * c.dias_con_quiebre / dias,
         porcentaje_tiempo_sin_combustible=100.0 * ind.fraccion_sin_combustible,
+        gnc_afectados_dia=c.gnc_afectados / dias,
+        migrados_gnc_dia=c.migrados_gnc_a_nafta / dias,
+        perdidos_corte_gnc_dia=c.perdidos_corte_gnc / dias,
+        m3_gnc_vendidos_dia=ind.c_producto["gnc"].litros_vendidos / dias,
+        m3_gnc_perdidos_dia=ind.c_producto["gnc"].litros_no_vendidos / dias,
+        dias_corte_gnc_pct=100.0 * c.dias_con_corte_gnc / dias,
+        util_compresores=(
+            ind.compresores_ocupados.promedio / p.gnc.compresores
+            if p.estacion_real and p.gnc is not None
+            else 0.0
+        ),
         viajes_demorados_pct=(
             100.0 * c.viajes_demorados / c.pedidos_emitidos if c.pedidos_emitidos else 0.0
         ),

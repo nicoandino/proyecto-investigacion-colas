@@ -11,6 +11,7 @@ Para ejecutar:
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import date
 
 import pandas as pd
 import streamlit as st
@@ -21,8 +22,10 @@ from sim.config import (
     ESTACIONALIDAD_LEVE,
     ESTACIONALIDAD_NEUTRA,
     ESTACIONALIDAD_PROXY,
+    ANO_REFERENCIA,
     DemandaDiaria,
     ParametrosEconomicos,
+    ParametrosGNC,
     ParametrosSimulacion,
     ParametrosTanque,
     Triangular,
@@ -32,6 +35,8 @@ from sim.config import (
     turnos_de,
 )
 from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
+from sim.distribuciones import Aleatorio
+from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
     ahorro_por_producto,
     analizar_escenarios,
@@ -63,7 +68,7 @@ from sim.red import (
     dias_de_mes_en_corrida,
     muestrear_plazos,
 )
-from ui import animacion, graficos, graficos_red
+from ui import animacion, graficos, graficos_gnc, graficos_red
 from ui.datos_ui import (
     csv_registro,
     esquema_estacion_html,
@@ -79,6 +84,7 @@ from ui.textos import (
     INDICADORES_CLIENTES,
     INDICADORES_COLAS,
     INDICADORES_COMPLEMENTARIOS,
+    INDICADORES_GNC,
     INDICADORES_INVENTARIO,
     POR_CLAVE,
     SUPUESTOS,
@@ -642,6 +648,73 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
                 velocidad_kmh=float(velocidad),
             )
 
+    # --- GNC: cortes de invierno, compresores y migración (sólo la estación real) ---
+    gnc = None
+    if es_real:
+        with st.sidebar.expander("🔥 GNC y cortes de invierno"):
+            st.markdown(
+                f"Fuentes {insignia_html(por_id('GNC-01'))} {insignia_html(por_id('GNC-02'))} "
+                f"{insignia_html(por_id('GNC-04'))} {insignia_html(por_id('SUR-06'))}: con "
+                f"contrato interrumpible, en jun–ago el GNC se corta por episodios (corte "
+                f"TOTAL, no −50 %).",
+                unsafe_allow_html=True,
+            )
+            g0 = base.gnc
+            contrato = st.radio(
+                "Contrato de gas",
+                ["interrumpible", "firme"],
+                index=0 if g0.contrato == "interrumpible" else 1,
+                format_func=lambda x: {
+                    "interrumpible": "Interrumpible (sufre los cortes)",
+                    "firme": "Firme (sin cortes)",
+                }[x],
+                horizontal=True,
+            )
+            episodios = st.slider(
+                "Episodios de corte por invierno", 0, 4, int(g0.episodios), 1,
+                disabled=contrato == "firme",
+            )
+            dias_episodio = st.slider(
+                "Duración de cada episodio (días)", 1, 14, int(g0.dias_por_episodio), 1,
+                disabled=contrato == "firme",
+            )
+            forma = st.selectbox(
+                "Forma del corte",
+                ["total_24h", "ventana", "parcial_50"],
+                index=["total_24h", "ventana", "parcial_50"].index(g0.forma),
+                format_func=lambda x: {
+                    "total_24h": "Corte total de 24 h (ENARGAS)",
+                    "ventana": "Ventana de 17 a 01 h (San Rafael 2022)",
+                    "parcial_50": "Compresores al 50 % (sin fuente)",
+                }[x],
+                disabled=contrato == "firme",
+            )
+            compresores = st.slider(
+                "Compresores (cargas GNC simultáneas)", 1, 6, int(g0.compresores), 1,
+                help="SUR-06 (supuesto, sin dato): derivado de 20–25 autos/h × 7 min ÷ 60.",
+            )
+            migracion = st.slider(
+                "Clientes que pasan a Súper durante el corte (%)", 0, 100,
+                int(round(g0.migracion_a_nafta * 100)), 5,
+                help="GNC-04 (supuesto): no hay migración documentada. Los demás se pierden.",
+            ) / 100.0
+            en_horizonte = st.checkbox(
+                "Forzar que los episodios caigan dentro del horizonte",
+                value=bool(g0.episodios_en_horizonte),
+                disabled=contrato == "firme",
+                help="Sin tildar, los episodios se sortean entre el 1/jun y el 31/ago: un "
+                     "horizonte que no incluye invierno no ve ninguno.",
+            )
+            gnc = ParametrosGNC(
+                contrato=contrato,
+                episodios=int(episodios),
+                dias_por_episodio=int(dias_episodio),
+                forma=forma,
+                compresores=int(compresores),
+                migracion_a_nafta=float(migracion),
+                episodios_en_horizonte=bool(en_horizonte),
+            )
+
     with st.sidebar.expander("🔬 Corrida"):
         st.info(
             f"Horizonte **{horizonte}**: desde el {fecha_inicio[1]}/{fecha_inicio[0]}, "
@@ -730,6 +803,7 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
             pct_gnc=float(pct_gnc),
             inventario=inventario,
             red=red,
+            gnc=gnc,
             **comunes,
         )
     else:
@@ -1679,6 +1753,19 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
         f"placeholder).",
         f"Nivel de servicio de combustible: {base.prom('nivel_servicio') * 100:.1f} %.",
     ]
+    if p.gnc is not None and base.prom("gnc_afectados_dia") > 0:
+        lineas.append(
+            f"GNC: el corte de invierno afecta a {base.prom('gnc_afectados_dia'):.1f} clientes "
+            f"por día (promedio del período): {base.prom('migrados_gnc_dia'):.1f} pasan a Súper "
+            f"y {base.prom('perdidos_corte_gnc_dia'):.1f} se pierden "
+            f"({base.prom('m3_gnc_perdidos_dia'):.0f} m³ por día sin vender)."
+        )
+    if p.gnc is not None:
+        caras_gnc = sum(gr.caras for gr in p.grupos if "gnc" in gr.productos)
+        lineas.append(
+            f"Alerta de coherencia (C8): {caras_gnc} de {sum(gr.caras for gr in p.grupos)} caras "
+            f"son de GNC para ≈ {p.pct_gnc:.0%} de los clientes."
+        )
     for linea in lineas:
         st.markdown(f"- {escapar_pesos(linea)}")
 
@@ -2085,6 +2172,121 @@ def pestania_red(p: ParametrosSimulacion) -> None:
 
 
 # =============================================================================
+# Pestaña: GNC (Fase 6)
+# =============================================================================
+def pestania_gnc(p: ParametrosSimulacion) -> None:
+    st.subheader("GNC: cortes de invierno, compresores y migración a nafta")
+    if p.gnc is None:
+        st.info(
+            "El caso clásico no vende GNC. Elegí la **estación real** en la barra lateral.",
+            icon="🔥",
+        )
+        return
+    g = p.gnc
+    base = buscar(st.session_state.resultados, "Base")
+
+    st.markdown(
+        "El GNC no tiene tanque: sale de la red de gas y se comprime en la estación. Con "
+        "**contrato interrumpible**, cuando hay una ola de frío el ENARGAS manda cortarlo "
+        "para priorizar el gas de las casas (verificado para abril-2026; San Rafael lo vivió "
+        "en 2022). El corte es **total** y por **episodios** de varios días. Durante el corte, "
+        "las 6 caras no atienden (los que ya cargan terminan) y cada cliente GNC **pasa a "
+        "Súper** con la probabilidad elegida o **se pierde**. El GNC se mide en **m³**."
+    )
+
+    caras_gnc = sum(gr.caras for gr in p.grupos if "gnc" in gr.productos)
+    caras_total = sum(gr.caras for gr in p.grupos)
+    st.warning(
+        f"**Alerta de coherencia (C8):** {caras_gnc} de {caras_total} caras "
+        f"({caras_gnc / caras_total:.0%}) son de GNC, pero los clientes GNC son ≈ "
+        f"{p.pct_gnc:.0%} de las llegadas. Con {g.compresores} compresores, los compresores "
+        f"están ocupados el {base.prom('util_compresores') * 100:.1f} % del tiempo: o la "
+        f"estación está sobredimensionada en GNC, o la demanda GNC está subestimada. Es "
+        f"lo primero que hay que relevar con el encargado (§12, prioridad 5).",
+        icon="⚖️",
+    )
+
+    # Calendario de episodios de la réplica 1
+    fecha0 = date(ANO_REFERENCIA, *p.fecha_inicio)
+    episodios = calendario_de_episodios(g, Aleatorio(st.session_state.semilla_usada), fecha0, p.dias)
+    visibles = episodios_con_fechas(episodios, fecha0, p.dias)
+    st.markdown("##### Episodios de corte de esta corrida")
+    if g.contrato == "firme" or g.episodios == 0:
+        st.info("No hay cortes: contrato firme o 0 episodios.", icon="✅")
+    elif not visibles:
+        st.warning(
+            "Ningún episodio cae dentro de este horizonte: los episodios se sortean entre "
+            "el 1/jun y el 31/ago. Elegí **Una estación → Invierno** (o un mes de invierno) "
+            "en la barra lateral, o tildá *Forzar que los episodios caigan dentro del "
+            "horizonte* en GNC y cortes de invierno.",
+            icon="📅",
+        )
+    else:
+        for desde, hasta in visibles:
+            st.markdown(
+                f"- **{desde.strftime('%d/%m')} al {hasta.strftime('%d/%m')}** "
+                f"({(hasta - desde).days + 1} días, {g.forma.replace('_', ' ')})"
+            )
+        st.caption(
+            "Calendario de la réplica 1; cada réplica sortea el suyo (mismas fechas en todos "
+            "los escenarios con la misma semilla)."
+        )
+
+    st.markdown("##### Indicadores (promedio de todos los días medidos)")
+    for fila in (INDICADORES_GNC[:4], INDICADORES_GNC[4:]):
+        columnas = st.columns(4)
+        for columna, metrica in zip(columnas, fila):
+            tarjeta(columna, metrica, base)
+
+    perdida_mes = base.prom("m3_gnc_perdidos_dia") * 30 * float(por_id("ECO-03").valor)
+    st.caption(
+        escapar_pesos(
+            f"Venta de GNC perdida en el período ≈ {pesos(perdida_mes)} por mes de 30 días "
+            f"(margen de ${float(por_id('ECO-03').valor):,.0f}/m³: ECO-03, heredado sin fuente). "
+            f"La economía completa del GNC llega en la Fase 8."
+        )
+    )
+
+    st.plotly_chart(
+        graficos_gnc.grafico_gnc_dias(st.session_state.traza, p), key="g_gnc_dias"
+    )
+
+    st.markdown("##### Efecto del corte en la estación")
+    st.caption("Corre la estación con y sin cortes (contrato firme), con las mismas semillas.")
+    replicas_gnc = st.slider("Réplicas", 1, 4, 2, 1, key="rep_gnc")
+    deshabilitado = g.contrato == "firme" or g.episodios == 0
+    if st.button("🔥 Simular el efecto del corte de GNC", disabled=deshabilitado):
+        with st.spinner("Simulando con y sin cortes…"):
+            sin = correr_estacion_real_cacheado(
+                replace(p, gnc=replace(g, contrato="firme")), replicas_gnc,
+                st.session_state.semilla_usada,
+            )
+            con = correr_estacion_real_cacheado(p, replicas_gnc, st.session_state.semilla_usada)
+        st.session_state.efecto_gnc = (sin, con)
+    efecto = st.session_state.get("efecto_gnc")
+    if efecto:
+        sin, con = efecto
+        super_sin = promedio_por_producto(sin.replicas, "litros_vendidos_por_producto")["super"]
+        super_con = promedio_por_producto(con.replicas, "litros_vendidos_por_producto")["super"]
+        filas = [
+            ("GNC vendido (m³/día)", f"{sin.prom('m3_gnc_vendidos_dia'):.1f}", f"{con.prom('m3_gnc_vendidos_dia'):.1f}"),
+            ("Clientes perdidos por el corte (por día)", f"{sin.prom('perdidos_corte_gnc_dia'):.2f}", f"{con.prom('perdidos_corte_gnc_dia'):.2f}"),
+            ("Clientes que pasaron a Súper (por día)", f"{sin.prom('migrados_gnc_dia'):.2f}", f"{con.prom('migrados_gnc_dia'):.2f}"),
+            ("Súper vendido (L/día)", f"{super_sin:,.0f}", f"{super_con:,.0f}"),
+            ("Espera en la hora pico (min)", f"{sin.prom('espera_pico'):.2f}", f"{con.prom('espera_pico'):.2f}"),
+            ("Días con corte de GNC (%)", f"{sin.prom('dias_corte_gnc_pct'):.1f}", f"{con.prom('dias_corte_gnc_pct'):.1f}"),
+        ]
+        st.dataframe(
+            pd.DataFrame(filas, columns=["Indicador", "Sin cortes (contrato firme)", "Con los cortes elegidos"]),
+            hide_index=True,
+        )
+        st.caption(
+            "Resultado de la última comparación. Los que pasan a Súper suman litros de nafta "
+            "(y cola en la zona A); los que se pierden son venta de GNC que no se recupera."
+        )
+
+
+# =============================================================================
 # Pestaña: la estación (caso real)
 # =============================================================================
 def pestania_estacion() -> None:
@@ -2218,6 +2420,7 @@ def correr_todo(
     st.session_state.politica_actual = None
     st.session_state.costos_real = None
     st.session_state.efecto_cortes = None
+    st.session_state.efecto_gnc = None
 
 
 def main() -> None:
@@ -2274,6 +2477,7 @@ def main() -> None:
             "🎲 Demanda",
             "🛢️ Inventario",
             "🗺️ Red y rutas",
+            "🔥 GNC",
             "⚖️ Escenarios",
             "💰 Economía",
             "📝 Conclusión",
@@ -2294,14 +2498,16 @@ def main() -> None:
     with pestanias[5]:
         pestania_red(p_corrida)
     with pestanias[6]:
-        pestania_escenarios()
+        pestania_gnc(p_corrida)
     with pestanias[7]:
-        pestania_economia(p_corrida, st.session_state.parametros_eco)
+        pestania_escenarios()
     with pestanias[8]:
-        pestania_conclusion()
+        pestania_economia(p_corrida, st.session_state.parametros_eco)
     with pestanias[9]:
-        pestania_modelo(p_corrida)
+        pestania_conclusion()
     with pestanias[10]:
+        pestania_modelo(p_corrida)
+    with pestanias[11]:
         pestania_datos_fuentes()
 
     st.divider()

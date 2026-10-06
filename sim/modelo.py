@@ -38,12 +38,14 @@ homogéneo.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 import simpy
 
-from sim.config import MINUTOS_POR_DIA, ParametrosSimulacion
+from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion
 from sim.distribuciones import Aleatorio
 from sim.estadisticas import Indicadores
+from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
 from sim.red import demora_de_viaje, mes_del_dia
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
@@ -67,6 +69,8 @@ class Auto:
     numero_producto: int = 0   # número aleatorio (01-100) del sorteo de producto
     numero_tipo: int = 0       # número aleatorio del sorteo de tipo de vehículo
     espera_playero: bool = False   # tiene la cara pero todavía no un playero (animación)
+    afectado_gnc: bool = False     # se topó con un corte de GNC (se cuenta una sola vez)
+    migrado: bool = False          # era de GNC y pasó a Súper durante el corte
 
 
 class EstacionDeServicio:
@@ -116,7 +120,9 @@ class EstacionDeServicio:
         self.surtidores = simpy.Resource(self.env, capacity=self.p.surtidores)
         self.cajas = simpy.Resource(self.env, capacity=self.p.cajas)
         self.playeros = None
-        self.gnc_cortado = False
+        self.gnc_cortado = 0
+        self.compresores = None
+        self.intervalos_gnc: list[tuple[float, float]] = []
         self.nivel = self.p.tanque.nivel_inicial
         self.litros_en_camino = 0.0
         self.pedidos_en_camino = 0
@@ -125,7 +131,7 @@ class EstacionDeServicio:
         """La estación real: grupos de caras, playeros por turno, cola finita."""
         self.es_real = True
         self.info_grupo = {g.id: g for g in self.p.grupos}
-        self.gnc_cortado = False            # los episodios llegan en la Fase 6
+        self.gnc_cortado = 0                # 0 normal · 1 cortado · 2 compresores al 50 %
 
         # Qué auto ocupa cada cara (carril) y quién espera en cada zona: sólo sirven para
         # dibujar la animación (el motor no los consulta).
@@ -155,6 +161,22 @@ class EstacionDeServicio:
 
         # Cajas del minimarket: 1 caja constante (PER-02 = 1·1·1).
         self.cajas = simpy.Resource(self.env, capacity=self.p.cajas)
+
+        # GNC (§7.5): los compresores limitan las cargas simultáneas (no las 6 caras) y los
+        # episodios de corte invernales se sortean ahora, con su stream propio.
+        g = self.p.gnc
+        self.compresores = None
+        self.reservas_compresores: list[simpy.events.Event] = []
+        self.episodios_gnc: list[tuple[int, int]] = []
+        self.intervalos_gnc = []
+        if g is not None:
+            self.compresores = simpy.PriorityResource(self.env, capacity=g.compresores)
+            self.episodios_gnc = calendario_de_episodios(
+                g, self.az, date(ANO_REFERENCIA, *self.p.fecha_inicio), self.p.dias
+            )
+            self.intervalos_gnc = intervalos_de_corte(g, self.episodios_gnc, self.p.dias)
+            if self.intervalos_gnc:
+                self.env.process(self.controlar_gnc())
 
         # Inventario por producto líquido.
         self.niveles: dict[str, float] = {
@@ -221,6 +243,74 @@ class EstacionDeServicio:
         self.ind.playeros_en_turno.cambiar(self.env.now, float(playeros_del_turno))
 
     # =========================================================================
+    # GNC: episodios de corte y compresores (§7.5)
+    # =========================================================================
+    def controlar_gnc(self):
+        """Aplica el calendario de cortes: GNC cortado (o compresores al 50 %) en cada tramo."""
+        parcial = self.p.gnc.forma == "parcial_50"
+        for desde, hasta in self.intervalos_gnc:
+            if desde > self.env.now:
+                yield self.env.timeout(desde - self.env.now)
+            if parcial:
+                self.gnc_cortado = 2
+                self._ajustar_compresores(max(1, self.p.gnc.compresores // 2))
+            else:
+                self.gnc_cortado = 1
+            yield self.env.timeout(hasta - self.env.now)
+            self.gnc_cortado = 0
+            if parcial:
+                self._ajustar_compresores(self.p.gnc.compresores)
+
+    def _ajustar_compresores(self, disponibles: int) -> None:
+        """Reservas ficticias (prioridad −1) bajan la capacidad, igual que con los playeros."""
+        objetivo = self.p.gnc.compresores - disponibles
+        actual = len(self.reservas_compresores)
+        if objetivo > actual:
+            for _ in range(objetivo - actual):
+                self.reservas_compresores.append(self.compresores.request(priority=-1))
+        elif objetivo < actual:
+            for _ in range(actual - objetivo):
+                pedido = self.reservas_compresores.pop()
+                if pedido.triggered:
+                    self.compresores.release(pedido)
+                else:
+                    pedido.cancel()
+
+    def _compresores_habilitados(self) -> int:
+        if self.compresores is None:
+            return 0
+        return self.compresores.capacity - len(self.reservas_compresores)
+
+    def _gnc_al_llegar_con_corte(self, auto: Auto) -> bool:
+        """Cliente GNC que llega con el GNC cortado: pasa a Súper o se pierde (§7.5).
+
+        Devuelve True si migró (sigue su recorrido como cliente de nafta). Conserva su
+        identidad (el mismo auto) pero se vuelve a sortear cuántos litros carga, con el
+        stream "migracion", y se re-etiquetan sus llegadas para que cada grupo siga
+        cerrando (llegadas = atendidos + perdidos + adentro).
+        """
+        auto.afectado_gnc = True
+        self.ind.contar("gnc_afectados")
+        g = self.p.gnc
+        if self.az.bernoulli(g.migracion_a_nafta, "migracion"):
+            tipo = self.info_tipo["auto"]
+            auto.litros = self.az.triangular(tipo.litros, "migracion")
+            auto.t_carga = self.az.triangular(self.p.carga, "migracion")
+            grupo_viejo = auto.grupo
+            auto.producto = "super"
+            auto.grupo = next(pr.grupo for pr in self.p.productos if pr.id == "super")
+            auto.tipo = "auto"
+            auto.migrado = True
+            self.ind.contar_producto("gnc", "llegadas", -1)
+            self.ind.contar_grupo(grupo_viejo, "llegadas", -1)
+            self.ind.contar_producto(auto.producto, "llegadas")
+            self.ind.contar_grupo(auto.grupo, "llegadas")
+            self.ind.contar("migrados_gnc_a_nafta")
+            return True
+        self.registrar_perdida(auto, motivo="corte_gnc")
+        return False
+
+    # =========================================================================
     # Procesos de control
     # =========================================================================
     def correr_dias(self):
@@ -248,8 +338,15 @@ class EstacionDeServicio:
             )
 
             antes = _foto(self.ind.c_total)
+            antes_gnc = self._conteo_gnc()
             yield self.env.timeout(MINUTOS_POR_DIA)
             despues = _foto(self.ind.c_total)
+            despues_gnc = self._conteo_gnc()
+            minutos_corte = (
+                minutos_de_corte_en_dia(self.intervalos_gnc, dia - 1) if self.es_real else 0.0
+            )
+            if minutos_corte > 0:
+                self.ind.contar("dias_con_corte_gnc")
 
             if self.es_real:
                 if any(self.hubo_quiebre_hoy.values()):
@@ -279,12 +376,25 @@ class EstacionDeServicio:
                             if self.es_real else self.hubo_quiebre_hoy
                         ),
                         en_calentamiento=dia <= self.p.dias_calentamiento,
+                        gnc_atendidos=despues_gnc[0] - antes_gnc[0],
+                        gnc_migrados=despues_gnc[1] - antes_gnc[1],
+                        gnc_perdidos=despues_gnc[2] - antes_gnc[2],
+                        gnc_corte_min=minutos_corte,
                     )
                 )
 
             # El calentamiento termina justo al cerrar su último día.
             if dia == self.p.dias_calentamiento:
                 self.ind.reiniciar(self.env.now)
+
+    def _conteo_gnc(self) -> tuple[int, int, int]:
+        """(atendidos GNC, migrados a nafta, perdidos por el corte), acumulados."""
+        c = self.ind.c_total
+        return (
+            self.ind.c_producto_total["gnc"].atendidos,
+            c.migrados_gnc_a_nafta,
+            c.perdidos_corte_gnc,
+        )
 
     def generar_llegadas(self):
         """Proceso de Poisson NO HOMOGÉNEO, con la tasa λ(t) que marca el perfil horario.
@@ -417,7 +527,11 @@ class EstacionDeServicio:
                 playeros_ocupados=int(self.ind.playeros_ocupados.valor),
                 playeros_en_turno=int(self.ind.playeros_en_turno.valor),
                 perdidos_cola_llena=self.ind.c_total.perdidos_cola_llena,
-                gnc_cortado=1 if self.gnc_cortado else 0,
+                gnc_cortado=int(self.gnc_cortado),
+                compresores_ocupados=int(self.ind.compresores_ocupados.valor),
+                compresores_total=self._compresores_habilitados(),
+                migrados_gnc=self.ind.c_total.migrados_gnc_a_nafta,
+                perdidos_corte_gnc=self.ind.c_total.perdidos_corte_gnc,
                 grupos=self._foto_grupos(),
                 tanques=self._foto_tanques(),
             )
@@ -546,7 +660,7 @@ class EstacionDeServicio:
         if not self.es_real:
             return self.nivel >= auto.litros
         if auto.producto == "gnc":
-            return not self.gnc_cortado          # los episodios llegan en la Fase 6
+            return self.gnc_cortado != 1         # 1 = corte total (2 = sólo menos compresores)
         return self.niveles[auto.producto] >= auto.litros
 
     def consumir(self, auto: Auto) -> None:
@@ -666,6 +780,10 @@ class EstacionDeServicio:
             self.ind.contar("perdidos_cola_llena")
             if self.es_real:
                 self.ind.contar_grupo(auto.grupo, "perdidos_cola_llena")
+        elif motivo == "corte_gnc":
+            self.ind.contar("perdidos_corte_gnc")
+            if self.es_real:
+                self.ind.contar_grupo(auto.grupo, "perdidos_corte_gnc")
         else:  # abandono_espera
             self.ind.contar("perdidos_surtidor")
             if self.es_real:
@@ -690,6 +808,11 @@ class EstacionDeServicio:
         if self.es_real:
             self.ind.contar_grupo(auto.grupo, "llegadas")
             self.ind.litros_por_tipo[auto.tipo].agregar(auto.litros)
+
+        # ---------- GNC cortado: pasa a Súper o se pierde (§7.5) ----------
+        if self.es_real and auto.producto == "gnc" and self.gnc_cortado == 1:
+            if not self._gnc_al_llegar_con_corte(auto):
+                return
 
         # ---------- ¿Hay combustible para atenderlo? ----------
         if not self.hay_combustible(auto):
@@ -856,16 +979,47 @@ class EstacionDeServicio:
 
                 self.ind.playeros_ocupados.sumar(self.env.now, -1)
         else:
-            # El GNC no retiene playero (PER-04): sólo conecta la manguera.
-            if not self.hay_combustible(auto):
-                self.registrar_perdida(auto, motivo="sin_combustible")
-                return False
-            espera_real = self.env.now - auto.t_llegada
-            self.ind.espera_surtidor.agregar(espera_real)
-            self.ind.esperas_grupo[grupo].agregar(espera_real)
-            self.ind.por_hora.contar_espera(auto.hora, espera_real)
-            self.consumir(auto)
-            yield from self._servir(auto, grupo)
+            # El GNC no retiene playero (PER-04: sólo conecta la manguera), pero sí un
+            # COMPRESOR mientras carga: el compresor, no las 6 caras, limita el GNC.
+            return (yield from self._cargar_gnc(auto, grupo, espera_cara))
+        return True
+
+    def _cargar_gnc(self, auto: Auto, grupo: str, espera_cara: float) -> bool:
+        """Con la cara tomada, espera un compresor (con paciencia) y carga."""
+        if self.compresores is None:
+            return (yield from self._empezar_carga_gnc(auto, grupo))
+        restante = self.p.paciencia_surtidor - espera_cara
+        with self.compresores.request(priority=0) as pedido:
+            if pedido.triggered:
+                yield pedido
+            else:
+                resultado = yield pedido | self.env.timeout(max(restante, 0.0))
+                if pedido not in resultado:
+                    # Se cansó esperando el compresor: libera la cara y se va.
+                    self.registrar_perdida(auto, motivo="abandono_espera")
+                    self.ind.contar("abandonos_playero")
+                    self.ind.contar_grupo(grupo, "abandonos_playero")
+                    return False
+            self.ind.compresores_ocupados.sumar(self.env.now, +1)
+            try:
+                return (yield from self._empezar_carga_gnc(auto, grupo))
+            finally:
+                self.ind.compresores_ocupados.sumar(self.env.now, -1)
+
+    def _empezar_carga_gnc(self, auto: Auto, grupo: str) -> bool:
+        """Ya tiene cara y compresor: si el corte llegó mientras esperaba, se pierde."""
+        if self.gnc_cortado == 1:
+            if not auto.afectado_gnc:
+                auto.afectado_gnc = True
+                self.ind.contar("gnc_afectados")
+            self.registrar_perdida(auto, motivo="corte_gnc")
+            return False
+        espera_real = self.env.now - auto.t_llegada
+        self.ind.espera_surtidor.agregar(espera_real)
+        self.ind.esperas_grupo[grupo].agregar(espera_real)
+        self.ind.por_hora.contar_espera(auto.hora, espera_real)
+        self.consumir(auto)
+        yield from self._servir(auto, grupo)
         return True
 
     def _servir(self, auto: Auto, grupo: str) -> None:

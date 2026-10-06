@@ -1,0 +1,113 @@
+"""Cortes de GNC en invierno (ORQUESTADOR §7.5).
+
+La estación vende GNC con contrato INTERRUMPIBLE (supuesto, GNC-01): cuando hay una ola de
+frío, el ENARGAS manda cortar el GNC a las estaciones con ese contrato para priorizar el
+gas de las casas (verificado para abril-2026 en el AMBA; San Rafael lo vivió en 2022). Es
+un corte TOTAL, no un "−50 %", y llega por EPISODIOS de varios días.
+
+Cada réplica sortea el calendario de episodios de su invierno (stream "corte_gnc"):
+`episodios` fechas de inicio al azar entre el 1/jun y el 31/ago, de `dias_por_episodio`
+días cada una. Como el sorteo es del invierno entero, un horizonte que no incluye jun–ago
+no ve ningún corte, y uno de un mes ve sólo los episodios que caen adentro. Con
+`episodios_en_horizonte` los episodios se sortean entre los días de invierno del horizonte,
+para poder estudiar el corte sin esperar a que el azar lo ponga adentro.
+
+Este módulo sólo arma el calendario; el motor (`sim/modelo.py`) lo aplica:
+  - durante un corte total las 6 caras GNC no atienden (los que ya cargan terminan);
+  - con probabilidad `migracion_a_nafta` el cliente pasa a Súper, si no se pierde.
+"""
+
+from __future__ import annotations
+
+from datetime import date, timedelta
+
+from sim.config import ANO_REFERENCIA, ParametrosGNC
+from sim.distribuciones import Aleatorio
+
+#: Ventana de invierno en la que caen los episodios (1/jun a 31/ago: 92 días).
+INICIO_INVIERNO = date(ANO_REFERENCIA, 6, 1)
+DIAS_INVIERNO = 92
+MESES_INVIERNO = (6, 7, 8)
+
+#: Forma "ventana" (Sitio Andino 23/6/2022): corte de 17 a 01 h de cada día del episodio.
+VENTANA_DESDE_H = 17.0
+VENTANA_HASTA_H = 25.0
+
+
+def calendario_de_episodios(
+    g: ParametrosGNC, az: Aleatorio, fecha_inicio: date, dias: int
+) -> list[tuple[int, int]]:
+    """Episodios de la corrida: [(día de inicio relativo a la corrida, duración en días)].
+
+    El día 0 es el primero de la corrida; puede dar negativo si el episodio empezó antes
+    del horizonte (el tramo que cae adentro igual se aplica). Siempre se consumen
+    `episodios` sorteos del stream, para que cambiar otros parámetros no mueva las fechas.
+    """
+    if g.contrato != "interrumpible" or g.episodios <= 0:
+        return []
+    episodios: list[tuple[int, int]] = []
+    if g.episodios_en_horizonte:
+        candidatos = [
+            d for d in range(dias)
+            if (fecha_inicio + timedelta(days=d)).month in MESES_INVIERNO
+        ]
+        for _ in range(g.episodios):
+            u = az.uniforme("corte_gnc")
+            if candidatos:
+                inicio = candidatos[min(int(u * len(candidatos)), len(candidatos) - 1)]
+                episodios.append((inicio, g.dias_por_episodio))
+    else:
+        for _ in range(g.episodios):
+            u = az.uniforme("corte_gnc")
+            corrimiento = int(u * (DIAS_INVIERNO - g.dias_por_episodio + 1))
+            inicio = (INICIO_INVIERNO + timedelta(days=corrimiento) - fecha_inicio).days
+            episodios.append((inicio, g.dias_por_episodio))
+    return sorted(episodios)
+
+
+def intervalos_de_corte(
+    g: ParametrosGNC, episodios: list[tuple[int, int]], dias: int
+) -> list[tuple[float, float]]:
+    """Intervalos (minuto inicial, minuto final) de la corrida en que el GNC está afectado.
+
+    `total_24h` y `parcial_50`: los días enteros del episodio. `ventana`: de 17 a 01 h de
+    cada día. Se recortan al horizonte y se fusionan los que se tocan.
+    """
+    total = dias * 1440.0
+    crudos: list[tuple[float, float]] = []
+    for inicio, duracion in episodios:
+        for d in range(inicio, inicio + duracion):
+            if g.forma == "ventana":
+                a, b = d * 1440.0 + VENTANA_DESDE_H * 60.0, d * 1440.0 + VENTANA_HASTA_H * 60.0
+            else:
+                a, b = d * 1440.0, (d + 1) * 1440.0
+            a, b = max(a, 0.0), min(b, total)
+            if b > a:
+                crudos.append((a, b))
+    fusionados: list[tuple[float, float]] = []
+    for a, b in sorted(crudos):
+        if fusionados and a <= fusionados[-1][1]:
+            fusionados[-1] = (fusionados[-1][0], max(fusionados[-1][1], b))
+        else:
+            fusionados.append((a, b))
+    return fusionados
+
+
+def minutos_de_corte_en_dia(intervalos: list[tuple[float, float]], dia: int) -> float:
+    """Minutos del día `dia` (0 = primero de la corrida) con el GNC afectado."""
+    desde, hasta = dia * 1440.0, (dia + 1) * 1440.0
+    return sum(max(0.0, min(b, hasta) - max(a, desde)) for a, b in intervalos)
+
+
+def episodios_con_fechas(
+    episodios: list[tuple[int, int]], fecha_inicio: date, dias: int
+) -> list[tuple[date, date]]:
+    """Los episodios que tocan el horizonte, como (primera fecha, última fecha)."""
+    salida = []
+    for inicio, duracion in episodios:
+        if inicio + duracion > 0 and inicio < dias:
+            salida.append(
+                (fecha_inicio + timedelta(days=inicio),
+                 fecha_inicio + timedelta(days=inicio + duracion - 1))
+            )
+    return salida

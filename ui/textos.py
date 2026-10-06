@@ -165,11 +165,35 @@ INDICADORES_COMPLEMENTARIOS: tuple[Metrica, ...] = (
                   "(capacidad de cola finita)."),
 )
 
+# --- GNC (Fase 6) -------------------------------------------------------------
+INDICADORES_GNC: tuple[Metrica, ...] = (
+    Metrica("gnc_afectados_dia", "Clientes GNC afectados por el corte", "por día", 2,
+            ayuda="Los que llegaron (o ya esperaban) cuando el GNC estaba cortado. Es el "
+                  "promedio de TODOS los días medidos: con 2 episodios de 6 días, sólo 12 "
+                  "de los ≈ 92 días de invierno tienen corte."),
+    Metrica("migrados_gnc_dia", "Pasaron a Súper", "por día", 2,
+            ayuda="De los afectados, los que cargaron nafta en lugar de GNC (migración, "
+                  "GNC-04). No son una pérdida: suben la cola de la zona A."),
+    Metrica("perdidos_corte_gnc_dia", "Perdidos por el corte", "por día", 2,
+            ayuda="De los afectados, los que se fueron sin cargar (motivo `corte_gnc`)."),
+    Metrica("m3_gnc_vendidos_dia", "GNC vendido", "m³/día", 1, mejor_bajo=False,
+            ayuda="El GNC se mide en m³, nunca en litros."),
+    Metrica("m3_gnc_perdidos_dia", "GNC no vendido", "m³/día", 1,
+            ayuda="Lo que habrían cargado los clientes que se fueron."),
+    Metrica("dias_corte_gnc_pct", "Días con corte de GNC", "%", 1,
+            ayuda="Porcentaje de los días medidos con algún tramo de corte."),
+    Metrica("util_compresores", "Utilización de compresores", "", 1, porcentaje=True,
+            mejor_bajo=False,
+            ayuda="Cargas GNC en curso ÷ compresores, promedio en el tiempo. El compresor, "
+                  "no las 6 caras, limita cuántos autos cargan GNC a la vez."),
+)
+
 TODAS: tuple[Metrica, ...] = (
     INDICADORES_COLAS
     + INDICADORES_CLIENTES
     + INDICADORES_INVENTARIO
     + INDICADORES_COMPLEMENTARIOS
+    + INDICADORES_GNC
 )
 
 POR_CLAVE: dict[str, Metrica] = {m.clave: m for m in TODAS}
@@ -324,7 +348,7 @@ SUPUESTOS_REAL = [
     "El tipo de vehículo por producto es un supuesto del orquestador (VEH-00).",
     "Las cargas siguen `Triangular(0,2·T ; 0,3·T ; 1,0·T)`: carga media = 0,5 × tanque (C12).",
     "Un tanque por producto líquido de 20.000 L con política (s, Q) derivada de la demanda "
-    "(INV-07); el GNC no tiene tanque y por ahora nunca se corta (Fase 6).",
+    "(INV-07); el GNC no tiene tanque y se corta por episodios en invierno (GNC-01..07).",
     "Márgenes, flete y almacenamiento son placeholders heredados del proyecto hipotético "
     "(ECO-*): los pesos que se informan no son todavía una conclusión económica.",
     "Un cliente que se va no vuelve más tarde: se cuenta como venta perdida.",

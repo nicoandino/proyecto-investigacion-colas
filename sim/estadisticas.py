@@ -139,6 +139,11 @@ class Contadores:
     pedidos_recibidos: int = 0
     dias_con_quiebre: int = 0
     viajes_demorados: int = 0           # camiones que encontraron un corte (Fase 5)
+    # GNC (Fase 6): afectados = migrados + perdidos por corte
+    gnc_afectados: int = 0              # clientes GNC que se toparon con el corte
+    migrados_gnc_a_nafta: int = 0       # de los afectados: pasaron a Súper (no es pérdida)
+    perdidos_corte_gnc: int = 0         # corte_gnc: se fueron sin cargar
+    dias_con_corte_gnc: int = 0         # días medidos con algún tramo de corte
 
     def reiniciar(self) -> None:
         for campo in self.__dataclass_fields__:
@@ -154,7 +159,8 @@ class ContadoresGrupo:
     perdidos_espera: int = 0            # abandono_espera
     perdidos_cola_llena: int = 0        # cola_llena
     perdidos_sin_combustible: int = 0   # sin_combustible
-    abandonos_playero: int = 0          # de perdidos_espera: se fue esperando al playero
+    abandonos_playero: int = 0          # de perdidos_espera: se fue esperando al playero o al compresor
+    perdidos_corte_gnc: int = 0         # corte_gnc
 
     def reiniciar(self) -> None:
         for campo in self.__dataclass_fields__:
@@ -255,6 +261,7 @@ class Indicadores:
         self.ocupados_surtidores = SerieTemporal()
         self.ocupadas_cajas = SerieTemporal()
         self.playeros_ocupados = SerieTemporal()
+        self.compresores_ocupados = SerieTemporal()
         self.playeros_en_turno = SerieTemporal(valor_inicial=float(p.playeros_por_turno[0]))
         self.colas_grupo = {g: SerieTemporal() for g in ids_grupos}
         self.ocupados_grupo = {g: SerieTemporal() for g in ids_grupos}
@@ -302,6 +309,7 @@ class Indicadores:
             self.ocupadas_cajas,
             self.playeros_ocupados,
             self.playeros_en_turno,
+            self.compresores_ocupados,
             self.nivel_tanque,
             self.sin_combustible,
             *self.colas_grupo.values(),

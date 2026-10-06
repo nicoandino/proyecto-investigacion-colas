@@ -54,6 +54,11 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
+  FASE 6 DEL ORQUESTADOR (GNC)
+   24. N7 (sin episodios no hay pérdidas; corte total sin migración pierde a todos), N8
+       (migrados + perdidos = afectados), N12 (invierno > verano), formas del corte y
+       compresores como límite de las cargas simultáneas.
+
   FASE 5 DEL ORQUESTADOR (red de rutas)
    23. N6 (km y minutos de §5-G), Dijkstra = fuerza bruta, demora por corte, la red sin
        cortes no cambia nada y N11 (cortes, playeros y demanda).
@@ -117,6 +122,7 @@ def main() -> int:
     t = ind.c_total
     perdidos = (
         t.perdidos_surtidor + t.perdidos_sin_combustible + t.perdidos_cola_llena
+        + t.perdidos_corte_gnc
     )
     salidas = t.atendidos_surtidor + perdidos
     en_sistema = t.llegadas - salidas
@@ -137,7 +143,7 @@ def main() -> int:
         suma_llegadas += cg.llegadas
         adentro = cg.llegadas - (
             cg.atendidos + cg.perdidos_espera + cg.perdidos_cola_llena
-            + cg.perdidos_sin_combustible
+            + cg.perdidos_sin_combustible + cg.perdidos_corte_gnc
         )
         if not 0 <= adentro <= g.caras + (p.capacidad_cola or 0):
             grupos_bien = False
@@ -596,12 +602,19 @@ def main() -> int:
     separador("13. N14: cero parámetros huérfanos")
     from dataclasses import fields
 
-    from sim.config import ParametrosEconomicos, ParametrosRed, ParametrosTanque
+    from sim.config import (
+        ParametrosEconomicos,
+        ParametrosGNC,
+        ParametrosRed,
+        ParametrosTanque,
+    )
     from sim.datos import MAPA_PARAMETROS, REGISTRO as REGISTRO_DATOS
 
     ids_registro = {d.id for d in REGISTRO_DATOS}
     huerfanos = []
-    for clase in (ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos, ParametrosRed):
+    for clase in (
+        ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos, ParametrosRed, ParametrosGNC,
+    ):
         for campo in fields(clase):
             clave = f"{clase.__name__}.{campo.name}"
             if clave not in MAPA_PARAMETROS or MAPA_PARAMETROS[clave] not in ids_registro:
@@ -624,8 +637,8 @@ def main() -> int:
     # El [theme] de .streamlit/config.toml está exceptuado: sus hex los prescribe el
     # propio §8.1 (regla 5) y son los únicos que puede haber fuera de ui/tema.py.
     archivos_ui = [
-        "app.py", "ui/graficos.py", "ui/graficos_red.py", "ui/animacion.py",
-        "ui/datos_ui.py", "ui/textos.py",
+        "app.py", "ui/graficos.py", "ui/graficos_red.py", "ui/graficos_gnc.py",
+        "ui/animacion.py", "ui/datos_ui.py", "ui/textos.py",
     ]
     infractores = []
     for nombre in archivos_ui:
@@ -990,6 +1003,103 @@ def main() -> int:
         f"espera pico: 3 playeros {mas_playeros.espera_pico:.2f} min < 1 playero "
         f"{pocos_playeros.espera_pico:.2f} min | 270.000 L {base_73.espera_pico:.2f} min < "
         f"400.000 L {mas_demanda.espera_pico:.2f} min",
+    )
+
+    # ------------------------------------------------------------------ 20
+    separador("20. Fase 6: GNC — episodios, compresores y migración (N7, N8, N12)")
+    from sim.config import ParametrosGNC
+
+    def ejecutar(g, semilla, base=p_jul):
+        return simular(reemplazar(base, gnc=g), semilla=semilla, con_traza=True)
+
+    # N7: sin episodios (o con contrato firme) no hay ninguna pérdida por corte
+    ind_0, _ = ejecutar(ParametrosGNC(episodios=0), 81)
+    ind_f, _ = ejecutar(ParametrosGNC(contrato="firme", episodios_en_horizonte=True), 81)
+    controlar(
+        all(
+            i.c_total.gnc_afectados == i.c_total.perdidos_corte_gnc
+            == i.c_total.migrados_gnc_a_nafta == i.c_total.dias_con_corte_gnc == 0
+            for i in (ind_0, ind_f)
+        ),
+        "N7: sin episodios o con contrato firme, cero afectados, cero pérdidas por corte",
+        f"GNC atendido en julio: {ind_0.c_producto_total['gnc'].atendidos} clientes (sin cortes)",
+    )
+
+    # N7: corte total y sin migración ⇒ todos los GNC del episodio se pierden
+    ind_7, traza_7 = ejecutar(ParametrosGNC(episodios_en_horizonte=True, migracion_a_nafta=0.0), 81)
+    c7 = ind_7.c_total
+    dias_7 = traza_7.dias
+    previo_cortado = [False] + [d.gnc_corte_min >= 1440 for d in dias_7[:-1]]
+    atendidos_en_corte = sum(
+        d.gnc_atendidos for d, previo in zip(dias_7, previo_cortado)
+        if d.gnc_corte_min >= 1440 and previo
+    )
+    controlar(
+        c7.gnc_afectados > 0 and c7.perdidos_corte_gnc == c7.gnc_afectados
+        and c7.migrados_gnc_a_nafta == 0 and atendidos_en_corte == 0,
+        "N7: corte total sin migración ⇒ todos los clientes GNC del episodio se pierden",
+        f"{c7.gnc_afectados} afectados = {c7.perdidos_corte_gnc} perdidos | GNC atendido en "
+        f"los días de corte completo: {atendidos_en_corte} | {c7.dias_con_corte_gnc} días con corte",
+    )
+
+    # N8: con migración, migrados + perdidos = afectados (y cada zona sigue cerrando)
+    ind_8, _ = ejecutar(ParametrosGNC(episodios_en_horizonte=True, migracion_a_nafta=0.5), 81)
+    c8 = ind_8.c_total
+    cierra = True
+    llegadas_grupos = 0
+    for gr in p_jul.grupos:
+        cg = ind_8.c_grupo_total[gr.id]
+        llegadas_grupos += cg.llegadas
+        adentro = cg.llegadas - (
+            cg.atendidos + cg.perdidos_espera + cg.perdidos_cola_llena
+            + cg.perdidos_sin_combustible + cg.perdidos_corte_gnc
+        )
+        cierra = cierra and 0 <= adentro <= gr.caras + (p_jul.capacidad_cola or 0)
+    controlar(
+        c8.migrados_gnc_a_nafta + c8.perdidos_corte_gnc == c8.gnc_afectados
+        and 0.3 < c8.migrados_gnc_a_nafta / c8.gnc_afectados < 0.7
+        and cierra and llegadas_grupos == c8.llegadas,
+        "N8: migrados + perdidos por el corte = afectados (≈ 50 % migra) y cada zona cierra",
+        f"{c8.migrados_gnc_a_nafta} migrados + {c8.perdidos_corte_gnc} perdidos = "
+        f"{c8.gnc_afectados} afectados",
+    )
+
+    # N12: invierno con episodios ⇒ más migrados que verano
+    ind_ene, _ = simular(p, semilla=81)
+    controlar(
+        c8.migrados_gnc_a_nafta > ind_ene.c_total.migrados_gnc_a_nafta == 0,
+        "N12: invierno con episodios ⇒ más migrados a nafta que verano",
+        f"julio {c8.migrados_gnc_a_nafta} migrados | enero {ind_ene.c_total.migrados_gnc_a_nafta}",
+    )
+
+    # Formas del corte
+    _, traza_v = ejecutar(
+        ParametrosGNC(episodios_en_horizonte=True, forma="ventana"), 81
+    )
+    horas_v = [d.gnc_corte_min / 60.0 for d in traza_v.dias if d.gnc_corte_min > 0]
+    ind_p, _ = ejecutar(ParametrosGNC(episodios_en_horizonte=True, forma="parcial_50"), 81)
+    controlar(
+        horas_v and max(horas_v) <= 8.0 + 1e-9 and ind_p.c_total.gnc_afectados == 0
+        and ind_p.c_total.dias_con_corte_gnc > 0,
+        "La forma 'ventana' corta sólo de 17 a 01 h (≤ 8 h por día) y 'parcial_50' no corta a nadie",
+        f"horas de corte por día (ventana): {sorted({round(h) for h in horas_v})} | "
+        f"parcial_50: {ind_p.c_total.dias_con_corte_gnc} días con compresores al 50 %, "
+        f"{ind_p.c_total.gnc_afectados} afectados",
+    )
+
+    # Los compresores, no las caras, limitan las cargas simultáneas de GNC
+    p_alto = reemplazar(p, pct_gnc=0.25)
+    ind_c1, traza_c1 = simular(
+        reemplazar(p_alto, gnc=ParametrosGNC(compresores=1)), semilla=82, con_traza=True
+    )
+    ind_c6, _ = simular(reemplazar(p_alto, gnc=ParametrosGNC(compresores=6)), semilla=82)
+    controlar(
+        max(c.compresores_ocupados for c in traza_c1.cuadros) <= 1
+        and ind_c1.compresores_ocupados.maximo <= 1
+        and ind_c1.esperas_grupo["C"].promedio > ind_c6.esperas_grupo["C"].promedio,
+        "Con 1 compresor nunca cargan 2 autos GNC a la vez y la espera sube respecto de 6",
+        f"espera en la zona C: 1 compresor {ind_c1.esperas_grupo['C'].promedio:.2f} min > "
+        f"6 compresores {ind_c6.esperas_grupo['C'].promedio:.2f} min",
     )
 
     # ------------------------------------------------------------------

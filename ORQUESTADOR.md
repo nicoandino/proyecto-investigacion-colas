@@ -515,6 +515,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Indicadores. El control 19 ahora compara los camiones sin el origen (sin red queda vacío). Se corrigió que dos `$` en un
   mismo texto de pantalla se leían como fórmula (pie de la tabla, horas extra de Eventos y comprobación del plan de red).
   Control nuevo (45). `verificar.py` **143/143**.
+- **G2 ✅ (Red y rutas: nafta, diésel y GNC; cortes sólo si se editó).** Sección **"La red de cada producto"**: nafta y
+  diésel llegan en camión (desde dónde, por qué ruta, camiones, plazo medio y litros de la corrida) y el **GNC por
+  gasoducto**, con un diagrama de la cadena real: gasoducto internacional GasAndes → empalme en el paraje La Tosca (planta
+  ESMO) → gasoducto San Rafael (inaugurado el 17-jun-2026) → planta reguladora sobre la RN 143 (42.000 m³/h) → red de
+  Ecogas → la estación (3 compresores). Registro **GNC-11** (informativo; nota `research_notes/…/13_red_gnc.md` con las
+  fuentes; las notas de prensa no aclaran si el gasoducto mide 28 o 50 km y se dicen los dos). **"Qué le hace cada corte a
+  cada origen"**, el plazo con y sin cortes y el efecto en el quiebre aparecen **sólo si se editó** (simulación editada,
+  escenario de cortes, eventos de abastecimiento o despacho según el plan); con datos reales, una línea explica por qué no
+  están y que los cortes se prueban en el plan del período. Se sacaron las menciones a la "barra lateral" de esa pestaña.
+  `verificar.py` **143/143**; QA `reports/qa_g_pendientes.py`: 0 excepciones, 0 errores de consola.
 
 ---
 

@@ -44,7 +44,8 @@ with sync_playwright() as pw:
     pagina.screenshot(path=str(SALIDA / "inventario_camiones.png"), full_page=True)
 
     texto = pestania("Red y rutas")
-    print("G2 Red y rutas | nafta, diésel y GNC:", all(x in texto for x in ("Nafta", "Diésel", "GNC")),
+    print("G2 Red y rutas | sección nafta, diésel y GNC:", "La red de cada producto: nafta, diésel y GNC" in texto,
+          "| diagrama del gas:", pagina.locator("[role='tabpanel']:visible [data-testid='stGraphVizChart'] svg").count() > 0,
           "| red del GNC:", "gasoducto" in texto.lower(),
           "| tabla de cortes oculta sin edición:", "Qué le hace cada corte a cada origen" not in texto,
           "| sin 'barra lateral':", "barra lateral" not in texto)

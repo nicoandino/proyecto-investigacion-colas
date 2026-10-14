@@ -1013,3 +1013,48 @@ def tabla_camiones(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametros
         f"{_pesos(eco.costo_pedido)} fijo + {_pesos(eco.flete_por_km)}/km × km de ida y vuelta (ECO-06, heredado sin "
         "fuente). El plazo es el de INV-01 más la diferencia de viaje si salió de otro origen y la demora de un corte."
     ))
+
+
+
+# =============================================================================
+# §24 · Red y rutas: la red de cada producto (nafta, diésel y GNC)
+# =============================================================================
+def seccion_red_por_producto(p: ParametrosSimulacion, r: ResultadoReplica) -> None:
+    """Nafta y diésel llegan en camión por la red de rutas; el GNC llega por gasoducto (GNC-11)."""
+    from sim.datos import valor
+    from sim.red import NOMBRE_NODO, camino_mas_corto
+
+    st.markdown("##### La red de cada producto: nafta, diésel y GNC")
+    grupos = {"Nafta (Súper y V-Power)": ("super", "vpower"), "Diésel (G2 y G3)": ("diesel_g2", "diesel_g3")}
+    filas = []
+    for nombre, productos in grupos.items():
+        camiones = [x for x in r.camiones if x.producto in productos]
+        origenes = dict.fromkeys(x.origen or p.red.origen for x in camiones) or {p.red.origen: None}
+        rutas = " · ".join(
+            " → ".join(NOMBRE_NODO.get(n, n) for n in camino_mas_corto(p.red, origen=o).ruta) for o in origenes)
+        plazo = sum(x.t_llegada - x.t_pedido for x in camiones) / len(camiones) / 60 if camiones else 0.0
+        filas.append({
+            "Producto": nombre, "Cómo llega": "camión cisterna (un producto por camión)",
+            "Desde": ", ".join(NOMBRE_NODO.get(o, o) for o in origenes), "Por": rutas,
+            "Camiones en el período": ent(len(camiones)),
+            "Plazo medio": f"{dec(plazo)} h" if camiones else "—",
+            "Litros pedidos": ent(sum(x.litros for x in camiones)),
+        })
+    cadena = valor("GNC-11")
+    filas.append({
+        "Producto": "GNC", "Cómo llega": "gasoducto (no tiene tanque ni camión)", "Desde": cadena[0][0],
+        "Por": " → ".join(t for t, _ in cadena[1:]), "Camiones en el período": "—", "Plazo medio": "—",
+        "Litros pedidos": "—",
+    })
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    nodos = [f"{t}\\n{d}" if d else t for t, d in cadena] + [
+        f"La estación\\n{valor('SUR-06')} compresores (SUR-06)"]
+    dot = "digraph { rankdir=LR; node [shape=box, style=rounded, fontsize=11];\n" + "\n".join(
+        f'"{a}" -> "{b}";' for a, b in zip(nodos, nodos[1:])) + "\n}"
+    st.graphviz_chart(dot)
+    st.caption(
+        "El gas de San Rafael se toma del gasoducto internacional GasAndes: el gasoducto nuevo de la ciudad (inaugurado "
+        "en junio de 2026) empalma en el paraje La Tosca, pasa por una planta reguladora sobre la RN 143 y la "
+        "distribuidora Ecogas lo lleva a los usuarios (GNC-11, nota 13; informativo: el modelo no simula la red de gas). "
+        "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña 🔥 GNC)."
+    )

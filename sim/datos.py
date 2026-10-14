@@ -779,6 +779,13 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "grupo (13/10/2026): con el alargue el corte llega a 10 días, la alternativa larga de GNC-06",
                     "grupo", "C9", (), "6 días habituales + 4 = 10 días (GNC-06, alternativa)", 0, 4),
           4),
+        ("GNC-11", ("De dónde llega el gas a San Rafael (informativo)", "—", "B", "dato", "media",
+                    "Sitio Andino 5-ago-2026; El Sol; Los Andes 21-jul-2025 (nota 13)", "investigacion", "", (),
+                    "no entra al modelo: el GNC lo limitan los compresores (SUR-06) y los cortes (GNC-01/02). El "
+                    "gasoducto mide ≈ 28 km en el proyecto y ≈ 50 km con ramales según la inauguración", None, None),
+          (("Gasoducto internacional GasAndes", ""), ("Empalme en el paraje La Tosca", "planta ESMO"),
+           ("Gasoducto San Rafael", "inaugurado el 17-jun-2026"), ("Planta reguladora sobre la RN 143", "42.000 m³/h"),
+           ("Red de Ecogas", "distribuidora"))),
         ("GNC-05", ("Flujo máximo de la red de gas", "—", "A", "supuesto", "sin_dato",
                     "CASO §6.2", "investigacion",
                     "", (), "sin datos de capacidad ⇒ episodios aleatorios "

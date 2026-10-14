@@ -2428,6 +2428,21 @@ def pestania_red(p: ParametrosSimulacion) -> None:
                 icon="🚧",
             )
 
+    vistas.seccion_red_por_producto(p, st.session_state.resultados[0].replicas[0])
+
+    # "Qué le hace cada corte a cada origen" y su efecto van sólo si se editó (pedido del grupo): con datos reales no
+    # hay cortes de ruta ni orígenes alternativos. El plan del período (abajo) deja probar cortes igual.
+    editada = (st.session_state.get("modo") == "editada" or red.escenario_corte != "ninguno"
+               or bool(red.origenes_alternativos or red.origenes_no_disponibles or red.cuotas_origen))
+    if not editada:
+        st.caption(
+            "Esta corrida usa los datos reales: no hubo cortes de ruta ni camiones de otros orígenes, así que lo que le "
+            "hace cada corte a cada origen no se muestra acá. Aparece si se edita la simulación o se prenden los "
+            "eventos de abastecimiento en el menú 🚚; el efecto de un corte sobre el plan del período se prueba abajo."
+        )
+        vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
+        return
+
     st.markdown("##### Qué le hace cada corte a cada origen")
     st.caption(
         "Demora de un camión que sale justo cuando empieza el corte: mín(desvío, tiempo que "
@@ -2448,7 +2463,8 @@ def pestania_red(p: ParametrosSimulacion) -> None:
 
     st.markdown("##### Plazo de entrega con y sin cortes")
     if red.escenario_corte == "ninguno":
-        st.info("Elegí un escenario de cortes en la barra lateral para ver el efecto.", icon="🚧")
+        st.info("Esta corrida no tiene un escenario de cortes de ruta: el efecto de cada corte sobre el plazo se ve en "
+                "la tabla de arriba y en el plan del período (abajo).", icon="🚧")
     else:
         mes = 7
         sin_corte, con_corte = muestrear_plazos(
@@ -2477,7 +2493,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     ):
         st.warning(
             "El horizonte de esta corrida no incluye jun–ago: no hay cortes sorteados y la "
-            "comparación va a dar igual. Elegí 'Una estación → Invierno' en la barra lateral.",
+            "comparación va a dar igual. Elegí el invierno en el menú principal.",
             icon="📅",
         )
     replicas_red = st.slider("Réplicas", 1, 4, 2, 1, key="rep_red")
@@ -2509,7 +2525,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             filas.append({"Indicador": etiqueta_m, "Sin cortes": v0, f"Con {escenario}": v1})
         st.dataframe(pd.DataFrame(filas), hide_index=True)
         st.caption(
-            "Es el resultado de la última comparación; si cambiaste algo en la barra lateral, "
+            "Es el resultado de la última comparación; si cambiaste algo en el menú, "
             "volvé a apretar el botón. Un camión demorado deja el tanque más tiempo sin "
             "reposición: el quiebre sube, y el óptimo de (s, Q) también cambia."
         )

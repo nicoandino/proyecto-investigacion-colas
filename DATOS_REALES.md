@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 146 datos · 🟢 dato 41 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 73
+**Resumen:** 147 datos · 🟢 dato 42 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 73
 
 ## La estación
 
@@ -157,6 +157,7 @@
 | GNC-08 | Cortes de GNC extra si se eligen 'más cortes en todo el invierno' | 2 | episodios | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026) sobre GNC-02: el Registro ya traía '4 episodios' como alternativa | 0 extra = 0 |
 | GNC-09 | Probabilidad de invierno más frío que alarga cada corte | 0.3 | prob. | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026); no hay estadística de olas de frío por episodio | sin alargue = 0.0 |
 | GNC-10 | Días que se alarga un corte en un invierno más frío | 4 | días | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026): con el alargue el corte llega a 10 días, la alternativa larga de GNC-06 | — |
+| GNC-11 | De dónde llega el gas a San Rafael (informativo) | (('Gasoducto internacional GasAndes', ''), ('Empalme en el paraje La Tosca', 'planta ESMO'), ('Gasoducto San Rafael', 'inaugurado el 17-jun-2026'),… | — | 🟢 dato | San Rafael | media | Sitio Andino 5-ago-2026; El Sol; Los Andes 21-jul-2025 (nota 13) | — |
 | GNC-05 | Flujo máximo de la red de gas | sin datos (ventana/episodio aleatorio) | — | 🟠 supuesto | la estación | sin_dato | CASO §6.2 | — |
 
 ## Economía

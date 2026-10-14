@@ -86,3 +86,7 @@ Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo
 Rediseño del flujo (etapas 1–4) y pulido en tandas 0–9 (13/10/2026): el plan, las decisiones y el avance de cada
 tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuentes se resolvieron con un criterio único
 (`research_notes/…/07_decisiones_fuentes.md`); la app muestra sólo el valor elegido y una frase general.
+
+**Parte 3 (14/10/2026, en curso):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
+seguridad) y **Flujos en redes** (transbordo / costo mínimo y flujo máximo sobre la red de abastecimiento). Etapas P1–P4,
+F1–F3 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como en la cátedra.

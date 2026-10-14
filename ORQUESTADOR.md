@@ -347,3 +347,80 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   en el mapa base; ruta y km al pasar el mouse); (2) un mapa dibujado en una pestaña oculta quedaba angosto: el script auxiliar
   avisa un `resize` al cambiar de pestaña y el gráfico va con `responsive`. QA `reports/qa_tanda9_mapa.py`: teselas 200 OK,
   atribución visible, 0 excepciones, 0 errores de consola. `verificar.py` 128/128.
+
+---
+
+# Parte 3 — Temas de la cátedra: Pronóstico y Flujos en redes (14/10/2026)
+
+> Nico eligió sumar **Pronóstico** y **Flujos en redes** (transporte, transbordo, flujo de costo mínimo, flujo máximo)
+> para darle más complejidad al TP **sin perder realismo**. Teoría de juegos y Asignación quedan afuera por ahora
+> (juegos necesita una elasticidad que no tenemos; asignación tendría habilidades inventadas). Árbol de expansión
+> mínima: sin uso natural en una estación, no se hace.
+
+## 15. Qué se quiere
+
+- **Pronóstico:** pronosticar la demanda mensual con los métodos de la cátedra, medir el error (MAE, MAPE, RMSE) y que
+  el pronóstico **alimente al simulador**: (1) la estacionalidad de la demanda (DEM-06, hoy neutra) y (2) el stock de
+  seguridad de la política (s, Q) de cada tanque.
+- **Flujos en redes:** la red de abastecimiento que ya existe (9 nodos, arcos RED-01…18, orígenes Dock Sud, Arroyo Seco
+  y Luján) resuelta como **problema de transbordo / flujo de costo mínimo** para el volumen del período, y como **flujo
+  máximo** para saber cuánto se puede reabastecer con una ruta cortada. Hoy Dijkstra elige la ruta de **cada camión**;
+  esto agrega el **plan del mes** (cuántos camiones por qué origen y por qué arcos) y el **arco crítico** (corte mínimo).
+- Todo **verificable**: cada método se prueba contra un ejercicio resuelto de la cátedra y la app muestra la cuenta.
+
+## 16. Reglas para esta parte
+
+- Las de la parte 2 (§10) siguen valiendo: parámetros nuevos con su `Dato`, **neutros por defecto** (dorados y 128
+  controles intactos), streams nuevos sólo al final, `sim/` sin Streamlit.
+- **Sin dependencias nuevas** (no hay `scipy` ni `statsmodels` en el entorno): los métodos se programan a mano en
+  `numpy`, **como se enseñan en la cátedra** (es lo que se defiende en el coloquio).
+- Cada método tiene un **control contra un ejercicio de la cátedra** con su resultado conocido.
+- **Nada de series inventadas:** si no se consigue la serie real de ventas, se frena y se avisa (ver P1).
+- Una etapa = un commit, con `verificar.py` en verde y QA con Playwright. Se informa al cerrar cada etapa; se sigue sin
+  esperar salvo que falte un dato o cambie el alcance (como en la parte 2).
+
+## 17. Decisiones y lecturas
+
+- **Serie de ventas:** la fuente buscada son los datos abiertos de la Secretaría de Energía (ventas mensuales de
+  combustibles; la prensa los cita por provincia y por empresa). Prioridad: **por estación** (si el dataset la trae, la
+  Shell de Balloffet 1810) > **San Rafael / Mendoza por empresa (Shell)** > **Mendoza total**. Si sólo hay agregado, se
+  usa **la forma** de la serie (índices estacionales, tendencia en %) escalada a DEM-01 (270.000 L/mes) y se rotula.
+- **Métodos:** promedio móvil, suavizado exponencial simple, tendencia (A + B·t por mínimos cuadrados) y **tendencia
+  estacional multiplicativa** (índices estacionales × tendencia). Se elige por **RMSE en los meses de prueba**
+  (entrenamiento con todos menos los últimos 12). IC del pronóstico = ± z·RMSE.
+- **Estacionalidad en el simulador:** los índices del pronóstico entran como **una opción más** del menú "📅 Calendario
+  de demanda" (calendario de temporadas DEM-14 / **índices del pronóstico** / neutra). Cuál queda por defecto lo decide
+  Nico al ver los números (P3).
+- **Stock de seguridad:** `s = D̂_día × plazo + z · σ_día · √plazo`, con D̂ del pronóstico del mes, plazo de INV-01 (36 h)
+  y σ_día derivado del RMSE (supuesto rotulado: errores diarios independientes). Entra como **una política candidata
+  más** en la búsqueda de la mejor política y como opción del menú "🚚 Abastecimiento"; el simulador la compara (quiebres,
+  camiones, costo) contra la (s, Q) actual.
+- **Red como flujo:** un solo bien, **camiones cisterna** (Σ litros del período por producto ÷ carga INV-02), porque la
+  capacidad de los arcos es de camiones y no de producto; después se reparte por producto en proporción. El GNC no entra
+  (viene por gasoducto). Datos nuevos, todos **supuestos rotulados**: capacidad de cada arco (camiones/día), oferta de
+  cada origen para esta estación (camiones/mes) y costo por km (ECO-06, heredado). Con la red sana y sin límites el plan
+  manda todo desde Dock Sud, que es lo que pasa en la realidad. **Lo interesante aparece con cortes, un origen no
+  disponible o un límite de capacidad**, y eso es lo que se muestra.
+- **Del plan a la simulación:** opción (apagada por defecto) "Despachar según el plan": los pedidos de camión salen de los
+  orígenes en las proporciones del plan (cuotas exactas, sin azar). Así el flujo es el **plan** y la simulación la
+  **ejecución** (plazos, quiebres).
+
+## 18. Etapas
+
+| Etapa | Qué incluye | Compuerta |
+|---|---|---|
+| **P1 · Serie real** | Buscar y bajar la serie mensual de ventas (Secretaría de Energía, datos abiertos); nota `research_notes/…/10_serie_ventas.md` con URL, alcance, unidad y criterio (§17); la serie entra al Registro (**PRO-01**, nivel y confianza según lo que se consiga) junto con los meses de prueba (**PRO-02** = 12) y el z del IC (**PRO-03**) | La serie tiene fuente y URL. **Si no se consigue ni la provincial, se frena y se le pregunta a Nico** (no se inventa) |
+| **P2 · Métodos de pronóstico** | `sim/pronostico.py` (sin Streamlit, `numpy`): los cuatro métodos, MAE / MAPE / RMSE / sesgo, IC, backtest entrenamiento/prueba y elección por RMSE | Controles con el práctico de Pronóstico: Cable Televisora con los pronósticos dados ⇒ **MAE = 107/12 = 8,92** y **RMSE = 37/√12 = 10,68**; tendencia A = 1.650, B = 30 ⇒ **2.010 · 2.040 · 2.070** para t = 12, 13, 14; los índices estacionales promedian 1 |
+| **P3 · Pronóstico en la app** | Pestaña **📈 Pronóstico** (después de Demanda): la serie real y el ajuste de cada método, tabla de errores, el método elegido y por qué, los próximos 12 meses con su IC, "¿Cómo se comprueba?" con las cuentas; en el menú, la opción de estacionalidad "índices del pronóstico" (§17) | Control: con la opción apagada la corrida es idéntica; con la opción, Σ de litros del año = la del pronóstico; QA, 0 errores de consola |
+| **P4 · Stock de seguridad** | Política "por pronóstico" (§17) en la búsqueda de la mejor política (Caso de informe) y en el menú de abastecimiento; Inventario muestra la cuenta del s de cada tanque | Control: con z = 0 el s es la demanda del plazo; el s de la app = la fórmula a mano; la búsqueda la evalúa como una más |
+| **F1 · Algoritmos de red** | `sim/flujos.py` (sin Streamlit): transporte (rincón noroeste, costo mínimo, Stepping-Stone), transbordo / flujo de costo mínimo (caminos más cortos sucesivos), flujo máximo (trayectorias de aumento) con corte mínimo | Controles con la cátedra: transbordo **P1/P2 → T1/T2 → D1/D2/D3 = $20.700**; flujo máximo del **oleoducto Neuquén → Buenos Aires** (TP 5, ej. 1) con el resultado del TP resuelto; transporte del Problema 1 (Tijuana / Boston / Montreal) con rincón noroeste y costo mínimo; en redes chicas, el óptimo = la enumeración de todas las soluciones |
+| **F2 · Datos de la red como flujo** | Registro: capacidad de cada arco, oferta de cada origen y costo por km (§17, supuestos rotulados, con nota de dónde saldría el dato real); `ParametrosRed` gana esos campos, neutros por defecto | Control: con los defaults la corrida es idéntica (dorados, 128 controles) |
+| **F3 · Red y rutas: el plan del mes** | En Red y rutas: el **plan de transbordo** del período (camiones por arco y por origen, costo total, contra "todo por la ruta más corta"); qué pasa con un corte (RN 143, RN 40) o con un origen no disponible; **flujo máximo** con la ruta cortada y el **arco crítico**; la matriz de transporte al estilo de la cátedra; opción "Despachar según el plan" (§17) | Control: Σ salidas de los orígenes = camiones del período; el costo del plan ≤ el de cualquier ruta única; con "Despachar según el plan" apagado la corrida es idéntica; QA, 0 errores de consola |
+| **C3 · Cierre** | `CLAUDE.md` (qué modela, controles), `DATOS_REALES.md` regenerado, memoria al día | `verificar.py` en verde; QA de las pestañas nuevas |
+
+**Orden:** P1 primero porque todo el pronóstico depende de la serie; si P1 se traba esperando un dato, se adelanta **F1**
+(no depende de nada) y se vuelve. P2 antes que P3 y P4. F1 → F2 → F3. El cierre al final.
+
+## 19. Avance
+
+- (sin etapas cerradas todavía)

@@ -530,7 +530,7 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Estaciones, tablas y promedios del modo clásico); los despachadores `if p.estacion_real: … else <modo clásico>`
   (Inventario, Conclusión, Modelo, Demanda vieja), los avisos "no hay red / no hay GNC en el caso clásico", la
   recomendación del modo clásico que se calculaba y no se leía, los imports y constantes sin uso y los encabezados
-  huérfanos. **`app.py`: 3.761 → 2.375 líneas**, sin menciones a la barra lateral. `ParametrosSimulacion.clasico()` y el
+  huérfanos. **`app.py`: 3.743 → 2.368 líneas** (−1.375), sin menciones a la barra lateral. `ParametrosSimulacion.clasico()` y el
   motor clásico siguen en `sim/` (los usa `verificar.py` para los dorados, N1). `verificar.py` **143/143**; se corrió la
   batería de QA completa (`qa_g_pendientes`, `qa_e0_gnc`, `qa_e3_eventos`, `qa_p3_pronostico`, `qa_p4_stock`,
   `qa_f3_plan`, `qa_tanda3`…`qa_tanda8`): 0 excepciones; 0 errores de consola (la tanda 7 dio 14 "Failed to fetch" con el

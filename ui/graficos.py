@@ -1,35 +1,47 @@
 """Gráficos de la interfaz, armados con Plotly.
 
 Todos reciben resultados del motor y devuelven una figura; no tocan Streamlit.
+Los colores salen TODOS de `ui/tema.py` (control N15).
 """
 
 from __future__ import annotations
 
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 from sim.config import DemandaDiaria, ParametrosSimulacion
 from sim.economia import CostoPolitica, ResultadoEconomico
 from sim.runner import ResultadoEscenario
 from sim.traza import Traza
+from ui.tema import (
+    AMARILLO,
+    AZUL,
+    CELESTE,
+    COLOR_PRODUCTO,
+    ESCENARIO,
+    GRIS,
+    INDIGO,
+    NARANJA,
+    ROJO,
+    TINTA_AZULADA,
+    VERDE_INGRESO,
+    VERDE_OK,
+    plantilla_plotly,
+    rgba,
+)
 from ui.textos import Metrica
 
 # Un color por escenario, usado en todos los gráficos para que se lean juntos.
-COLOR_ESCENARIO = {
-    "Base": "#64748b",
-    "A": "#3b82f6",
-    "B": "#a855f7",
-    "C": "#10b981",
-}
-COLOR_SURTIDOR = "#f59e0b"
-COLOR_CAJA = "#3b82f6"
-COLOR_TANQUE = "#0ea5e9"
-VERDE = "#16a34a"
-ROJO = "#dc2626"
-NARANJA = "#fb923c"
-GRIS = "#94a3b8"
+COLOR_ESCENARIO = ESCENARIO
+COLOR_SURTIDOR = AMARILLO
+COLOR_CAJA = AZUL
+COLOR_TANQUE = CELESTE
+VERDE = VERDE_OK
+NARANJA_ = NARANJA
+GRIS_ = GRIS
 
 _LAYOUT = dict(
-    template="plotly_white",
+    template=plantilla_plotly(),
     margin=dict(l=60, r=20, t=50, b=50),
     height=380,
     hovermode="x unified",
@@ -62,7 +74,7 @@ def grafico_evolucion_colas(traza: Traza, dia: int) -> go.Figure:
         go.Scatter(
             x=horas, y=cola_s, name="Cola de surtidores", mode="lines",
             line=dict(color=COLOR_SURTIDOR, width=2, shape="hv"),
-            fill="tozeroy", fillcolor="rgba(245,158,11,0.15)",
+            fill="tozeroy", fillcolor=rgba(AMARILLO, 0.15),
         )
     )
     fig.add_trace(
@@ -91,7 +103,7 @@ def grafico_ocupacion(traza: Traza, surtidores: int, dia: int) -> go.Figure:
         go.Scatter(
             x=horas, y=ocupados, name="Surtidores ocupados", mode="lines",
             line=dict(color=COLOR_SURTIDOR, width=2, shape="hv"),
-            fill="tozeroy", fillcolor="rgba(245,158,11,0.2)",
+            fill="tozeroy", fillcolor=rgba(AMARILLO, 0.2),
         )
     )
     fig.add_hline(
@@ -125,7 +137,7 @@ def grafico_perfil_horario(traza: Traza, dias_medidos: int) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=horas, y=llegadas, name="Autos que llegan",
-        marker_color="rgba(59,130,246,0.55)",
+        marker_color=rgba(AZUL, 0.55),
         hovertemplate="%{x}:00 — %{y:.1f} autos<extra></extra>",
     )
     fig.add_trace(
@@ -158,7 +170,7 @@ def grafico_distribucion_demanda(demanda: DemandaDiaria, traza: Traza) -> go.Fig
     etiquetas = [str(v) for v in demanda.valores]
 
     fig = go.Figure()
-    fig.add_bar(x=etiquetas, y=teoricas, name="Tabla observada (histórica)", marker_color=GRIS)
+    fig.add_bar(x=etiquetas, y=teoricas, name="Tabla observada (histórica)", marker_color=GRIS_)
     fig.add_bar(x=etiquetas, y=observadas, name="Frecuencia simulada", marker_color=COLOR_CAJA)
     fig.update_layout(
         title="La simulación reproduce la tabla de frecuencias",
@@ -181,7 +193,7 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
     )
     fig.add_bar(
         x=numeros, y=[d.perdidos_cola for d in dias], name="Perdidos por cola",
-        marker_color=NARANJA,
+        marker_color=NARANJA_,
     )
     fig.add_bar(
         x=numeros, y=[d.perdidos_sin_combustible for d in dias],
@@ -190,7 +202,7 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
     fig.add_trace(
         go.Scatter(
             x=numeros, y=[d.autos_sorteados for d in dias], name="Demanda sorteada",
-            mode="lines", line=dict(color="#1e293b", width=2, dash="dot"),
+            mode="lines", line=dict(color=TINTA_AZULADA, width=2, dash="dot"),
         )
     )
     fig.update_layout(
@@ -209,37 +221,94 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
 def grafico_tanque(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
     """El clásico gráfico de dientes de sierra del nivel de inventario."""
     dias, litros = traza.serie_inventario()
+    # Estación real: se grafica la SUMA de los 4 tanques (el detalle por producto llega
+    # con la Fase 4), contra la suma de las capacidades y de los puntos de pedido.
+    if p.estacion_real:
+        capacidad = sum(i.capacidad for i in p.inventario)
+        punto_pedido = sum(i.punto_pedido for i in p.inventario)
+        rotulo_punto = "suma de los puntos de pedido"
+        nombre_nivel = "Nivel de los 4 tanques (suma)"
+    else:
+        capacidad = p.tanque.capacidad
+        punto_pedido = p.tanque.punto_pedido
+        rotulo_punto = "punto de pedido"
+        nombre_nivel = "Nivel del tanque"
 
     fig = go.Figure()
     fig.add_trace(
         go.Scatter(
-            x=dias, y=litros, name="Nivel del tanque", mode="lines",
+            x=dias, y=litros, name=nombre_nivel, mode="lines",
             line=dict(color=COLOR_TANQUE, width=2),
-            fill="tozeroy", fillcolor="rgba(14,165,233,0.18)",
+            fill="tozeroy", fillcolor=rgba(CELESTE, 0.18),
             hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
         )
     )
     fig.add_hline(
-        y=p.tanque.punto_pedido, line_dash="dash", line_color=NARANJA,
-        annotation_text=f"punto de pedido ({_miles(p.tanque.punto_pedido)} L)",
+        y=punto_pedido, line_dash="dash", line_color=NARANJA_,
+        annotation_text=f"{rotulo_punto} ({_miles(punto_pedido)} L)",
         annotation_position="top left",
     )
     fig.add_hline(
-        y=p.tanque.capacidad, line_dash="dot", line_color=GRIS,
-        annotation_text=f"capacidad ({_miles(p.tanque.capacidad)} L)",
+        y=capacidad, line_dash="dot", line_color=GRIS_,
+        annotation_text=f"capacidad ({_miles(capacidad)} L)",
         annotation_position="bottom left",
     )
     fig.add_hline(y=0, line_color=ROJO, line_width=1)
     fig.add_vrect(
-        x0=0, x1=p.dias_calentamiento, fillcolor="rgba(100,116,139,0.18)", line_width=0,
+        x0=0, x1=p.dias_calentamiento, fillcolor=rgba(ESCENARIO["Base"], 0.18), line_width=0,
         annotation_text="calentamiento", annotation_position="bottom right",
         annotation_font_size=11,
     )
     fig.update_layout(
-        title="Nivel del tanque durante el mes",
+        title="Nivel de los tanques durante la corrida" if p.estacion_real
+        else "Nivel del tanque durante el mes",
         xaxis_title="Día",
         yaxis_title="Litros en el tanque",
         **_layout(hovermode="x", height=420),
+    )
+    return fig
+
+
+def grafico_tanques_real(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
+    """Un diente de sierra por tanque (4 productos líquidos), con su punto de pedido."""
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    fig = make_subplots(
+        rows=2, cols=2, shared_xaxes=True,
+        subplot_titles=[nombres[i.producto] for i in p.inventario],
+        vertical_spacing=0.14,
+    )
+    dias = [t / 1440.0 for t, *_ in traza.inventario_producto]
+    for k, inv in enumerate(p.inventario):
+        fila, columna = k // 2 + 1, k % 2 + 1
+        niveles = [fila_[k + 1] for fila_ in traza.inventario_producto]
+        fig.add_trace(
+            go.Scatter(
+                x=dias, y=niveles, mode="lines", name=nombres[inv.producto],
+                line=dict(color=TINTA_AZULADA, width=1.5),
+                fill="tozeroy", fillcolor=rgba(COLOR_PRODUCTO[inv.producto], 0.45),
+                hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
+                showlegend=False,
+            ),
+            row=fila, col=columna,
+        )
+        fig.add_hline(
+            y=inv.punto_pedido, line_dash="dash", line_color=NARANJA_,
+            annotation_text=f"s = {_miles(inv.punto_pedido)} L",
+            annotation_position="top left", row=fila, col=columna,
+        )
+        fig.add_hline(y=0, line_color=ROJO, line_width=1, row=fila, col=columna)
+        fig.add_vrect(
+            x0=0, x1=p.dias_calentamiento, fillcolor=rgba(ESCENARIO["Base"], 0.15),
+            line_width=0, row=fila, col=columna,
+        )
+    fig.update_xaxes(title_text="Día", row=2)
+    fig.update_yaxes(title_text="Litros", col=1)
+    fig.update_layout(
+        title=(
+            "Nivel de cada tanque (la franja gris es el calentamiento)" if p.dias_calentamiento
+            else "Nivel de cada tanque, desde el día 0 (arrancan llenos)"
+        ),
+        **_layout(hovermode="x", height=560),
     )
     return fig
 
@@ -252,11 +321,11 @@ def grafico_costos_politicas(costos: list[CostoPolitica]) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=etiquetas, y=[c.costo_pedidos for c in ordenados],
-        name="Costo de pedido (flete)", marker_color="#6366f1",
+        name="Costo de pedido (flete)", marker_color=INDIGO,
     )
     fig.add_bar(
         x=etiquetas, y=[c.costo_almacenamiento for c in ordenados],
-        name="Costo de almacenamiento", marker_color="#0ea5e9",
+        name="Costo de almacenamiento", marker_color=CELESTE,
     )
     fig.add_bar(
         x=etiquetas, y=[c.costo_faltante for c in ordenados],
@@ -286,7 +355,7 @@ def grafico_frontera_politicas(costos: list[CostoPolitica]) -> go.Figure:
             marker=dict(
                 size=13,
                 color=[VERDE if c is mejor else COLOR_CAJA for c in costos],
-                line=dict(width=1, color="#1e293b"),
+                line=dict(width=1, color=TINTA_AZULADA),
             ),
             text=[c.etiqueta if c is mejor else "" for c in costos],
             textposition="top center",
@@ -327,8 +396,8 @@ def grafico_comparativo(
         go.Bar(
             x=nombres,
             y=valores,
-            marker_color=[COLOR_ESCENARIO.get(n, GRIS) for n in nombres],
-            error_y=dict(type="data", array=errores, color="#334155", thickness=1.5, width=8),
+            marker_color=[COLOR_ESCENARIO.get(n, GRIS_) for n in nombres],
+            error_y=dict(type="data", array=errores, color=TINTA_AZULADA, thickness=1.5, width=8),
             text=[f"{v:,.{metrica.decimales}f}" for v in valores],
             textposition="outside",
             hovertemplate="%{x}: %{y:,.2f}<extra></extra>",
@@ -356,7 +425,7 @@ def grafico_atendidos_vs_perdidos(resultados: list[ResultadoEscenario]) -> go.Fi
     )
     fig.add_bar(
         x=nombres, y=[r.prom("perdidos_cola_dia") for r in resultados],
-        name="Perdidos por cola", marker_color=NARANJA,
+        name="Perdidos por cola", marker_color=NARANJA_,
     )
     fig.add_bar(
         x=nombres, y=[r.prom("perdidos_sin_combustible_dia") for r in resultados],
@@ -386,7 +455,7 @@ def grafico_dispersion_replicas(
             go.Box(
                 y=valores,
                 name=r.escenario.nombre,
-                marker_color=COLOR_ESCENARIO.get(r.escenario.nombre, GRIS),
+                marker_color=COLOR_ESCENARIO.get(r.escenario.nombre, GRIS_),
                 boxpoints="all",
                 jitter=0.5,
                 pointpos=0,
@@ -421,7 +490,7 @@ def grafico_beneficio(economia: list[ResultadoEconomico]) -> go.Figure:
             hovertemplate="%{x}: $%{y:,.0f} por mes<extra></extra>",
         )
     )
-    fig.add_hline(y=0, line_color="#334155", line_width=1)
+    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
     fig.update_layout(
         title="Beneficio neto mensual respecto del escenario Base",
         xaxis_title="Escenario",
@@ -440,7 +509,7 @@ def grafico_ingresos_costos(economia: list[ResultadoEconomico]) -> go.Figure:
     fig = go.Figure()
     fig.add_bar(
         x=nombres, y=[e.ingreso_extra for e in alternativos],
-        name="Ingreso extra mensual", marker_color="#22c55e",
+        name="Ingreso extra mensual", marker_color=VERDE_INGRESO,
     )
     fig.add_bar(
         x=nombres, y=[-e.costo_capacidad for e in alternativos],
@@ -450,12 +519,12 @@ def grafico_ingresos_costos(economia: list[ResultadoEconomico]) -> go.Figure:
         go.Scatter(
             x=nombres, y=[e.beneficio_neto for e in alternativos],
             name="Beneficio neto", mode="markers+text",
-            marker=dict(size=13, color="#1e293b", symbol="diamond"),
+            marker=dict(size=13, color=TINTA_AZULADA, symbol="diamond"),
             text=[f"${e.beneficio_neto:,.0f}" for e in alternativos],
             textposition="top center",
         )
     )
-    fig.add_hline(y=0, line_color="#334155", line_width=1)
+    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
     fig.update_layout(
         title="De dónde sale el beneficio: ingreso extra menos costo incremental",
         xaxis_title="Escenario",
@@ -487,4 +556,66 @@ def grafico_venta_perdida(economia: list[ResultadoEconomico]) -> go.Figure:
         showlegend=False,
         **_layout(hovermode="closest"),
     )
+    return fig
+
+
+
+# =============================================================================
+# Pronóstico (parte 3): la serie real, el ajuste, la prueba y los próximos meses
+# =============================================================================
+MESES_CORTOS = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+
+def _etiqueta_mes(anio: int, mes: int) -> str:
+    return f"{MESES_CORTOS[mes - 1]}-{str(anio)[2:]}"
+
+
+def grafico_pronostico(analisis, meses_todos, valores_todos) -> go.Figure:
+    """La serie de Shell en Mendoza, el método elegido (ajuste, prueba y pronóstico) y su banda ± z·RMSE."""
+    from sim.pronostico import METODOS
+
+    x_todos = [_etiqueta_mes(a, m) for a, m in meses_todos]
+    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
+    n_ent = len(analisis.reales) - analisis.n_prueba
+    x_vent = [_etiqueta_mes(a, m) for a, m in analisis.meses]
+    x_fut = [_etiqueta_mes(a, m) for a, m in analisis.futuros]
+    fig = go.Figure()
+    fig.add_vrect(x0=x_vent[n_ent], x1=x_vent[-1], fillcolor=rgba(GRIS, 0.18), line_width=0,
+                  annotation_text="meses de prueba", annotation_position="top left")
+    bajo = [lo for lo, _ in analisis.intervalo]
+    alto = [hi for _, hi in analisis.intervalo]
+    fig.add_trace(go.Scatter(x=x_fut + x_fut[::-1], y=alto + bajo[::-1], fill="toself", fillcolor=rgba(AZUL, 0.15),
+                             line=dict(width=0), hoverinfo="skip", name="intervalo 95 %"))
+    fig.add_trace(go.Scatter(x=x_todos, y=list(valores_todos), mode="lines", name="ventas reales",
+                             line=dict(color=TINTA_AZULADA, width=2),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>real</extra>"))
+    ajustados = [v for v in elegido.ajustados]
+    fig.add_trace(go.Scatter(x=x_vent[:n_ent], y=ajustados, mode="lines", name=f"{METODOS[elegido.metodo]} (ajuste)",
+                             line=dict(color=AZUL, width=2, dash="dot"), connectgaps=False,
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>ajuste</extra>"))
+    fig.add_trace(go.Scatter(x=x_vent[n_ent:], y=list(elegido.prueba), mode="lines+markers", name="pronóstico de prueba",
+                             line=dict(color=NARANJA, width=2), marker=dict(size=8),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>prueba</extra>"))
+    fig.add_trace(go.Scatter(x=x_fut, y=list(analisis.pronostico), mode="lines+markers", name="pronóstico",
+                             line=dict(color=AZUL, width=2), marker=dict(size=8),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>pronóstico</extra>"))
+    fig.update_layout(title="Ventas al público de Shell en Mendoza (m³ por mes)", yaxis_title="m³ por mes",
+                      legend=dict(orientation="h", y=-0.22), **_layout(height=430, hovermode="closest"))
+    # Eje de categorías: el orden es el del calendario (si no, los meses del pronóstico quedan primero).
+    fig.update_xaxes(tickangle=-45, nticks=24, categoryorder="array", categoryarray=x_todos + x_fut)
+    return fig
+
+
+def grafico_indices(indices) -> go.Figure:
+    """Los 12 índices estacionales de la serie real (1 = un mes promedio)."""
+    fig = go.Figure(go.Bar(
+        x=list(MESES_CORTOS), y=list(indices), marker=dict(color=AZUL),
+        text=[f"{v:.2f}".replace(".", ",") for v in indices], textposition="outside",
+        hovertemplate="%{x}: %{y:.3f}<extra>índice</extra>",
+    ))
+    fig.add_hline(y=1.0, line_color=TINTA_AZULADA, line_width=1, line_dash="dash")
+    fig.update_layout(title="Cuánto pesa cada mes (índice estacional; la línea punteada = 1, un mes promedio)",
+                      yaxis_title="índice",
+                      showlegend=False, **_layout(height=340, hovermode="closest"))
+    fig.update_yaxes(range=[min(indices) - 0.08, max(indices) + 0.06])
     return fig

@@ -13,6 +13,11 @@ Distinción clave del TP (y pregunta típica de parcial):
 Promediar "cuánta cola había cada vez que llegó alguien" daría un número distinto y
 equivocado, porque no pondera cuánto tiempo duró cada estado.
 
+Desde la Fase 2 hay colectores POR GRUPO (A nafta, B diésel, C GNC), POR PRODUCTO y
+POR MOTIVO de pérdida (§7.6): los agregados clásicos (cola de surtidores, litros
+vendidos, etc.) siguen existiendo y suman toda la estación, para que la interfaz
+clásica y los dorados sigan funcionando.
+
 Nota de implementación: los colectores NO guardan la historia completa de valores. Una
 corrida de 30 días mueve decenas de miles de clientes y guardar cada cambio de estado
 gastaría memoria sin aportar nada: los gráficos se arman con la traza, que muestrea el
@@ -22,6 +27,8 @@ sistema a intervalos regulares.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
+from sim.config import ParametrosSimulacion
 
 HORAS_POR_DIA = 24
 
@@ -113,14 +120,16 @@ class SerieTemporal:
 class Contadores:
     """Conteos de la corrida (se reinician al terminar el calentamiento)."""
 
-    # Clientes
+    # Clientes (agregados de toda la estación)
     llegadas: int = 0
     atendidos_surtidor: int = 0
-    perdidos_surtidor: int = 0          # abandono por cola larga
-    perdidos_sin_combustible: int = 0   # se fueron porque no había nafta
+    perdidos_surtidor: int = 0          # abandono_espera: se cansó de hacer cola
+    perdidos_sin_combustible: int = 0   # sin_combustible: no había producto
+    perdidos_cola_llena: int = 0        # cola_llena: no entró a la cola finita
     entraron_minimarket: int = 0
     compras_atendidas: int = 0
-    perdidos_caja: int = 0
+    perdidos_caja: int = 0              # abandono_caja
+    abandonos_playero: int = 0          # de perdidos_surtidor: se fue esperando al playero
 
     # Combustible
     litros_vendidos: float = 0.0
@@ -129,10 +138,58 @@ class Contadores:
     pedidos_emitidos: int = 0
     pedidos_recibidos: int = 0
     dias_con_quiebre: int = 0
+    viajes_demorados: int = 0           # camiones que encontraron un corte (Fase 5)
+    # GNC (Fase 6): afectados = migrados + perdidos por corte
+    gnc_afectados: int = 0              # clientes GNC que se toparon con el corte
+    migrados_gnc_a_nafta: int = 0       # de los afectados: pasaron a Súper (no es pérdida)
+    perdidos_corte_gnc: int = 0         # corte_gnc: se fueron sin cargar
+    dias_con_corte_gnc: int = 0         # días medidos con algún tramo de corte
 
     def reiniciar(self) -> None:
         for campo in self.__dataclass_fields__:
             setattr(self, campo, type(getattr(self, campo))())
+
+
+@dataclass
+class ContadoresGrupo:
+    """Conteos de UN grupo de surtidores (A, B o C), por motivo de pérdida (§7.6)."""
+
+    llegadas: int = 0
+    atendidos: int = 0
+    perdidos_espera: int = 0            # abandono_espera
+    perdidos_cola_llena: int = 0        # cola_llena
+    perdidos_sin_combustible: int = 0   # sin_combustible
+    abandonos_playero: int = 0          # de perdidos_espera: se fue esperando al playero o al compresor
+    perdidos_corte_gnc: int = 0         # corte_gnc
+
+    def reiniciar(self) -> None:
+        for campo in self.__dataclass_fields__:
+            setattr(self, campo, 0)
+
+
+@dataclass
+class ContadoresProducto:
+    """Conteos de UN producto (litros y clientes)."""
+
+    llegadas: int = 0
+    atendidos: int = 0
+    litros_vendidos: float = 0.0
+    litros_no_vendidos: float = 0.0
+    litros_recibidos: float = 0.0
+    perdidos_sin_combustible: int = 0
+    litros_perdidos_sin_combustible: float = 0.0   # litros que pidieron los que se fueron sin stock
+    # Los otros motivos (tanda 3): litros (m³ el GNC) que pidieron los que se fueron por cada causa.
+    litros_perdidos_espera: float = 0.0            # se cansaron de esperar
+    litros_perdidos_cola_llena: float = 0.0        # la cola de su zona estaba llena
+    litros_perdidos_corte_gnc: float = 0.0         # GNC cortado y no pasaron a Súper
+    viajes_demorados: int = 0                      # camiones de este producto que encontraron un corte
+    pedidos_emitidos: int = 0
+    pedidos_recibidos: int = 0
+    dias_con_quiebre: int = 0
+
+    def reiniciar(self) -> None:
+        for campo in self.__dataclass_fields__:
+            setattr(self, campo, 0)
 
 
 @dataclass
@@ -165,40 +222,110 @@ class PorHora:
         return self.espera_suma[hora] / n if n else 0.0
 
 
+def _nivel_inicial_total(p: ParametrosSimulacion) -> float:
+    """Litros iniciales de toda la estación (suma de los tanques)."""
+    if p.estacion_real:
+        return sum(i.nivel_inicial for i in p.inventario)
+    return p.tanque.nivel_inicial
+
+
+def _capacidad_total(p: ParametrosSimulacion) -> float:
+    """Capacidad total de almacenamiento (suma de los tanques)."""
+    if p.estacion_real:
+        return sum(i.capacidad for i in p.inventario)
+    return p.tanque.capacidad
+
+
+def nivel_inicial_total(p: ParametrosSimulacion) -> float:
+    """Helper público (lo usan los controles de conservación)."""
+    return _nivel_inicial_total(p)
+
+
+def capacidad_total(p: ParametrosSimulacion) -> float:
+    """Helper público (lo usan los controles de conservación)."""
+    return _capacidad_total(p)
+
+
+@dataclass(frozen=True)
+class PedidoCamion:
+    """Un pedido de combustible: cuándo se hizo, cuándo llegó y cuánto se demoró en la ruta."""
+
+    producto: str
+    t_pedido: float          # minuto de la corrida
+    t_llegada: float
+    litros: float
+    demora_ruta: float       # minutos que sumó un corte de ruta (0 si no hubo)
+    causa: str               # "" · "corte E2" · "obra" · ...
+    origen: str = ""         # nodo de la red que despachó el camión (tanda 8)
+    redirigido: bool = False  # el origen habitual no pudo y salió de otro
+
+
 class Indicadores:
     """Todos los colectores de una corrida, en un solo objeto."""
 
-    def __init__(
-        self,
-        capacidad_surtidores: int,
-        capacidad_cajas: int,
-        nivel_inicial_tanque: float = 0.0,
-        capacidad_tanque: float = 1.0,
-    ) -> None:
-        self.capacidad_surtidores = capacidad_surtidores
-        self.capacidad_cajas = capacidad_cajas
-        self.capacidad_tanque = capacidad_tanque
+    def __init__(self, p: ParametrosSimulacion) -> None:
+        self.p = p
+        self.pedidos: list[PedidoCamion] = []      # cada camión pedido (día, plazo, demora de ruta)
+        self.eventos: tuple = ()                   # calendario de eventos aleatorios de la corrida (parte 4)
+        self.perdidos_evento: list[int] = []       # clientes perdidos mientras duraba cada evento
+        self.extra_evento: list[float] = []        # lo que cada evento sumó o sacó (ver EventoOcurrido.extra)
+        self.eventos_dinamicos: list = []          # roturas del camión (EVT-11), sorteadas en cada viaje
+        self.capacidad_surtidores = p.surtidores
+        self.capacidad_cajas = p.cajas
 
-        # Colas y servidores
+        ids_grupos = tuple(g.id for g in p.grupos)
+        ids_productos = tuple(pr.id for pr in p.productos)
+        ids_liquidos = tuple(pr.id for pr in p.productos if not pr.es_gnc)
+        ids_tipos = tuple(t.id for t in p.tipos_vehiculo)
+
+        # Colas y servidores (agregados de toda la estación + por grupo)
         self.cola_surtidor = SerieTemporal()
         self.cola_caja = SerieTemporal()
         self.ocupados_surtidores = SerieTemporal()
         self.ocupadas_cajas = SerieTemporal()
+        self.playeros_ocupados = SerieTemporal()
+        self.compresores_ocupados = SerieTemporal()
+        self.playeros_en_turno = SerieTemporal(valor_inicial=float(p.playeros_por_turno[0]))
+        self.colas_grupo = {g: SerieTemporal() for g in ids_grupos}
+        self.ocupados_grupo = {g: SerieTemporal() for g in ids_grupos}
 
         # Esperas
-        self.espera_surtidor = Muestras()
+        self.espera_surtidor = Muestras()    # total hasta empezar a ser atendido
+        self.espera_cara = Muestras()        # hasta tener la cara (Little / N4)
         self.espera_caja = Muestras()
         self.tiempo_sistema = Muestras()
+        self.esperas_grupo = {g: Muestras() for g in ids_grupos}
+        self.esperas_cara_grupo = {g: Muestras() for g in ids_grupos}
+        self.servicio_suma = 0.0             # Σ tiempo de carga de los atendidos (control 4)
 
         # Inventario
-        self.nivel_tanque = SerieTemporal(valor_inicial=nivel_inicial_tanque)
+        self.nivel_tanque = SerieTemporal(valor_inicial=_nivel_inicial_total(p))
+        self.niveles = {
+            pr: SerieTemporal(valor_inicial=inv.nivel_inicial)
+            for pr, inv in zip(ids_liquidos, p.inventario)
+        }
         self.sin_combustible = SerieTemporal()   # indicador 0/1: fracción de tiempo sin nafta
+        # 0/1 por tanque: fracción del tiempo en que ese producto no alcanza ni para la carga más chica
+        self.sin_stock = {pr: SerieTemporal() for pr in ids_liquidos}
         self.plazo_entrega = Muestras()
+        self.demora_ruta = Muestras()        # horas de demora por corte de ruta (sólo los demorados)
+        # Cada quiebre de cada tanque: [minuto en que se vació, minuto en que volvió a tener] (tanda 3)
+        self.quiebres = {pr: [] for pr in ids_liquidos}
 
+        # Litros por tipo de vehículo (N10)
+        self.litros_por_tipo = {t: Muestras() for t in ids_tipos}
+
+        # Conteos
         self.c = Contadores()
         self.c_total = Contadores()
+        self.c_grupo = {g: ContadoresGrupo() for g in ids_grupos}
+        self.c_grupo_total = {g: ContadoresGrupo() for g in ids_grupos}
+        self.c_producto = {pr: ContadoresProducto() for pr in ids_productos}
+        self.c_producto_total = {pr: ContadoresProducto() for pr in ids_productos}
+
         self.por_hora = PorHora()
-        self.calentamiento_terminado = False
+        # Sin días de calentamiento no hay transitorio que descartar: se mide desde el inicio.
+        self.calentamiento_terminado = p.dias_calentamiento == 0
 
     @property
     def series(self) -> tuple[SerieTemporal, ...]:
@@ -207,13 +334,30 @@ class Indicadores:
             self.cola_caja,
             self.ocupados_surtidores,
             self.ocupadas_cajas,
+            self.playeros_ocupados,
+            self.playeros_en_turno,
+            self.compresores_ocupados,
             self.nivel_tanque,
             self.sin_combustible,
+            *self.sin_stock.values(),
+            *self.colas_grupo.values(),
+            *self.ocupados_grupo.values(),
+            *self.niveles.values(),
         )
 
     def contar(self, nombre: str, cantidad: float = 1) -> None:
         """Incrementa un contador, tanto el del período de medición como el total."""
         for contadores in (self.c, self.c_total):
+            setattr(contadores, nombre, getattr(contadores, nombre) + cantidad)
+
+    def contar_grupo(self, grupo: str, nombre: str, cantidad: float = 1) -> None:
+        """Incrementa un contador de grupo, en el medido y en el total."""
+        for contadores in (self.c_grupo[grupo], self.c_grupo_total[grupo]):
+            setattr(contadores, nombre, getattr(contadores, nombre) + cantidad)
+
+    def contar_producto(self, producto: str, nombre: str, cantidad: float = 1) -> None:
+        """Incrementa un contador de producto, en el medido y en el total."""
+        for contadores in (self.c_producto[producto], self.c_producto_total[producto]):
             setattr(contadores, nombre, getattr(contadores, nombre) + cantidad)
 
     def reiniciar(self, t: float) -> None:
@@ -222,24 +366,47 @@ class Indicadores:
             serie.reiniciar(t)
         for muestras in (
             self.espera_surtidor,
+            self.espera_cara,
             self.espera_caja,
             self.tiempo_sistema,
             self.plazo_entrega,
+            self.demora_ruta,
+            *self.esperas_grupo.values(),
+            *self.esperas_cara_grupo.values(),
+            *self.litros_por_tipo.values(),
         ):
             muestras.reiniciar()
+        self.servicio_suma = 0.0
         self.c.reiniciar()
+        for g in self.c_grupo:
+            self.c_grupo[g].reiniciar()
+        for pr in self.c_producto:
+            self.c_producto[pr].reiniciar()
         self.por_hora.reiniciar()
         self.calentamiento_terminado = True
+
+    def marcar_sin_stock(self, producto: str, t: float, vacio: bool) -> None:
+        """Abre (vacío) o cierra (volvió a tener) el quiebre en curso de un tanque."""
+        episodios = self.quiebres[producto]
+        if vacio:
+            episodios.append([t, None])
+        elif episodios and episodios[-1][1] is None:
+            episodios[-1][1] = t
 
     def cerrar(self, t: float) -> None:
         for serie in self.series:
             serie.cerrar(t)
+        for episodios in self.quiebres.values():
+            if episodios and episodios[-1][1] is None:
+                episodios[-1][1] = t
 
     # --- Indicadores finales --------------------------------------------------
     @property
     def utilizacion_surtidores(self) -> float:
-        """Fracción del tiempo que, en promedio, está ocupado cada surtidor."""
-        return self.ocupados_surtidores.promedio / self.capacidad_surtidores
+        """Fracción del tiempo que, en promedio, está ocupada cada cara."""
+        total_caras = sum(g.caras for g in self.p.grupos) if self.p.estacion_real \
+            else self.capacidad_surtidores
+        return self.ocupados_surtidores.promedio / max(total_caras, 1)
 
     @property
     def utilizacion_cajas(self) -> float:

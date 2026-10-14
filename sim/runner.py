@@ -21,6 +21,8 @@ from sim.config import (
     ParametrosTanque,
     escenarios_desde,
 )
+from sim.estadisticas import PedidoCamion
+from sim.eventos import EventoOcurrido
 from sim.modelo import simular
 from sim.traza import Traza
 
@@ -87,10 +89,79 @@ class ResultadoReplica:
     # --- Por hora (para el gráfico del perfil) -------------------------------
     hora_pico: int
 
+    # --- Estación real (Fase 2): por motivo, grupo y producto -----------------
+    perdidos_cola_llena_dia: float = 0.0
+    util_playeros: float = 0.0            # playeros ocupados ÷ playeros en turno (promedio temporal)
+    viajes_demorados_pct: float = 0.0     # % de los camiones que encontraron un corte (Fase 5)
+    gnc_afectados_dia: float = 0.0        # clientes GNC que se toparon con el corte (Fase 6)
+    migrados_gnc_dia: float = 0.0         # ... y pasaron a Súper
+    perdidos_corte_gnc_dia: float = 0.0   # ... y se fueron sin cargar
+    m3_gnc_vendidos_dia: float = 0.0      # GNC vendido, en m³
+    m3_gnc_perdidos_dia: float = 0.0      # GNC que pidieron los que se fueron, en m³
+    dias_corte_gnc_pct: float = 0.0       # % de los días medidos con algún tramo de corte
+    util_compresores: float = 0.0         # compresores ocupados ÷ compresores
+    demora_ruta_promedio: float = 0.0     # horas de demora por viaje (incluye los que no se demoran)
+    espera_por_grupo: tuple[float, ...] = ()
+    cola_por_grupo: tuple[float, ...] = ()
+    util_por_grupo: tuple[float, ...] = ()
+    atendidos_por_producto: tuple[tuple[str, float], ...] = ()
+    litros_vendidos_por_producto: tuple[tuple[str, float], ...] = ()
+    dias_quiebre_por_producto: tuple[tuple[str, float], ...] = ()
+    # Fase 4: lo que hace falta para costear la política (s, Q) de CADA tanque
+    pedidos_por_producto: tuple[tuple[str, float], ...] = ()          # camiones pedidos por día
+    nivel_por_producto: tuple[tuple[str, float], ...] = ()            # litros promedio en el tanque
+    litros_sin_stock_por_producto: tuple[tuple[str, float], ...] = () # litros no vendidos por día
+    perdidos_sin_stock_por_producto: tuple[tuple[str, float], ...] = ()  # clientes por día
+    # Totales ENTEROS del período medido (rediseño v3: los clientes se cuentan, no se promedian)
+    totales: tuple[tuple[str, int], ...] = ()                     # llegadas, atendidos, perdidos…
+    totales_zona: tuple[tuple[str, int, int, int, int, int, int], ...] = ()
+    # (zona, llegadas, atendidos, perdidos por espera, cola llena, sin combustible, corte de GNC)
+    totales_producto: tuple[tuple[str, int, int, float], ...] = ()   # (producto, llegadas, atendidos, litros o m³)
+    dias_quiebre_total: tuple[tuple[str, int], ...] = ()          # días con quiebre de cada tanque
+    pedidos_total: tuple[tuple[str, int], ...] = ()               # camiones pedidos de cada tanque
+    tiempo_sin_stock: tuple[tuple[str, float], ...] = ()          # fracción del tiempo con cada tanque vacío
+    dias_medidos: int = 0
+    # Tanda 3: por qué no se vendió (litros; m³ el GNC) y cada quiebre de stock, en el período medido
+    litros_perdidos_causa: tuple[tuple[str, float, float, float, float], ...] = ()
+    # (producto, sin combustible, se cansó de esperar, cola llena, GNC cortado sin pasar a Súper)
+    quiebres: tuple[tuple[str, int, float, float], ...] = ()
+    # (tanque, cuántas veces se vació, horas vacío en total, horas del quiebre más largo)
+    pedidos_por_origen: tuple[tuple[str, int, int], ...] = ()   # (origen, camiones, redirigidos); vacío = todos del habitual
+    # Parte 4: los eventos aleatorios de la corrida, con los clientes que se fueron mientras duraba cada uno
+    eventos: tuple[EventoOcurrido, ...] = ()
+    # §24: cada camión pedido en el período medido (para la tabla de Inventario)
+    camiones: tuple[PedidoCamion, ...] = ()
 
-#: Métricas que se promedian entre réplicas (todas menos la semilla).
+
+#: Campos que NO son métricas numéricas (no se promedian en `resumir`).
+NO_METRICAS = {
+    "semilla",
+    "espera_por_grupo",
+    "cola_por_grupo",
+    "util_por_grupo",
+    "atendidos_por_producto",
+    "litros_vendidos_por_producto",
+    "dias_quiebre_por_producto",
+    "pedidos_por_producto",
+    "nivel_por_producto",
+    "litros_sin_stock_por_producto",
+    "perdidos_sin_stock_por_producto",
+    "totales",
+    "totales_zona",
+    "totales_producto",
+    "dias_quiebre_total",
+    "pedidos_total",
+    "tiempo_sin_stock",
+    "litros_perdidos_causa",
+    "quiebres",
+    "pedidos_por_origen",
+    "eventos",
+    "camiones",
+}
+
+#: Métricas que se promedian entre réplicas (todas menos las no numéricas).
 METRICAS: tuple[str, ...] = tuple(
-    f.name for f in fields(ResultadoReplica) if f.name != "semilla"
+    f.name for f in fields(ResultadoReplica) if f.name not in NO_METRICAS
 )
 
 
@@ -145,6 +216,13 @@ class ResultadoPolitica:
 
 
 # --- Una réplica --------------------------------------------------------------
+def _por_tanque(p: ParametrosSimulacion, ind, valor) -> tuple[tuple[str, float], ...]:
+    """((producto, valor), ...) de cada tanque; vacío en el caso clásico (un solo tanque)."""
+    if not p.estacion_real:
+        return ()
+    return tuple((i.producto, float(valor(i.producto))) for i in p.inventario)
+
+
 def correr_replica(
     p: ParametrosSimulacion,
     semilla: int,
@@ -154,6 +232,7 @@ def correr_replica(
     ind, traza = simular(p, semilla=semilla, con_traza=con_traza)
     c = ind.c
     dias = max(p.dias_medidos, 1)
+    medidos = [x for x in ind.pedidos if x.t_pedido >= p.calentamiento]
 
     esperas_por_hora = [ind.por_hora.espera_promedio(h) for h in range(24)]
     espera_pico = max(esperas_por_hora)
@@ -178,7 +257,12 @@ def correr_replica(
         perdidos_caja_dia=c.perdidos_caja / dias,
         compras_dia=c.compras_atendidas / dias,
         tasa_abandono=(
-            100.0 * (c.perdidos_surtidor + c.perdidos_sin_combustible) / c.llegadas
+            100.0
+            * (
+                c.perdidos_surtidor + c.perdidos_sin_combustible + c.perdidos_cola_llena
+                + c.perdidos_corte_gnc
+            )
+            / c.llegadas
             if c.llegadas
             else 0.0
         ),
@@ -191,36 +275,165 @@ def correr_replica(
         plazo_entrega=ind.plazo_entrega.promedio,
         porcentaje_dias_quiebre=100.0 * c.dias_con_quiebre / dias,
         porcentaje_tiempo_sin_combustible=100.0 * ind.fraccion_sin_combustible,
+        gnc_afectados_dia=c.gnc_afectados / dias,
+        migrados_gnc_dia=c.migrados_gnc_a_nafta / dias,
+        perdidos_corte_gnc_dia=c.perdidos_corte_gnc / dias,
+        m3_gnc_vendidos_dia=ind.c_producto["gnc"].litros_vendidos / dias,
+        m3_gnc_perdidos_dia=ind.c_producto["gnc"].litros_no_vendidos / dias,
+        dias_corte_gnc_pct=100.0 * c.dias_con_corte_gnc / dias,
+        util_compresores=(
+            ind.compresores_ocupados.promedio / p.gnc.compresores
+            if p.estacion_real and p.gnc is not None
+            else 0.0
+        ),
+        viajes_demorados_pct=(
+            100.0 * c.viajes_demorados / c.pedidos_emitidos if c.pedidos_emitidos else 0.0
+        ),
+        demora_ruta_promedio=(
+            ind.demora_ruta.suma / c.pedidos_emitidos if c.pedidos_emitidos else 0.0
+        ),
         hora_pico=hora_pico,
+        # --- Estación real: por motivo, grupo y producto ---
+        perdidos_cola_llena_dia=c.perdidos_cola_llena / dias,
+        util_playeros=(
+            ind.playeros_ocupados.promedio / ind.playeros_en_turno.promedio
+            if ind.playeros_en_turno.promedio > 0
+            else 0.0
+        ),
+        espera_por_grupo=tuple(
+            ind.esperas_grupo[g.id].promedio for g in p.grupos
+        ),
+        cola_por_grupo=tuple(ind.colas_grupo[g.id].promedio for g in p.grupos),
+        util_por_grupo=tuple(
+            ind.ocupados_grupo[g.id].promedio / g.caras for g in p.grupos
+        ),
+        atendidos_por_producto=tuple(
+            (pr, ind.c_producto[pr].atendidos / dias) for pr in ind.c_producto
+        ),
+        litros_vendidos_por_producto=tuple(
+            (pr, ind.c_producto[pr].litros_vendidos / dias) for pr in ind.c_producto
+        ),
+        dias_quiebre_por_producto=tuple(
+            (pr, 100.0 * ind.c_producto[pr].dias_con_quiebre / dias)
+            for pr in ind.c_producto
+        ),
+        pedidos_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].pedidos_emitidos / dias
+        ),
+        nivel_por_producto=_por_tanque(p, ind, lambda pr: ind.niveles[pr].promedio),
+        litros_sin_stock_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].litros_perdidos_sin_combustible / dias
+        ),
+        perdidos_sin_stock_por_producto=_por_tanque(
+            p, ind, lambda pr: ind.c_producto[pr].perdidos_sin_combustible / dias
+        ),
+        totales=(
+            ("llegadas", c.llegadas),
+            ("atendidos", c.atendidos_surtidor),
+            ("compras", c.compras_atendidas),
+            ("perdidos_espera", c.perdidos_surtidor),
+            ("perdidos_cola_llena", c.perdidos_cola_llena),
+            ("perdidos_sin_combustible", c.perdidos_sin_combustible),
+            ("perdidos_corte_gnc", c.perdidos_corte_gnc),
+            ("perdidos_caja", c.perdidos_caja),
+            ("migrados_gnc", c.migrados_gnc_a_nafta),
+            ("dias_con_quiebre", c.dias_con_quiebre),
+            ("dias_con_corte_gnc", c.dias_con_corte_gnc),
+        ),
+        totales_zona=tuple(
+            (
+                g.id, ind.c_grupo[g.id].llegadas, ind.c_grupo[g.id].atendidos,
+                ind.c_grupo[g.id].perdidos_espera, ind.c_grupo[g.id].perdidos_cola_llena,
+                ind.c_grupo[g.id].perdidos_sin_combustible, ind.c_grupo[g.id].perdidos_corte_gnc,
+            )
+            for g in p.grupos
+        ) if p.estacion_real else (),
+        totales_producto=tuple(
+            (pr, ind.c_producto[pr].llegadas, ind.c_producto[pr].atendidos, ind.c_producto[pr].litros_vendidos)
+            for pr in ind.c_producto
+        ) if p.estacion_real else (),
+        dias_quiebre_total=tuple(
+            (pr, ind.c_producto[pr].dias_con_quiebre) for pr in ind.c_producto
+        ) if p.estacion_real else (),
+        pedidos_total=tuple(
+            (i.producto, ind.c_producto[i.producto].pedidos_emitidos) for i in p.inventario
+        ) if p.estacion_real else (),
+        tiempo_sin_stock=tuple(
+            (pr, serie.promedio) for pr, serie in ind.sin_stock.items()
+        ) if p.estacion_real else (),
+        dias_medidos=p.dias_medidos,
+        litros_perdidos_causa=tuple(
+            (
+                pr, cp.litros_perdidos_sin_combustible, cp.litros_perdidos_espera,
+                cp.litros_perdidos_cola_llena, cp.litros_perdidos_corte_gnc,
+            )
+            for pr, cp in ind.c_producto.items()
+        ) if p.estacion_real else (),
+        quiebres=tuple(
+            _resumen_quiebres(pr, episodios, p.calentamiento, p.duracion)
+            for pr, episodios in ind.quiebres.items()
+        ) if p.estacion_real else (),
+        pedidos_por_origen=tuple(
+            (o, sum(1 for x in medidos if x.origen == o), sum(1 for x in medidos if x.origen == o and x.redirigido))
+            for o in dict.fromkeys(x.origen for x in medidos)
+        ) if p.estacion_real and p.red is not None and (
+            p.red.origenes_alternativos or p.red.origenes_no_disponibles
+        ) else (),   # sin orígenes alternativos todos salen del habitual: vacío (la corrida neutra no cambia)
+        camiones=tuple(medidos) if p.estacion_real else (),
+        eventos=tuple(sorted(
+            [
+                EventoOcurrido(*ev, perdidos=n, extra=x)
+                for ev, n, x in zip(ind.eventos, ind.perdidos_evento, ind.extra_evento) if ev.inicio < p.duracion
+            ] + list(ind.eventos_dinamicos),
+            key=lambda e: (e.inicio, e.id),
+        )),
     )
     return resultado, traza
 
 
+def _resumen_quiebres(
+    producto: str, episodios: list, desde: float, hasta: float
+) -> tuple[str, int, float, float]:
+    """(tanque, quiebres, horas vacío en total, horas del más largo), recortado al período medido."""
+    duraciones = [
+        min(fin, hasta) - max(inicio, desde)
+        for inicio, fin in episodios
+        if fin > desde and inicio < hasta
+    ]
+    duraciones = [d for d in duraciones if d > 0]
+    return (
+        producto, len(duraciones), sum(duraciones) / 60.0, max(duraciones, default=0.0) / 60.0
+    )
+
+
 # --- N réplicas ---------------------------------------------------------------
+def resumen_de(valores: list[float]) -> Resumen:
+    """Promedio, desvío e IC 95 % (t de Student) de una lista de valores, uno por réplica."""
+    n = len(valores)
+    promedio = sum(valores) / n
+    if n > 1:
+        varianza = sum((v - promedio) ** 2 for v in valores) / (n - 1)
+        desvio = math.sqrt(varianza)
+        semiamplitud = t_critico(n - 1) * desvio / math.sqrt(n)
+    else:
+        desvio = 0.0
+        semiamplitud = 0.0
+    return Resumen(
+        promedio=promedio,
+        desvio=desvio,
+        semiamplitud=semiamplitud,
+        minimo=min(valores),
+        maximo=max(valores),
+        n=n,
+    )
+
+
 def resumir(replicas: list[ResultadoReplica]) -> dict[str, Resumen]:
     """Promedio, desvío e intervalo de confianza 95% de cada métrica."""
-    n = len(replicas)
-    resumen: dict[str, Resumen] = {}
-
-    for metrica in METRICAS:
-        valores = [float(getattr(r, metrica)) for r in replicas]
-        promedio = sum(valores) / n
-        if n > 1:
-            varianza = sum((v - promedio) ** 2 for v in valores) / (n - 1)
-            desvio = math.sqrt(varianza)
-            semiamplitud = t_critico(n - 1) * desvio / math.sqrt(n)
-        else:
-            desvio = 0.0
-            semiamplitud = 0.0
-        resumen[metrica] = Resumen(
-            promedio=promedio,
-            desvio=desvio,
-            semiamplitud=semiamplitud,
-            minimo=min(valores),
-            maximo=max(valores),
-            n=n,
-        )
-    return resumen
+    return {
+        metrica: resumen_de([float(getattr(r, metrica)) for r in replicas])
+        for metrica in METRICAS
+    }
 
 
 def correr_replicas(
@@ -267,6 +480,33 @@ def buscar(resultados: list[ResultadoEscenario], nombre: str) -> ResultadoEscena
         if r.escenario.nombre == nombre:
             return r
     raise KeyError(f"No existe el escenario {nombre}")
+
+
+def correr_estacion_real(
+    p: ParametrosSimulacion,
+    replicas: int = 5,
+    semilla_base: int = 1,
+) -> ResultadoEscenario:
+    """Corre la estación real (3 grupos, 5 productos, playeros) y la envuelve en un
+    único "escenario Base" para que la interfaz clásica la muestre.
+
+    El catálogo de escenarios del caso real (S0–S12) llega en la Fase 7; por ahora
+    la comparación de capacidad es la del caso clásico.
+    """
+    total_caras = sum(g.caras for g in p.grupos)
+    escenario = Escenario(
+        nombre="Base",
+        descripcion=f"Estación real (Shell San Rafael, {total_caras} caras)",
+        surtidores=total_caras,
+        cajas=p.cajas,
+    )
+    replicas_corridas = correr_replicas(p, replicas=replicas, semilla_base=semilla_base)
+    return ResultadoEscenario(
+        escenario=escenario,
+        parametros=p,
+        replicas=replicas_corridas,
+        resumen=resumir(replicas_corridas),
+    )
 
 
 # --- Barrido de políticas de inventario ---------------------------------------
@@ -338,3 +578,101 @@ def grilla_sugerida(p: ParametrosSimulacion) -> tuple[list[float], list[float]]:
     puntos = sorted({x for x in puntos if 0 < x < capacidad})
     cantidades = sorted({x for x in cantidades if 0 < x <= capacidad})
     return puntos, cantidades
+
+
+# --- Política (s, Q) por producto (Fase 4) --------------------------------------
+def promedio_por_producto(
+    replicas: list[ResultadoReplica], campo: str
+) -> dict[str, float]:
+    """Promedio entre réplicas de un campo ((producto, valor), ...)."""
+    acumulado: dict[str, float] = {}
+    for r in replicas:
+        for producto, valor in getattr(r, campo):
+            acumulado[producto] = acumulado.get(producto, 0.0) + valor
+    return {k: v / len(replicas) for k, v in acumulado.items()}
+
+
+def con_politicas(
+    p: ParametrosSimulacion, politicas: dict[str, tuple[float, float]]
+) -> ParametrosSimulacion:
+    """Los mismos parámetros pero con (s, Q) distintos en algunos tanques."""
+    inventario = tuple(
+        replace(i, punto_pedido=politicas[i.producto][0], cantidad_pedido=politicas[i.producto][1])
+        if i.producto in politicas
+        else i
+        for i in p.inventario
+    )
+    return replace(p, inventario=inventario)
+
+
+#: Puntos de pedido y cantidades de la grilla, en DÍAS de consumo del producto. El camión
+#: tarda 24–48 h, así que s por debajo de 1 día casi seguro quiebra.
+S_EN_DIAS = (1.0, 1.5, 2.0, 2.5)
+Q_EN_DIAS = (2.0, 3.0, 4.5)
+
+
+def grilla_politicas_real(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
+    """Puntos de la grilla; cada uno trae la política (s, Q) de TODOS los tanques.
+
+    El punto 0 es la política cargada (para poder compararla). Los demás combinan s y Q
+    medidos en días de consumo de cada producto, así que la grilla se adapta sola a la
+    demanda y a la mezcla. Como cada camión es independiente (un pedido por producto)
+    y cada producto tiene su propio stream de plazos, las cuatro curvas de costo se
+    miden en las MISMAS corridas: 13 puntos × réplicas, no 13⁴.
+    """
+    puntos: list[dict[str, tuple[float, float]]] = [
+        {i.producto: (i.punto_pedido, i.cantidad_pedido) for i in p.inventario}
+    ]
+    for s_dias in S_EN_DIAS:
+        for q_dias in Q_EN_DIAS:
+            puntos.append(politica_en_dias(p, s_dias, q_dias))
+    return puntos
+
+
+def politica_en_dias(p: ParametrosSimulacion, s_dias: float, q_dias: float) -> dict[str, tuple[float, float]]:
+    """{producto: (s, Q)} con s y Q en días de venta de cada producto (redondeados a 100 L, con lugar en el tanque)."""
+    consumo_mes = p.litros_mes / 30.0
+    pct = {pr.id: pr.pct_litros for pr in p.productos}
+    punto: dict[str, tuple[float, float]] = {}
+    for i in p.inventario:
+        consumo_dia = consumo_mes * pct[i.producto]
+        s_ = min(round(s_dias * consumo_dia, -2), i.capacidad - 500.0)
+        q_ = max(500.0, min(round(q_dias * consumo_dia, -2), i.capacidad - s_))
+        punto[i.producto] = (s_, q_)
+    return punto
+
+
+@dataclass(frozen=True)
+class PuntoBarrido:
+    """Una corrida del barrido: la política de cada tanque y las réplicas de la estación."""
+
+    politicas: dict[str, tuple[float, float]]
+    replicas: list[ResultadoReplica]
+
+
+@dataclass(frozen=True)
+class ResultadoBarridoReal:
+    """El barrido de políticas de la estación real (todos los tanques a la vez)."""
+
+    productos: tuple[str, ...]
+    puntos: list[PuntoBarrido]
+
+
+def barrer_politicas_real(
+    p: ParametrosSimulacion,
+    replicas: int = 2,
+    semilla_base: int = 1,
+) -> ResultadoBarridoReal:
+    """Barre la grilla de (s, Q) de los 4 tanques con números aleatorios comunes."""
+    puntos = [
+        PuntoBarrido(
+            politicas=politicas,
+            replicas=correr_replicas(
+                con_politicas(p, politicas), replicas=replicas, semilla_base=semilla_base
+            ),
+        )
+        for politicas in grilla_politicas_real(p)
+    ]
+    return ResultadoBarridoReal(
+        productos=tuple(i.producto for i in p.inventario), puntos=puntos
+    )

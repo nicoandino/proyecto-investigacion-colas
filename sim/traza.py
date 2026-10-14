@@ -41,6 +41,25 @@ class Cuadro:
     perdidos_sin_combustible: int # los que se fueron porque no había nafta (acumulado)
     pedidos_en_camino: int        # camiones cisterna pedidos y todavía no llegados
     en_calentamiento: bool
+    playeros_ocupados: int = 0    # playeros atendiendo en este instante (estación real)
+    playeros_en_turno: int = 0    # playeros que corresponden al turno (estación real)
+    perdidos_cola_llena: int = 0  # no entraron porque la cola de su zona estaba llena (acumulado)
+    gnc_cortado: int = 0          # 0 normal · 1 GNC cortado · 2 compresores al 50 %
+    compresores_ocupados: int = 0     # cargas GNC en curso
+    compresores_total: int = 0        # compresores habilitados en este instante
+    migrados_gnc: int = 0             # clientes GNC que pasaron a Súper (acumulado)
+    perdidos_corte_gnc: int = 0       # clientes GNC que se fueron por el corte (acumulado)
+    # Una foto por zona: (id, carriles, cola, largo de la cola, rechazados acumulados).
+    #   carriles: un código por cara: -1 libre · 2·k cargando · 2·k+1 esperando al
+    #   playero con la cara ocupada (k = índice del producto).
+    #   cola: el producto (índice) de cada auto que espera, en orden de llegada.
+    grupos: tuple = ()
+    # Una foto por tanque: (producto, litros, litros en camino, progreso del camión
+    # entre 0 y 1 (-1 si no hay pedido), horas que faltan para que llegue, horas de
+    # demora que le agregó un corte de ruta).
+    tanques: tuple = ()
+    # Litros (m³ el GNC) vendidos de cada producto, acumulados; el orden es el de `p.productos`.
+    litros_producto: tuple = ()
 
     @property
     def perdidos(self) -> int:
@@ -71,6 +90,11 @@ class DiaSimulado:
     litros_vendidos: float
     hubo_quiebre: bool
     en_calentamiento: bool
+    # GNC del día (Fase 6): atendidos, pasados a nafta, perdidos por el corte y minutos de corte
+    gnc_atendidos: int = 0
+    gnc_migrados: int = 0
+    gnc_perdidos: int = 0
+    gnc_corte_min: float = 0.0
 
     @property
     def numero_texto(self) -> str:
@@ -87,18 +111,49 @@ class Traza:
     def __init__(self) -> None:
         self.cuadros: list[Cuadro] = []
         self.inventario: list[tuple[float, float, int]] = []   # (minuto, litros, pedidos en camino)
+        # (minuto, litros del tanque 1, 2, 3, 4): el orden es el de `p.inventario` (sólo estación real)
+        self.inventario_producto: list[tuple] = []
         self.dias: list[DiaSimulado] = []
         # Indicadores por hora del día, copiados al terminar la corrida. Sirven para el
         # gráfico del perfil: muestran en qué hora está realmente el pico.
         self.llegadas_por_hora: list[int] = [0] * 24
         self.espera_por_hora: list[float] = [0.0] * 24
         self.perdidos_por_hora: list[int] = [0] * 24
+        # Momentos importantes para los avisos de la animación (parte 2, tanda 7), en orden de tiempo:
+        #   ("pedido", minuto, producto, nivel 0–1 al pedir, origen, redirigido, minuto de llegada, litros)
+        #   ("descarga", minuto, producto, litros recibidos)
+        #   ("corte_gnc", minuto en que empieza, en que termina dentro de la corrida, inicio y fin del episodio entero)
+        self.eventos: list[tuple] = []
+        # Lo mismo pero día por día (parte 2, tanda 5): para filtrar el perfil del día por fechas.
+        self.llegadas_dia_hora: list[list[int]] = []          # [día][hora]
+        self.espera_dia_hora: list[list[list[float]]] = []    # [día][hora] = [suma de esperas, cantidad]
+
+    def _dia(self, dia: int) -> None:
+        while len(self.llegadas_dia_hora) <= dia:
+            self.llegadas_dia_hora.append([0] * 24)
+            self.espera_dia_hora.append([[0.0, 0] for _ in range(24)])
+
+    def contar_llegada(self, minuto: float) -> None:
+        dia, hora = int(minuto // MINUTOS_POR_DIA), int((minuto % MINUTOS_POR_DIA) // 60)
+        self._dia(dia)
+        self.llegadas_dia_hora[dia][hora] += 1
+
+    def contar_espera(self, minuto_llegada: float, espera: float) -> None:
+        dia, hora = int(minuto_llegada // MINUTOS_POR_DIA), int((minuto_llegada % MINUTOS_POR_DIA) // 60)
+        self._dia(dia)
+        celda = self.espera_dia_hora[dia][hora]
+        celda[0] += espera
+        celda[1] += 1
 
     def capturar(self, **datos) -> None:
         self.cuadros.append(Cuadro(**datos))
 
-    def capturar_inventario(self, t: float, nivel: float, pedidos_en_camino: int) -> None:
+    def capturar_inventario(
+        self, t: float, nivel: float, pedidos_en_camino: int, por_producto: tuple = ()
+    ) -> None:
         self.inventario.append((t, nivel, pedidos_en_camino))
+        if por_producto:
+            self.inventario_producto.append((t, *por_producto))
 
     def registrar_dia(self, dia: DiaSimulado) -> None:
         self.dias.append(dia)

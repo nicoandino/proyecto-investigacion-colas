@@ -18,7 +18,9 @@ import random
 
 from sim.config import DemandaDiaria, Triangular
 
-#: Cada fuente de azar del modelo.
+#: Cada fuente de azar del modelo. Los streams NUEVOS se agregan SIEMPRE AL FINAL:
+#: reordenar esta tupla cambia las semillas de los anteriores y rompe los números
+#: aleatorios comunes y los dorados (trampa 6 del orquestador).
 STREAMS = (
     "llegadas",   # instantes de llegada de los autos
     "carga",      # tiempo de carga de combustible
@@ -27,6 +29,37 @@ STREAMS = (
     "litros",     # cuántos litros carga cada auto
     "demanda",    # cuántos autos trae cada día (Monte Carlo, tabla empírica)
     "entrega",    # plazo de entrega del camión cisterna
+    "producto",   # qué producto carga cada cliente (Fase 2)
+    "tipo_vehiculo",  # qué tipo de vehículo es cada cliente (Fase 2)
+    # Fase 4: el plazo de cada camión sale de un stream PROPIO por producto. Así, cambiar
+    # la política de un producto no corre los sorteos de plazo de los otros (números
+    # aleatorios comunes por producto: permite barrer las 4 políticas a la vez).
+    "entrega_super",
+    "entrega_vpower",
+    "entrega_diesel_g2",
+    "entrega_diesel_g3",
+    # Fase 5: los cortes de ruta, un stream por producto por la misma razón.
+    "corte_ruta_super",
+    "corte_ruta_vpower",
+    "corte_ruta_diesel_g2",
+    "corte_ruta_diesel_g3",
+    # Fase 6: el calendario de episodios de corte de GNC y la migración a nafta.
+    "corte_gnc",
+    "migracion",
+    # Parte 2, tanda 4: más cortes de GNC en todo el invierno y el invierno frío que los alarga.
+    "cortes_extra_gnc",
+    "invierno_frio",
+    # Parte 2, tanda 8: si el origen puede cumplir cada pedido, un stream por producto (como los plazos).
+    "origen_super",
+    "origen_vpower",
+    "origen_diesel_g2",
+    "origen_diesel_g3",
+    # Parte 4: eventos aleatorios. Un stream por evento (prenderlos o apagarlos no corre a los otros), más el
+    # de la rotura de cada viaje y el de los clientes que no llegan por el corte de la avenida.
+    "evento_01", "evento_02", "evento_03", "evento_04", "evento_05", "evento_06", "evento_07",
+    "evento_08", "evento_09", "evento_10", "evento_11", "evento_12", "evento_13", "evento_14",
+    "evento_11_viaje",
+    "evento_12_llegadas",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden
@@ -37,6 +70,9 @@ _MULTIPLICADOR = 7_919
 
 class Aleatorio:
     """Fábrica de variables aleatorias del modelo, con un generador por stream."""
+
+    #: En el modelo con azar es False; `AleatorioDeterminista` lo pone en True.
+    es_determinista = False
 
     def __init__(self, semilla: int) -> None:
         self.semilla = int(semilla)
@@ -69,6 +105,31 @@ class Aleatorio:
         """True con probabilidad p. Modela la decisión de entrar al minimarket."""
         return self._g(stream).random() < p
 
+    def discreta(self, pesos: tuple[float, ...], stream: str) -> int:
+        """Índice sorteado por pesos (se normalizan solos). Monte Carlo de 5 pasos:
+        frecuencia → probabilidad → acumulada → intervalo → sorteo."""
+        u = self._g(stream).random()
+        total = sum(pesos)
+        acumulado = 0.0
+        for i, peso in enumerate(pesos):
+            acumulado += peso / total
+            if u < acumulado:
+                return i
+        return len(pesos) - 1
+
+    def discreta_con_numero(self, pesos: tuple[float, ...], stream: str) -> tuple[int, int]:
+        """Como `discreta` pero devuelve además el número aleatorio de dos dígitos
+        (01 a 100) para poder mostrar la tabla de simulación igual que en el apunte."""
+        u = self._g(stream).random()
+        numero = int(u * 100) + 1           # 01 a 100; el 100 se muestra como "00"
+        total = sum(pesos)
+        acumulado = 0.0
+        for i, peso in enumerate(pesos):
+            acumulado += peso / total
+            if u < acumulado:
+                return i, numero
+        return len(pesos) - 1, numero
+
     def empirica(self, tabla: DemandaDiaria, stream: str) -> tuple[int, int]:
         """Sortea un valor de una tabla de frecuencias empírica (método Monte Carlo).
 
@@ -79,16 +140,73 @@ class Aleatorio:
         numero = int(u * 100) + 1           # 01 a 100; el 100 se muestra como "00"
         return tabla.sortear(u), numero
 
-    def determinista(self, autos_por_dia: float) -> tuple[int, int]:
-        """Retorna una demanda determinista (sin azar).
+    def esperada(self, clientes_por_dia: float) -> tuple[int, int]:
+        """Demanda esperada del día, derivada de los litros por mes (sin sorteo).
 
-        En modo determinista no hay número aleatorio. El segundo valor es siempre 50
-        (representa que está en el "medio" del rango de valores posibles).
+        El total diario es fijo pero las llegadas siguen siendo Poisson y los tiempos
+        aleatorios: por eso se mantienen las réplicas y el calentamiento (B4).
 
         Args:
-            autos_por_dia: cantidad de autos esperados para el día
+            clientes_por_dia: clientes esperados para el día (litros ÷ litros medios)
 
         Returns:
-            Tupla (autos_redondeados, numero_pseudoaleatorio_50)
+            Tupla (clientes_redondeados, numero_pseudoaleatorio_50)
         """
-        return int(round(autos_por_dia)), 50
+        return int(round(clientes_por_dia)), 50
+
+
+class AleatorioDeterminista(Aleatorio):
+    """El mismo contrato que `Aleatorio`, pero SIN azar (simulación con datos reales).
+
+    Cada "sorteo" del modelo pasa a ser una regla exacta y reproducible:
+
+      · tiempos y litros (Triangular, exponencial) = el promedio de su distribución;
+      · producto, tipo de vehículo, compra en el minimarket y migración del GNC = **cuotas
+        exactas** (reparto proporcional "suave": con 20 % de compra, entra uno de cada cinco, y
+        los demás clientes se reparten igual, siempre en el mismo orden);
+      · el resto de los sorteos (cortes de ruta, etc.) devuelve el valor central.
+
+    Como el motor pide todo a `self.az`, alcanza con cambiar este objeto para que el modelo
+    entero sea determinista: la semilla no tiene ningún efecto.
+    """
+
+    es_determinista = True
+
+    def __init__(self, semilla: int = 0) -> None:
+        super().__init__(semilla)
+        self._acumulado: dict[tuple, list[float]] = {}
+
+    def _cuota(self, clave: tuple, pesos: tuple[float, ...]) -> int:
+        """Reparto proporcional suave: el índice que más "debe" según su peso en cada turno."""
+        total = sum(pesos)
+        estado = self._acumulado.setdefault(clave, [0.0] * len(pesos))
+        for i, peso in enumerate(pesos):
+            estado[i] += peso
+        elegido = max(range(len(pesos)), key=lambda i: (estado[i], -i))
+        estado[elegido] -= total
+        return elegido
+
+    def uniforme(self, stream: str) -> float:
+        return 0.5
+
+    def exponencial(self, media: float, stream: str) -> float:
+        return media
+
+    def triangular(self, t: Triangular, stream: str) -> float:
+        return t.media
+
+    def bernoulli(self, p: float, stream: str) -> bool:
+        if p <= 0.0:
+            return False
+        if p >= 1.0:
+            return True
+        return self._cuota((stream, "bernoulli", p), (p, 1.0 - p)) == 0
+
+    def discreta(self, pesos: tuple[float, ...], stream: str) -> int:
+        return self._cuota((stream, tuple(pesos)), tuple(pesos))
+
+    def discreta_con_numero(self, pesos: tuple[float, ...], stream: str) -> tuple[int, int]:
+        return self.discreta(pesos, stream), 0
+
+    def empirica(self, tabla: DemandaDiaria, stream: str) -> tuple[int, int]:
+        return int(round(tabla.media)), 0

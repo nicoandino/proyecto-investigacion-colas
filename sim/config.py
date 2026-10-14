@@ -510,6 +510,11 @@ class ParametrosGNC:
     compresores: int = valor("SUR-06")               # cargas simultáneas posibles
     migracion_a_nafta: float = valor("GNC-04")       # prob. de pasarse a Súper durante el corte
     episodios_en_horizonte: bool = valor("GNC-07")   # herramienta: forzar el corte adentro
+    # "Pueden ocurrir más cortes en todo el invierno" (menú, tanda 4): apagado por defecto. Los valores del
+    # Registro (GNC-08/09/10) son los que pone el menú al elegir esa opción.
+    cortes_extra: int = 0                            # episodios que se suman a los habituales
+    prob_invierno_frio: float = 0.0                  # prob. de que un corte se alargue
+    dias_extra_frio: int = 0                         # días que se alarga
 
     def __post_init__(self) -> None:
         if self.contrato not in ("interrumpible", "firme"):
@@ -520,6 +525,8 @@ class ParametrosGNC:
             raise ValueError("episodios ≥ 0, días por episodio ≥ 1 y compresores ≥ 1.")
         if not 0.0 <= self.migracion_a_nafta <= 1.0:
             raise ValueError("migracion_a_nafta tiene que estar entre 0 y 1.")
+        if self.cortes_extra < 0 or self.dias_extra_frio < 0 or not 0.0 <= self.prob_invierno_frio <= 1.0:
+            raise ValueError("cortes_extra y dias_extra_frio ≥ 0; prob_invierno_frio entre 0 y 1.")
 
 
 #: Los cinco productos de la estación real.
@@ -1083,6 +1090,7 @@ class ParametrosEconomicos:
     # Ingresos
     precios: tuple[tuple[str, float], ...] = valor("ECO-08")   # $ por litro (GNC: por m³); editables
     margen_por_litro: float = valor("ECO-01")              # $ de ganancia bruta por litro vendido
+    margenes_producto: tuple[tuple[str, float], ...] = ()  # $/L por producto (menú); () = todos ECO-01
     margen_compra: float = valor("ECO-02")                 # $ de ganancia bruta por compra en minimarket
 
     # Inversión y operación de la capacidad de atención
@@ -1118,7 +1126,8 @@ class ParametrosEconomicos:
 
     def margen_de(self, producto: str) -> float:
         """Margen por litro (por m³ el GNC) de un producto, con el cambio de precio si se editó."""
-        base = self.margen_gnc if producto == "gnc" else self.margen_por_litro
+        propio = dict(self.margenes_producto)
+        base = propio.get(producto, self.margen_gnc if producto == "gnc" else self.margen_por_litro)
         return base + self.delta_precio(producto)
 
     def __post_init__(self) -> None:

@@ -46,6 +46,9 @@ STREAMS = (
     # Fase 6: el calendario de episodios de corte de GNC y la migración a nafta.
     "corte_gnc",
     "migracion",
+    # Parte 2, tanda 4: más cortes de GNC en todo el invierno y el invierno frío que los alarga.
+    "cortes_extra_gnc",
+    "invierno_frio",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

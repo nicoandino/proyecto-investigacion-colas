@@ -315,7 +315,7 @@ def analizar_politicas_real(
             costo_almacenamiento = niveles[producto] * eco.costo_almacenamiento_litro_mes
             litros_perdidos_mes = sin_stock[producto] * DIAS_DEL_MES
             costo_faltante = (
-                litros_perdidos_mes * eco.margen_por_litro
+                litros_perdidos_mes * eco.margen_de(producto)
                 + perdidos[producto] * DIAS_DEL_MES * p.prob_compra * eco.margen_compra
             )
             vendidos_mes = vendidos[producto] * DIAS_DEL_MES
@@ -335,7 +335,7 @@ def analizar_politicas_real(
                     porcentaje_dias_quiebre=quiebre[producto],
                     litros_vendidos_mes=vendidos_mes,
                     margen_operativo=(
-                        vendidos_mes * eco.margen_por_litro
+                        vendidos_mes * eco.margen_de(producto)
                         - costo_pedidos
                         - costo_almacenamiento
                     ),

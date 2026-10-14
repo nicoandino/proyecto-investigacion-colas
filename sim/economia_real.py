@@ -217,7 +217,8 @@ def margen_de_equilibrio_por_litro(e: EconomiaMensual, eco: ParametrosEconomicos
     Es el número que más le dice al grupo: si es muy distinto de ECO-01 ($100/L, heredado), la
     conclusión económica depende de un dato que hoy no tenemos.
     """
-    litros = e.ingreso_combustible / eco.margen_por_litro if eco.margen_por_litro else 0.0
+    # Litros vendidos = ingreso de cada producto ÷ su margen (con márgenes por producto, cada uno el suyo).
+    litros = sum(v / eco.margen_de(k) for k, v in e.ingreso_por_producto if k != "gnc" and eco.margen_de(k))
     if litros <= 0:
         return float("nan")
     return (e.costo_total - e.ingreso_gnc - e.ingreso_minimarket) / litros

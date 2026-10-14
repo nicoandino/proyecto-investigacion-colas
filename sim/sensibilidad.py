@@ -448,6 +448,10 @@ NO_ES_EJE: dict[str, str] = {
     "RED-12": "son los escenarios de corte S4 (pestaña Escenarios), no un valor",
     "GNC-03": "las formas del corte son el escenario S3 (pestaña Escenarios)",
     "GNC-07": "herramienta de análisis (forzar el corte adentro): la base del tornado ya la usa",
+    "GNC-08": "opción del menú ('más cortes en todo el invierno'), apagada en la base; la cantidad de cortes "
+              "ya es el eje GNC-02",
+    "GNC-09": "sólo vale con la opción 'más cortes en todo el invierno'; la duración del corte ya es el eje GNC-06",
+    "GNC-10": "sólo vale con la opción 'más cortes en todo el invierno'; la duración del corte ya es el eje GNC-06",
 }
 
 #: Contradicciones del §4.2 que no son eje y por qué.

@@ -190,3 +190,76 @@ def aplicar_edicion(
     if ed.precios is not None:
         eco = replace(eco, precios=ed.precios)
     return p, eco
+
+
+# =============================================================================
+# Los ajustes del menú inicial (parte 2, tanda 4)
+# =============================================================================
+#: Margen de cada producto según el Registro: los líquidos ECO-01 ($/L), el GNC ECO-03 ($/m³). Heredados sin fuente.
+MARGENES_REGISTRO: tuple[tuple[str, float], ...] = tuple(
+    (pr, float(valor("ECO-03") if pr == "gnc" else valor("ECO-01")))
+    for pr in ("super", "vpower", "diesel_g2", "diesel_g3", "gnc")
+)
+
+#: Modos de corte de GNC del menú.
+CORTES_GNC = ("habituales", "todo_invierno")
+
+
+@dataclass(frozen=True)
+class Ajustes:
+    """Lo que se elige en el menú antes de simular. Por defecto, los valores del Registro.
+
+    La economía (márgenes, flete, almacenamiento, sueldo) no cambia la simulación, sólo la plata. Los cortes de
+    GNC y el % de clientes GNC sí cambian la simulación, pero sin azar: sigue siendo determinista.
+    """
+
+    margenes: tuple[tuple[str, float], ...] = MARGENES_REGISTRO
+    flete_fijo: float = float(valor("ECO-06")[0])
+    flete_km: float = float(valor("ECO-06")[1])
+    almacenamiento: float = float(valor("ECO-07"))
+    sueldo_playero: float = float(valor("ECO-04")[0])
+    cortes_gnc: str = "habituales"                    # "habituales" | "todo_invierno"
+    pct_gnc: float = float(valor("DEM-05"))
+
+    def cambios(self) -> list[str]:
+        """Lo que difiere del Registro, en palabras (para el encabezado de los resultados)."""
+        base = Ajustes()
+        salida = []
+        if self.margenes != base.margenes:
+            salida.append("márgenes por litro")
+        if (self.flete_fijo, self.flete_km) != (base.flete_fijo, base.flete_km):
+            salida.append("flete")
+        if self.almacenamiento != base.almacenamiento:
+            salida.append("costo de almacenamiento")
+        if self.sueldo_playero != base.sueldo_playero:
+            salida.append("sueldo de los playeros")
+        if self.cortes_gnc != base.cortes_gnc:
+            salida.append("más cortes de GNC en todo el invierno")
+        if abs(self.pct_gnc - base.pct_gnc) > 1e-9:
+            salida.append(f"{self.pct_gnc:.0%} de clientes GNC")
+        return salida
+
+
+def gnc_con_ajustes(g: ParametrosGNC | None, a: Ajustes) -> ParametrosGNC | None:
+    """El GNC con el modo de cortes elegido: 'todo el invierno' prende GNC-08/09/10."""
+    if g is None or a.cortes_gnc != "todo_invierno":
+        return g
+    return replace(
+        g, cortes_extra=int(valor("GNC-08")), prob_invierno_frio=float(valor("GNC-09")),
+        dias_extra_frio=int(valor("GNC-10")),
+    )
+
+
+def aplicar_ajustes(
+    p: ParametrosSimulacion, eco: ParametrosEconomicos, a: Ajustes
+) -> tuple[ParametrosSimulacion, ParametrosEconomicos]:
+    """Parámetros y economía con los ajustes del menú (con los defaults, idénticos a los del Registro)."""
+    eco = replace(
+        eco, margenes_producto=a.margenes, costo_pedido=a.flete_fijo, flete_por_km=a.flete_km,
+        costo_almacenamiento_litro_mes=a.almacenamiento, sueldo_playero_mensual=a.sueldo_playero,
+    )
+    p = replace(p, gnc=gnc_con_ajustes(p.gnc, a))
+    if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
+        p = replace(p, pct_gnc=a.pct_gnc)
+    return p, eco
+

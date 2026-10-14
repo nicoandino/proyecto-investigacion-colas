@@ -275,3 +275,14 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   con rótulos en palabras. Matiz que el rótulo dice: se pierde por falta de stock también cuando el tanque **no alcanza para la
   carga de ese cliente** aunque no esté vacío. Control nuevo (29): Σ causas = litros no vendidos; Σ horas de quiebre = tiempo
   sin combustible. `verificar.py` **120/120**; QA `reports/qa_tanda3_inventario.py`: 0 excepciones, 0 errores de consola.
+- **Tanda 4 ✅ (menú con parámetros).** `sim/periodo.py`: `Ajustes` (márgenes por producto, flete fijo y por km,
+  almacenamiento, sueldo del playero, modo de cortes de GNC, % de clientes GNC) y `aplicar_ajustes`; los defaults son los del
+  Registro y dan **exactamente** la misma corrida. Motor: `ParametrosEconomicos.margenes_producto` + `margen_de(producto)` (una
+  sola fórmula del margen, usada en la economía, el barrido y la venta perdida); `ParametrosGNC.cortes_extra /
+  prob_invierno_frio / dias_extra_frio` (0 por defecto) con los valores del Registro **GNC-08** (2 cortes extra), **GNC-09**
+  (30 %) y **GNC-10** (+4 días ⇒ 10, la alternativa larga de GNC-06), y dos streams nuevos al final (`cortes_extra_gnc`,
+  `invierno_frio`). Sin azar, los cortes extra caen en el medio de los huecos más largos del invierno y el alargue es una cuota:
+  11/6–16/6 · 28/6–7/7 (alargado) · 30/7–4/8 · 15/8–20/8. Menú: desplegables "💰 Economía" (con valor del Registro, rango de
+  prueba y la aclaración de heredado/no confirmado en cada ayuda) y "🔥 GNC"; los ajustes se guardan al simular y el encabezado
+  dice cuáles difieren del Registro; Economía muestra los márgenes usados. Control nuevo (30); GNC-08/09/10 clasificados en el
+  listado del tornado. `verificar.py` **122/122**; QA `reports/qa_tanda4_menu.py`: 0 excepciones, 0 errores de consola.

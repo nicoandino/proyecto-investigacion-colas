@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 114 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 47
+**Resumen:** 117 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 50
 
 ## La estación
 
@@ -148,6 +148,9 @@
 | GNC-04 | Migración a nafta durante el corte | 0.3 | % | 🟠 supuesto | la estación | sin_dato | DATOS: 'no hay migración documentada' → supuesto explícito | 0 % = 0.0 · 60 % = 0.6 |
 | GNC-06 | Duración de cada episodio de corte | 6 | días | 🟡 estimación | San Rafael | baja | DATOS §7 ('10–14 días en jun/jul' ⇒ 2 episodios de 6 días) | 3 días = 3 · 10 días = 10 |
 | GNC-07 | Forzar que los episodios caigan dentro del horizonte | False | — | 🟠 supuesto | la estación | sin_dato | orquestador (herramienta de análisis, no un dato) | no = False |
+| GNC-08 | Cortes de GNC extra si se eligen 'más cortes en todo el invierno' | 2 | episodios | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026) sobre GNC-02: el Registro ya traía '4 episodios' como alternativa | 0 extra = 0 |
+| GNC-09 | Probabilidad de invierno más frío que alarga cada corte | 0.3 | prob. | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026); no hay estadística de olas de frío por episodio | sin alargue = 0.0 |
+| GNC-10 | Días que se alarga un corte en un invierno más frío | 4 | días | 🟠 supuesto | San Rafael | sin_dato | grupo (13/10/2026): con el alargue el corte llega a 10 días, la alternativa larga de GNC-06 | — |
 | GNC-05 | Flujo máximo de la red de gas | sin datos (ventana/episodio aleatorio) | — | 🟠 supuesto | la estación | sin_dato | CASO §6.2 | — |
 
 ## Economía

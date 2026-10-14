@@ -63,6 +63,7 @@ def calendario_de_episodios(
             for k in range(1, n + 1):
                 corrimiento = round(k * hueco + (k - 1) * dur)
                 episodios.append(((INICIO_INVIERNO + timedelta(days=corrimiento) - fecha_inicio).days, dur))
+            episodios = _mas_cortes_y_frio(g, az, episodios, fecha_inicio)
         return sorted(episodios)
     if g.episodios_en_horizonte:
         candidatos = [
@@ -80,7 +81,47 @@ def calendario_de_episodios(
             corrimiento = int(u * (DIAS_INVIERNO - g.dias_por_episodio + 1))
             inicio = (INICIO_INVIERNO + timedelta(days=corrimiento) - fecha_inicio).days
             episodios.append((inicio, g.dias_por_episodio))
+        episodios = _mas_cortes_y_frio(g, az, episodios, fecha_inicio)
     return sorted(episodios)
+
+
+def _mas_cortes_y_frio(
+    g: ParametrosGNC, az: Aleatorio, episodios: list[tuple[int, int]], fecha_inicio: date
+) -> list[tuple[int, int]]:
+    """"Más cortes en todo el invierno" (menú): suma `cortes_extra` episodios y, con probabilidad
+    `prob_invierno_frio`, alarga cada corte `dias_extra_frio` días. Con los defaults no hace nada (ni sortea).
+
+    Sin azar los cortes extra caen en el medio de los huecos más largos del invierno (siempre las mismas fechas)
+    y el alargue es una cuota exacta; con azar las fechas salen del stream "cortes_extra_gnc" y el alargue del
+    stream "invierno_frio" (los dos al final de STREAMS: no mueven ningún otro sorteo).
+    """
+    corrimiento = (INICIO_INVIERNO - fecha_inicio).days     # día de la corrida en que empieza el invierno
+    dur = g.dias_por_episodio
+    salida = list(episodios)
+    if g.cortes_extra > 0:
+        if az.es_determinista:
+            ocupados = sorted((i - corrimiento, i - corrimiento + d) for i, d in episodios)
+            huecos, cursor = [], 0
+            for a, b in ocupados:
+                if a > cursor:
+                    huecos.append((cursor, a))
+                cursor = max(cursor, b)
+            if cursor < DIAS_INVIERNO:
+                huecos.append((cursor, DIAS_INVIERNO))
+            huecos.sort(key=lambda h: -(h[1] - h[0]))       # los más largos primero (empate: el más temprano)
+            for a, b in huecos[: g.cortes_extra]:
+                if b - a >= dur:
+                    salida.append((a + (b - a - dur) // 2 + corrimiento, dur))
+        else:
+            for _ in range(g.cortes_extra):
+                u = az.uniforme("cortes_extra_gnc")
+                salida.append((int(u * (DIAS_INVIERNO - dur + 1)) + corrimiento, dur))
+    if g.prob_invierno_frio > 0 and g.dias_extra_frio > 0:
+        salida = [
+            (i, d + g.dias_extra_frio) if az.bernoulli(g.prob_invierno_frio, "invierno_frio") else (i, d)
+            for i, d in sorted(salida)
+        ]
+    return sorted(salida)
 
 
 def intervalos_de_corte(

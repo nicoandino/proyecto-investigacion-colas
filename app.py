@@ -46,15 +46,19 @@ from sim.economia_real import (
     resumir_economia,
 )
 from sim.periodo import (
+    MARGENES_REGISTRO,
     MESES as MESES_PERIODO,
     NIVELES_DEMANDA,
     TEMPORADAS,
+    Ajustes,
     Edicion,
     Periodo,
     anio_completo,
+    aplicar_ajustes,
     aplicar_edicion,
     con_periodo,
     cortes_gnc_previstos,
+    gnc_con_ajustes,
     litros_de_nivel,
     por_dias,
     por_meses,
@@ -77,7 +81,7 @@ from sim.escenarios import (
     es_significativa,
     para_mes,
 )
-from sim.datos import AVISO_FUENTES, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
+from sim.datos import AVISO_FUENTES, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id, valor
 from sim.distribuciones import Aleatorio
 from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
@@ -1778,7 +1782,12 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         c3.caption(escapar_pesos(f"± {pesos(margen.semiamplitud)} (IC 95 %)"))
     equilibrio = margen_de_equilibrio_por_litro(lista[0], eco)
     c4.metric("Margen por litro de equilibrio", escapar_pesos(f"${equilibrio:,.0f}/L"))
-    c4.caption(escapar_pesos(f"hoy se usa ${eco.margen_por_litro:,.0f}/L (ECO-01)"))
+    liquidos = [pr.id for pr in p.productos if not pr.es_gnc]
+    usados = sorted({eco.margen_de(x) for x in liquidos})
+    c4.caption(escapar_pesos(
+        f"hoy se usa ${usados[0]:,.0f}/L (heredado sin fuente)" if len(usados) == 1
+        else "hoy se usan " + " · ".join(f"{NOMBRES_PRODUCTO[x]} ${eco.margen_de(x):,.0f}" for x in liquidos)
+    ))
     if margen.promedio < 0:
         st.error(
             escapar_pesos(
@@ -2948,7 +2957,7 @@ def menu_de_periodo() -> Periodo | None:
 def simular_periodo(periodo: Periodo, edicion: Edicion | None = None) -> None:
     """Corre el período con los datos reales (sin azar) o editado (con azar) y pasa a los resultados."""
     base = con_periodo(ParametrosSimulacion().datos_reales(), periodo)
-    eco = ParametrosEconomicos()
+    base, eco = aplicar_ajustes(base, ParametrosEconomicos(), ajustes_actuales())
     semilla = 1
     if edicion is not None:
         base, eco = aplicar_edicion(base, eco, edicion)
@@ -2966,6 +2975,91 @@ def simular_periodo(periodo: Periodo, edicion: Edicion | None = None) -> None:
     st.session_state.vista = "resultados"
 
 
+def ajustes_actuales() -> Ajustes:
+    """Los ajustes guardados al simular (los widgets se borran al salir del menú; esto no)."""
+    return st.session_state.get("ajustes") or Ajustes()
+
+
+NOMBRES_PRODUCTO = {"super": "Súper", "vpower": "V-Power", "diesel_g2": "Diésel G2", "diesel_g3": "Diésel G3",
+                    "gnc": "GNC"}
+
+
+def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
+    """Los desplegables del menú inicial: Economía y GNC. Devuelve los `Ajustes` elegidos."""
+    previo = ajustes_actuales()
+    margenes_previos = dict(previo.margenes)
+
+    with st.expander("💰 Economía: márgenes, flete, almacenamiento y sueldos"):
+        st.caption(
+            "Los márgenes, el flete y el almacenamiento son **heredados sin fuente** (del proyecto hipotético): "
+            "muestran cómo se calcula, no son cifras del negocio. Los sueldos son la escala de FECRA de enero-2026 "
+            "con adicionales, **no confirmados** para esta estación. Cambiar esto no cambia la simulación: sólo la plata."
+        )
+        rango_l = por_id("ECO-01")
+        rango_m3 = por_id("ECO-03")
+        columnas = st.columns(5)
+        margenes = []
+        for col, (pr, defecto) in zip(columnas, MARGENES_REGISTRO):
+            d = rango_m3 if pr == "gnc" else rango_l
+            unidad = "m³" if pr == "gnc" else "L"
+            margenes.append((pr, float(col.number_input(
+                f"Margen {NOMBRES_PRODUCTO[pr]} ($/{unidad})", 0, 5000, int(margenes_previos.get(pr, defecto)), 10,
+                key=f"aj_margen_{pr}",
+                help=f"Registro: ${defecto:,.0f}/{unidad} ({d.id}, heredado sin fuente). Rango de prueba del tornado: "
+                     f"${d.bajo:,.0f}–{d.alto:,.0f} (no es un dato).".replace(",", "."),
+            ))))
+        flete = por_id("ECO-06")
+        c1, c2, c3, c4 = st.columns(4)
+        flete_fijo = float(c1.number_input(
+            "Flete por viaje ($)", 0, 5_000_000, int(previo.flete_fijo), 10_000, key="aj_flete_fijo",
+            help=f"Registro: ${flete.valor[0]:,.0f} por viaje (ECO-06, heredado sin fuente; implausible para ≈ 1.000 km). "
+                 f"Rango de prueba: ${flete.bajo:,.0f}–{flete.alto:,.0f}.".replace(",", "."),
+        ))
+        flete_km = float(c2.number_input(
+            "Flete por km ($/km)", 0, 20_000, int(previo.flete_km), 50, key="aj_flete_km",
+            help="Registro: $0 (sin dato). Se multiplica por los km de ida y vuelta desde el origen.",
+        ))
+        alm = por_id("ECO-07")
+        almacenamiento = float(c3.number_input(
+            "Almacenamiento ($ por litro y por mes)", 0, 500, int(previo.almacenamiento), 1, key="aj_almacen",
+            help=f"Registro: ${alm.valor:,.0f} (ECO-07, heredado sin fuente). Rango de prueba: "
+                 f"${alm.bajo:,.1f}–{alm.alto:,.1f}.".replace(".", ","),
+        ))
+        sueldos = por_id("ECO-04")
+        sueldo = float(c4.number_input(
+            "Sueldo de un playero ($/mes)", 0, 10_000_000, int(previo.sueldo_playero), 10_000, key="aj_sueldo",
+            help=f"Registro: ${sueldos.valor[0]:,.0f} con adicionales (FECRA, enero-2026; no confirmado para esta "
+                 f"estación). El básico sin adicionales es ${sueldos.alternativas[0][1][0]:,.0f}.".replace(",", "."),
+        ))
+
+    with st.expander("🔥 GNC: cortes de invierno y clientes"):
+        opciones = {
+            "habituales": "Sólo los cortes habituales (2 cortes de 6 días entre junio y agosto)",
+            "todo_invierno": "Pueden ocurrir más cortes en todo el invierno (y un invierno más frío los alarga)",
+        }
+        cortes = st.radio(
+            "Cortes de GNC", list(opciones), index=list(opciones).index(previo.cortes_gnc),
+            format_func=opciones.get, key="aj_cortes_gnc",
+        )
+        if cortes == "todo_invierno":
+            st.caption(
+                f"Se suman {valor('GNC-08')} cortes en los huecos más largos del invierno y, con probabilidad "
+                f"{valor('GNC-09'):.0%}, cada corte se alarga {valor('GNC-10')} días por un invierno más frío "
+                f"(GNC-08/09/10, supuestos del grupo). Sin azar el alargue es una cuota exacta: siempre los mismos cortes."
+            )
+        pct = st.slider(
+            "Clientes que entran por GNC", 0, 30, int(round(100 * previo.pct_gnc)), 1, key="aj_pct_gnc",
+            format="%d %%",
+            help="DEM-05: 3 % de las llegadas (estimación). El Registro trae 11 % (parque GNC de ENARGAS) y 20 % "
+                 "como alternativas de sensibilidad.",
+        ) / 100.0
+
+    return Ajustes(
+        margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
+        sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct,
+    )
+
+
 def pantalla_inicio() -> None:
     st.title("⛽ Simulador de la Estación Shell — San Rafael")
     st.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
@@ -2978,17 +3072,22 @@ def pantalla_inicio() -> None:
     periodo = menu_de_periodo()
     if periodo is not None:
         st.success(f"**{periodo.titulo}** — {periodo.texto}", icon="📅")
-        if periodo.incluye_invierno:
-            cortes = cortes_gnc_previstos(periodo, ParametrosSimulacion().gnc)
-            if cortes:
-                st.info(
-                    "Incluye invierno: se aplican los **cortes de GNC** (fechas fijas, GNC-02): "
-                    + " · ".join(f"{texto_fecha(a)} al {texto_fecha(b)}" for a, b in cortes) + ".",
-                    icon="🔥",
-                )
-        else:
-            st.caption("No incluye invierno: no hay cortes de GNC en este período.")
+
+    st.markdown("##### Ajustes (opcionales; arrancan con los valores del Registro)")
+    ajustes = menu_de_ajustes(periodo)
+    if periodo is not None and periodo.incluye_invierno:
+        cortes = cortes_gnc_previstos(periodo, gnc_con_ajustes(ParametrosSimulacion().gnc, ajustes))
+        if cortes:
+            st.info(
+                "Incluye invierno: se aplican los **cortes de GNC** (sin azar, fechas fijas): "
+                + " · ".join(f"{texto_fecha(a)} al {texto_fecha(b)} ({(b - a).days + 1} días)" for a, b in cortes)
+                + ".",
+                icon="🔥",
+            )
+    elif periodo is not None:
+        st.caption("No incluye invierno: no hay cortes de GNC en este período.")
     if st.button("▶ Simular con datos reales", type="primary", disabled=periodo is None):
+        st.session_state.ajustes = ajustes
         simular_periodo(periodo)
         st.rerun()
     st.divider()
@@ -3027,7 +3126,7 @@ def pantalla_editar() -> None:
 
     st.markdown("##### Clientes de GNC")
     pct_gnc = st.slider("Porcentaje de clientes que cargan GNC", 0, 30,
-                        int(round(100 * (previa.pct_gnc if previa.pct_gnc is not None else base.pct_gnc))),
+                        int(round(100 * (previa.pct_gnc if previa.pct_gnc is not None else ajustes_actuales().pct_gnc))),
                         1, key="ed_gnc", format="%d %%",
                         help="Hoy se usa 3 % (DEM-05); el Registro trae 11 % y 20 % como alternativas.") / 100.0
 
@@ -3088,6 +3187,9 @@ def encabezado_resultados() -> None:
             f"Siempre da el mismo resultado.",
             icon="✅",
         )
+    cambios = ajustes_actuales().cambios()
+    if cambios:
+        st.caption("Ajustes del menú distintos del Registro: " + ", ".join(cambios) + ".")
 
 
 def pie_de_resultados() -> None:

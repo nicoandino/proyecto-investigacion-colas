@@ -1839,6 +1839,37 @@ def main() -> int:
         " · ".join(f"{pr}: {n} quiebres, {h:.1f} h (el más largo {mx:.1f} h)" for pr, n, h, mx in r29.quiebres),
     )
 
+    # ------------------------------------------------------------------ 30
+    separador("30. Parte 2, tanda 4: los ajustes del menú (economía y GNC)")
+    from sim.periodo import Ajustes, aplicar_ajustes, gnc_con_ajustes
+
+    p30 = dataclasses.replace(
+        con_periodo(ParametrosSimulacion().datos_reales(), por_meses(7, 7)), animar_todo=False
+    )
+    eco30 = ParametrosEconomicos()
+    p30b, eco30b = aplicar_ajustes(p30, eco30, Ajustes())
+    controlar(
+        p30b == p30 and correr_replica(p30b, 1)[0] == correr_replica(p30, 1)[0]
+        and all(eco30b.margen_de(x) == eco30.margen_de(x) for x in ("super", "diesel_g3", "gnc"))
+        and (eco30b.costo_pedido, eco30b.flete_por_km, eco30b.costo_almacenamiento_litro_mes,
+             eco30b.sueldo_playero_mensual)
+        == (eco30.costo_pedido, eco30.flete_por_km, eco30.costo_almacenamiento_litro_mes,
+            eco30.sueldo_playero_mensual),
+        "Con los ajustes por defecto todo da exactamente igual que con el Registro",
+        "mismos parámetros, misma réplica y mismos márgenes, flete, almacenamiento y sueldo",
+    )
+    invierno30 = cortes_gnc_previstos(por_temporada("Invierno"), gnc_con_ajustes(p30.gnc, Ajustes(cortes_gnc="todo_invierno")))
+    largos = [(b - a).days + 1 for a, b in invierno30]
+    _, eco30m = aplicar_ajustes(p30, eco30, Ajustes(margenes=(("super", 120.0),)))
+    controlar(
+        len(invierno30) == 2 + 2 and sorted(largos) == [6, 6, 6, 10]
+        and cortes_gnc_previstos(por_temporada("Invierno"), gnc_con_ajustes(p30.gnc, Ajustes(cortes_gnc="todo_invierno")))
+        == invierno30
+        and eco30m.margen_de("super") == 120.0 and eco30m.margen_de("vpower") == eco30.margen_por_litro,
+        "'Más cortes en todo el invierno' suma 2 cortes y alarga una cuota (sin azar, siempre igual); márgenes por producto",
+        " · ".join(f"{a:%d/%m}–{b:%d/%m}" for a, b in invierno30),
+    )
+
     # ------------------------------------------------------------------
     print()
     if _fallas == 0:

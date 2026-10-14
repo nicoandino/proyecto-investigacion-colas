@@ -536,6 +536,24 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   `qa_f3_plan`, `qa_tanda3`…`qa_tanda8`): 0 excepciones; 0 errores de consola (la tanda 7 dio 14 "Failed to fetch" con el
   servidor cargado y 0 al repetirla sola).
 
+## 27. Decisiones de Nico sobre los valores por defecto (14/10/2026)
+
+- **"Poné lo real":** la forma de la demanda a lo largo del año sale por defecto de los **índices de la serie real** de
+  Shell Mendoza (PRO-01); el calendario de temporadas (DEM-14, supuesto) y la demanda sin forma quedan como opciones del
+  menú. El total del año no cambia (los índices promedian 1).
+- **"La real o la más conveniente":** la política real de la estación no está documentada (INV-06), así que va **la más
+  conveniente**: se evaluaron las 14 candidatas (la de INV-07, las 13 de la grilla y la del pronóstico) en el año completo
+  con datos reales y los índices reales, y la más barata es **s = 2 días y Q = 4,5 días de venta** (**INV-13**, supuesto con
+  su evaluación): $4,52 M/mes contra $4,66 M la del pronóstico y $4,95 M la de INV-07, con 14 L/mes sin vender. Por tanque,
+  Súper y G2 prefieren esta y V-Power y G3 la del pronóstico; se eligió una sola para todos por simple. Las otras dos quedan
+  como opciones en el menú 🚚. Ojo: los costos usan márgenes y flete heredados sin fuente (ordenan, no son del negocio).
+- `Ajustes()` ahora **es** lo que usa la app por defecto (`politica="conveniente"`, `indices_reales=True`,
+  `calendario=False`); los controles que probaban el Registro puro o el calendario lo piden explícito. `runner.politica_en_dias`
+  arma (s, Q) en días de venta (la grilla la usa). Control nuevo (46: INV-13 es la más barata de las 14 en el año y es la
+  que carga la app). `verificar.py` **144/144** (ahora tarda ≈ 5 min por ese control). QA: los scripts que dependían del
+  valor por defecto viejo (`qa_p4_stock`, `qa_tanda5_calendario`, `qa_p3_pronostico`) piden la opción explícita; 0
+  excepciones, 0 errores de consola.
+
 ---
 
 # Parte 4 — Eventos aleatorios que alteran la estación (14/10/2026)

@@ -58,7 +58,8 @@ with sync_playwright() as pw:
     pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)
     esperar(4)
     cuerpo = pagina.locator("body").inner_text()
-    print("Con índices reales | encabezado:", "índices mensuales de la serie real" in cuerpo)
+    # Desde el 14/10/2026 los índices reales son el valor por defecto: el encabezado no los lista como cambio.
+    print("Con índices reales (por defecto) | encabezado sin cambios:", "Ajustes del menú distintos" not in cuerpo)
     texto = pestania("Demanda")
     print("Demanda | cuenta con el índice:", "(serie real)" in texto, "| aclaración:", "índices mensuales de la serie real" in texto)
     pagina.screenshot(path=str(SALIDA / "demanda_indices.png"), full_page=True)

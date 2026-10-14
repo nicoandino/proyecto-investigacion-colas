@@ -211,8 +211,11 @@ CORTES_GNC = ("habituales", "todo_invierno")
 
 @dataclass(frozen=True)
 class Ajustes:
-    """Lo que se elige en el menú antes de simular. Por defecto, los valores del Registro (y el calendario de
-    temporadas prendido, que es la opción por defecto de la app; `calendario=False` deja la demanda del Registro pura).
+    """Lo que se elige en el menú antes de simular; los valores por defecto son los que usa la app.
+
+    Por defecto (decisión de Nico, 14/10/2026): la forma de la demanda a lo largo del año sale de los **índices de la
+    serie real** (PRO-01) y la política de reposición es **la más conveniente** de las evaluadas (INV-13). Para la
+    demanda del Registro pura: `indices_reales=False, calendario=False`; para la política de INV-07: `politica="cargada"`.
 
     La economía (márgenes, flete, almacenamiento, sueldo) no cambia la simulación, sólo la plata. Los cortes de
     GNC y el % de clientes GNC sí cambian la simulación, pero sin azar: sigue siendo determinista.
@@ -225,9 +228,9 @@ class Ajustes:
     sueldo_playero: float = float(valor("ECO-04")[0])
     cortes_gnc: str = "habituales"                    # "habituales" | "todo_invierno"
     pct_gnc: float = float(valor("DEM-05"))
-    calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
-    indices_reales: bool = False                      # forma mensual de la serie real (PRO-01, parte 3) en vez del calendario
-    politica_pronostico: bool = False                 # punto de pedido con el stock de seguridad del pronóstico (P4)
+    calendario: bool = False                          # calendario de temporadas (DEM-14): opción del menú
+    indices_reales: bool = True                       # forma mensual de la serie real (PRO-01): la de la app por defecto
+    politica: str = "conveniente"                     # "conveniente" (INV-13) · "pronostico" (P4) · "cargada" (INV-07)
     topes_origen: tuple[tuple[str, float], ...] = tuple(valor("FLU-02"))   # cuánto puede despachar cada origen (F3)
     despachar_plan: bool = False                      # los camiones salen según el plan de costo mínimo (F3)
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
@@ -262,18 +265,18 @@ class Ajustes:
                 f"{len(self.eventos)} eventos aleatorios (semilla {self.semilla_eventos}"
                 + (f", frecuencia × {self.frecuencia_eventos:g}" if self.frecuencia_eventos != 1 else "") + ")"
             )
-        if self.politica_pronostico:
-            salida.append("política de reposición por pronóstico (stock de seguridad)")
+        if self.politica != base.politica:
+            salida.append({"pronostico": "política de reposición por pronóstico (stock de seguridad)",
+                           "cargada": "política de reposición INV-07 (1,5 días de venta)"}.get(self.politica, self.politica))
         if self.topes_origen != base.topes_origen:
             salida.append("topes de despacho de los orígenes")
         if self.despachar_plan:
             salida.append("camiones despachados según el plan de costo mínimo")
-        if self.indices_reales:
-            salida.append("índices mensuales de la serie real (pronóstico)")
-        elif not self.calendario:
-            salida.append("sin calendario de temporadas")
-        elif self.factores != base.factores:
-            salida.append("factores del calendario de temporadas")
+        if not self.indices_reales and self.calendario:
+            salida.append("calendario de temporadas en vez de los índices reales"
+                          + (" (con factores cambiados)" if self.factores != base.factores else ""))
+        elif not self.indices_reales:
+            salida.append("demanda sin forma mensual (todos los meses iguales)")
         return salida
 
 
@@ -317,11 +320,16 @@ def aplicar_ajustes(
         plan = plan_de_abastecimiento(p.red, 100.0, dict(a.topes_origen))
         if plan.cuotas:
             p = replace(p, red=replace(p.red, cuotas_origen=plan.cuotas))
-    if a.politica_pronostico:
-        # El punto de pedido de cada tanque con el stock de seguridad del pronóstico (sim/pronostico.py, P4).
-        from sim.pronostico import politica_por_pronostico
+    if a.politica in ("pronostico", "conveniente"):
+        # P4: el punto de pedido con el stock de seguridad del pronóstico; INV-13: la más conveniente de las evaluadas.
+        if a.politica == "pronostico":
+            from sim.pronostico import politica_por_pronostico
 
-        politica = politica_por_pronostico(p)
+            politica = politica_por_pronostico(p)
+        else:
+            from sim.runner import politica_en_dias
+
+            politica = politica_en_dias(p, *valor("INV-13"))
         p = replace(p, inventario=tuple(
             replace(i, punto_pedido=politica[i.producto][0], cantidad_pedido=politica[i.producto][1])
             for i in p.inventario

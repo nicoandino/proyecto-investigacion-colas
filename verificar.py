@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
+       barata de las 14 candidatas en el año completo con datos reales.
    45. §24, G1: la tabla de camiones tiene un camión por pedido y la ruta recorrida se reconstruye
        (desvío o espera).
    44. Parte 3, etapa F3: el menú arma las cuotas del plan (con los topes de hoy no cambia nada) y la
@@ -1875,7 +1877,7 @@ def main() -> int:
         con_periodo(ParametrosSimulacion().datos_reales(), por_meses(7, 7)), animar_todo=False
     )
     eco30 = ParametrosEconomicos()
-    p30b, eco30b = aplicar_ajustes(p30, eco30, Ajustes(calendario=False))
+    p30b, eco30b = aplicar_ajustes(p30, eco30, Ajustes(calendario=False, indices_reales=False, politica="cargada"))   # los valores del Registro
     controlar(
         p30b == p30 and correr_replica(p30b, 1)[0] == correr_replica(p30, 1)[0]
         and all(eco30b.margen_de(x) == eco30.margen_de(x) for x in ("super", "diesel_g3", "gnc"))
@@ -1903,8 +1905,9 @@ def main() -> int:
     from sim.datos import valor as _valor
 
     p31 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), _anio()), animar_todo=False)
-    p31n, _ = aplicar_ajustes(p31, eco30, Ajustes(factores=(("verano", 1.0), ("vacaciones_invierno", 1.0), ("invierno", 1.0))))
-    p31c, _ = aplicar_ajustes(p31, eco30, Ajustes())
+    p31n, _ = aplicar_ajustes(p31, eco30, Ajustes(calendario=True, indices_reales=False, politica="cargada",
+                                                  factores=(("verano", 1.0), ("vacaciones_invierno", 1.0), ("invierno", 1.0))))
+    p31c, _ = aplicar_ajustes(p31, eco30, Ajustes(calendario=True, indices_reales=False, politica="cargada"))
     factores31 = dict(_valor("DEM-14"))
     dias31 = {"verano": 10, "otoño": 100, "invierno": 160, "vacaciones": 190, "invierno tarde": 200}
     razones = {k: p31c.litros_del_dia(d) / p31.litros_del_dia(d) for k, d in dias31.items()}
@@ -1962,9 +1965,9 @@ def main() -> int:
     )
     _, eco33 = None, ParametrosEconomicos()
     corrida33 = {}
-    for etiqueta, aj in (("apagado", Ajustes(calendario=False)),
-                          ("sin Dock Sud", Ajustes(calendario=False, origenes_no_disponibles=("DOCK",))),
-                          ("eventos", Ajustes(calendario=False, eventos_abastecimiento=True))):
+    for etiqueta, aj in (("apagado", Ajustes(calendario=False, indices_reales=False, politica="cargada")),
+                          ("sin Dock Sud", Ajustes(calendario=False, indices_reales=False, politica="cargada", origenes_no_disponibles=("DOCK",))),
+                          ("eventos", Ajustes(calendario=False, indices_reales=False, politica="cargada", eventos_abastecimiento=True))):
         p33, _ = aplicar_ajustes(dataclasses.replace(p30, fecha_inicio=(1, 1), dias=365), eco33, aj)
         ind33, _ = simular(p33, semilla=1)
         corrida33[etiqueta] = (ind33, correr_replica(p33, 1)[0])
@@ -2236,7 +2239,7 @@ def main() -> int:
 
     base40 = con_periodo(ParametrosSimulacion().datos_reales(), _anio40())
     p_def, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes())
-    p_neu, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes(calendario=False))
+    p_neu, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes(calendario=False, indices_reales=False))
     p_real, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes(calendario=False, indices_reales=True))
     indices40 = pron.analizar().indices
 
@@ -2248,9 +2251,9 @@ def main() -> int:
     proporcional = all(abs(litros_mes40(p_real, m) / litros_mes40(p_real, 6) - indices40[m - 1] / indices40[5]) < 1e-9
                        for m in range(1, 13))
     controlar(
-        p_def.estacionalidad == base40.estacionalidad and p_def.calendario_demanda == tuple(_valor("DEM-14"))
+        p_def.estacionalidad == p_real.estacionalidad and p_def.calendario_demanda == ()
         and abs(total_real - total_neu) < 1e-6 and proporcional and p_real.calendario_demanda == ()
-        and "índices mensuales de la serie real (pronóstico)" in Ajustes(indices_reales=True).cambios(),
+        and "calendario de temporadas en vez de los índices reales" in Ajustes(indices_reales=False, calendario=True).cambios(),
         "Los índices de la serie real reparten los mismos litros del año, mes a mes según su índice",
         f"año: {total_neu:,.0f} L sin forma = {total_real:,.0f} L con los índices reales · marzo ÷ junio = "
         f"{litros_mes40(p_real, 3) / litros_mes40(p_real, 6):.3f} = {indices40[2] / indices40[5]:.3f} · "
@@ -2274,8 +2277,8 @@ def main() -> int:
         largo = i.plazo_entrega.media / 24
         a_mano.append(min(round(d * largo + 1.96 * error41 * d * 30 / _m41.sqrt(30) * _m41.sqrt(largo), -2),
                           i.capacidad - 500))
-    p_carg, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes())
-    p_pron, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes(politica_pronostico=True))
+    p_carg, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes(politica="cargada"))
+    p_pron, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes(politica="pronostico"))
     r_carg, _ = correr_replica(p_carg, semilla=1)
     r_pron, _ = correr_replica(p_pron, semilla=1)
     t_carg, t_pron = dict(r_carg.totales), dict(r_pron.totales)
@@ -2433,6 +2436,33 @@ def main() -> int:
         "Un camión por pedido (= los pedidos de Indicadores); la ruta recorrida se reconstruye: desvío o espera",
         f"enero: {len(r45.camiones)} camiones · con E4, Dock Sud se desvía ({desvio.km:,.1f} km, +{d_dock / 60:.1f} h) y "
         f"Arroyo Seco espera ({d_arroyo / 60:.0f} h, misma ruta)",
+    )
+
+    # ------------------------------------------------------------------ 46
+    separador("46. Valores por defecto de la app: índices reales y la política más conveniente (INV-13)")
+    from sim.economia import analizar_politicas_real
+    from sim.runner import PuntoBarrido, ResultadoBarridoReal, con_politicas, correr_replicas, politica_en_dias
+
+    base46, eco46 = aplicar_ajustes(con_periodo(ParametrosSimulacion().datos_reales(), _anio40()),
+                                    ParametrosEconomicos(), Ajustes(politica="cargada"))
+    candidatas = grilla_politicas_real(base46) + [pron.politica_por_pronostico(base46)]
+    hechos46 = [PuntoBarrido(politicas=pol, replicas=correr_replicas(con_politicas(base46, pol), replicas=1, semilla_base=1))
+                for pol in candidatas]
+    costos46 = analizar_politicas_real(
+        ResultadoBarridoReal(productos=tuple(i.producto for i in base46.inventario), puntos=hechos46), eco46, base46)
+    total46 = [sum(lista[k].costo_total for lista in costos46.values()) for k in range(len(candidatas))]
+    elegida = politica_en_dias(base46, *_valor("INV-13"))
+    k46 = candidatas.index(elegida)
+    p_app, _ = aplicar_ajustes(con_periodo(ParametrosSimulacion().datos_reales(), _anio40()),
+                               ParametrosEconomicos(), Ajustes())
+    controlar(
+        total46[k46] == min(total46) and len(candidatas) == 14
+        and {i.producto: (i.punto_pedido, i.cantidad_pedido) for i in p_app.inventario} == elegida
+        and p_app.estacionalidad == p_real.estacionalidad and p_app.calendario_demanda == ()
+        and Ajustes().cambios() == [],
+        "La app usa por defecto los índices de la serie real y la política más barata de las 14 en el año",
+        f"año con datos reales: INV-13 (s = {_valor('INV-13')[0]:g}, Q = {_valor('INV-13')[1]:g} días) ${total46[k46]:,.0f}/mes · "
+        f"pronóstico ${total46[-1]:,.0f} · INV-07 ${total46[0]:,.0f} · la más cara ${max(total46):,.0f}",
     )
 
     # ------------------------------------------------------------------

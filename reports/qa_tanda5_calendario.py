@@ -36,6 +36,11 @@ with sync_playwright() as pw:
             campo.fill(dias)
             campo.press("Enter")
             esperar()
+        # Desde el 14/10/2026 la app usa por defecto los índices reales: el calendario se elige en el menú.
+        pagina.get_by_text("📅 Calendario de demanda").first.click()
+        esperar()
+        pagina.get_by_text("Calendario de temporadas (supuesto del grupo, DEM-14)").first.click()
+        esperar(2)
         pagina.get_by_role("button", name="Simular con datos reales").click()
         pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)
         esperar(4)

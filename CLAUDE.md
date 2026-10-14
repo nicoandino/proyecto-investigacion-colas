@@ -25,17 +25,18 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 - **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (1·2·2); cola finita;
   abandono; caja del minimarket. **El GNC también lo carga un playero** (PER-04) y además usa un compresor.
 - **Demanda:** litros/mes (270.000) ⇒ clientes/día (≈ 252) con perfil horario, fin de semana ×1,30 normalizado,
-  estacionalidad neutra + **calendario de temporadas** (verano, vacaciones de invierno de Mendoza 6–17/7, resto del
-  invierno; DEM-14/15, activo en la app y neutro en los parámetros por defecto). Cada cliente: producto → tipo de
+  estacionalidad neutra en `ParametrosSimulacion()`; en la app, por defecto, los **índices mensuales de la serie real**
+  (PRO-01) y como opción el **calendario de temporadas** (DEM-14/15, supuesto). Cada cliente: producto → tipo de
   vehículo → litros → ¿compra?
-- **Inventario:** un tanque por líquido, política (s, Q) por producto, camión por producto (plazo 24–36–48 h)
+- **Inventario:** un tanque por líquido, política (s, Q) por producto (en la app, por defecto la más conveniente:
+  s = 2 y Q = 4,5 días de venta, INV-13), camión por producto (plazo 24–36–48 h)
   desde Dock Sud (991 km) por una red de rutas (Dijkstra) con cortes; orígenes alternativos Arroyo Seco y Luján
   (apagados por defecto). Quiebres y litros no vendidos por causa.
 - **GNC:** 3 compresores; episodios de corte total en jun–ago (opción: más cortes en todo el invierno e invierno
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **143 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **144 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -56,14 +57,14 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 7. Si cambia la **firma** de un módulo, **reiniciar Streamlit**; `fileWatcherType = "poll"` no se quita.
 8. `Escenario` guarda cambios declarativos (`((campo, valor), …)`), no lambdas.
 9. Un commit por etapa, en castellano, en la rama `claude/simulator-graphic-orchestrator-wu2xh4`. **Sin Pull Request.**
-10. **Antes de commitear:** `python verificar.py` (≈ 2 min) debe terminar en "Todos los controles pasaron".
+10. **Antes de commitear:** `python verificar.py` (≈ 5 min) debe terminar en "Todos los controles pasaron".
 11. No se escala: sin base de datos, login, API, Docker, plugins ni multiprocessing.
 
 ## Estructura
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      143 controles
+verificar.py      144 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -75,10 +76,11 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 143 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 144 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
-Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.
+Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·
+`verificar.py` completo ≈ 5 min (el control 46 corre 14 políticas en un año).
 
 ## Decisiones técnicas que siguen valiendo
 

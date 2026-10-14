@@ -1797,8 +1797,8 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         forma = st.radio(
             "Cómo cambia la demanda a lo largo del año", list(formas), index=list(formas).index(actual),
             format_func=formas.get, key="aj_forma_demanda",
-            help="Por defecto, el calendario de temporadas. La serie real (Secretaría de Energía) dice que en Shell "
-                 "Mendoza el verano casi no cambia; marzo y diciembre son los meses fuertes y junio el más flojo.",
+            help="Por defecto, los índices de la serie real (Secretaría de Energía): en Shell Mendoza el verano casi no "
+                 "cambia; marzo y diciembre son los meses fuertes y junio el más flojo. El calendario es un supuesto.",
         )
         calendario = forma == "calendario"
         indices_reales = forma == "real"
@@ -1856,11 +1856,17 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             help="Prendido: cada camión sale del origen que indica el plan de costo mínimo (cuotas exactas). Con los "
                  "topes de hoy el plan es todo desde Dock Sud y la corrida no cambia.",
         )
-        politica_pron = st.toggle(
-            "Punto de pedido por pronóstico (stock de seguridad)", value=previo.politica_pronostico,
-            key="aj_pol_pronostico",
-            help="s = lo que se vende mientras viaja el camión + 1,96 × el error del pronóstico de la serie real "
-                 "(pestaña 📈 Pronóstico). Apagado: la política cargada (INV-07, s = 1,5 días de venta).",
+        politicas = {
+            "conveniente": "La más conveniente: s = 2 días y Q = 4,5 días de venta (INV-13, por defecto)",
+            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña 📈 Pronóstico)",
+            "cargada": "La de INV-07: s = 1,5 días de venta",
+        }
+        politica = st.radio(
+            "Política de reposición de los tanques (s, Q)", list(politicas), index=list(politicas).index(previo.politica),
+            format_func=politicas.get, key="aj_politica",
+            help="La política real de la estación no está documentada (INV-06). Por defecto, la más barata de las 14 "
+                 "que se evaluaron en el año con datos reales (control 46); la del pronóstico no deja quiebres y "
+                 "cuesta un poco más.",
         )
         if len(no_disponibles) == len(opciones_origen):
             st.warning("Si ninguno está disponible, el pedido sale igual de Dock Sud con la demora de redirección.",
@@ -1871,7 +1877,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
-        indices_reales=bool(indices_reales), politica_pronostico=bool(politica_pron),
+        indices_reales=bool(indices_reales), politica=str(politica),
         topes_origen=(("DOCK", 1.0), ("ARROYO", float(tope_arroyo)), ("LUJAN", float(tope_lujan))),
         despachar_plan=bool(despachar),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),

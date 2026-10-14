@@ -592,6 +592,15 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "la simulación con datos reales no tiene calentamiento: arranca en el momento "
                     "cero con los tanques llenos", None, None),
           1.0),
+        ("INV-13", ("Política (s, Q) que usa la app por defecto, en días de venta de cada producto", "días",
+                    "A", "supuesto", "media",
+                    "evaluación del grupo (14/10/2026): la de menor costo de las 14 candidatas en el año completo con "
+                    "datos reales y los índices de la serie real (control 46); la política real no está documentada "
+                    "(INV-06)", "grupo", "", (),
+                    "s = 2 días de venta y Q = 4,5 días de venta: $4,52 M/mes contra $4,66 M la del pronóstico y $4,95 M "
+                    "la de INV-07, con 14 L/mes sin vender (costos con márgenes y flete heredados sin fuente)",
+                    None, None),
+          (2.0, 4.5)),
         ("INV-10", ("Nivel inicial del tanque", "%", "A", "supuesto", "sin_dato",
                     "orquestador (INV-07)", "orquestador",
                     "", (), "75 % de la capacidad (INV-07)", None, None),

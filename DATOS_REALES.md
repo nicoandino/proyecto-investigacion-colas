@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 147 datos · 🟢 dato 42 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 73
+**Resumen:** 148 datos · 🟢 dato 42 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 74
 
 ## La estación
 
@@ -116,6 +116,7 @@
 | INV-09 | Crisis de abastecimiento (S7) | (72.0, 84.0, 96.0) | h | 🟡 estimación | Mendoza | baja | Los Andes 31-jul-2023 | — |
 | INV-11 | Ventana de la crisis de abastecimiento (S7): día de inicio y duración | (10, 3.5) | día · días | 🟠 supuesto | Mendoza | sin_dato | INV-09 (Los Andes 31-jul-2023: 3–4 días); el día de inicio es arbitrario | 3 días = (10, 3.0) · 4 días = (10, 4.0) |
 | INV-12 | Nivel inicial de los tanques en la simulación con datos reales | 1.0 | % | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): los tanques arrancan llenos | 75 % = 0.75 |
+| INV-13 | Política (s, Q) que usa la app por defecto, en días de venta de cada producto | (2.0, 4.5) | días | 🟠 supuesto | la estación | media | evaluación del grupo (14/10/2026): la de menor costo de las 14 candidatas en el año completo con datos reales y los índices de la serie real (contr… | — |
 | INV-10 | Nivel inicial del tanque | 0.75 | % | 🟠 supuesto | la estación | sin_dato | orquestador (INV-07) | — |
 
 ## Red de rutas

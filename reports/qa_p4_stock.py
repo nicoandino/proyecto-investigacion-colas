@@ -47,7 +47,7 @@ with sync_playwright() as pw:
     esperar()
     pagina.get_by_text("🚚 Abastecimiento").first.click()
     esperar()
-    pagina.get_by_text("Punto de pedido por pronóstico (stock de seguridad)").first.click()
+    pagina.get_by_text("Por pronóstico: s con stock de seguridad").first.click()
     esperar(2)
     pagina.get_by_role("button", name="Simular con datos reales").click()
     pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)

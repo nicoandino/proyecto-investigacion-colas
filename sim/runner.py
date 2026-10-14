@@ -620,21 +620,26 @@ def grilla_politicas_real(p: ParametrosSimulacion) -> list[dict[str, tuple[float
     y cada producto tiene su propio stream de plazos, las cuatro curvas de costo se
     miden en las MISMAS corridas: 13 puntos × réplicas, no 13⁴.
     """
-    consumo_mes = p.litros_mes / 30.0
-    pct = {pr.id: pr.pct_litros for pr in p.productos}
     puntos: list[dict[str, tuple[float, float]]] = [
         {i.producto: (i.punto_pedido, i.cantidad_pedido) for i in p.inventario}
     ]
     for s_dias in S_EN_DIAS:
         for q_dias in Q_EN_DIAS:
-            punto: dict[str, tuple[float, float]] = {}
-            for i in p.inventario:
-                consumo_dia = consumo_mes * pct[i.producto]
-                s_ = min(round(s_dias * consumo_dia, -2), i.capacidad - 500.0)
-                q_ = max(500.0, min(round(q_dias * consumo_dia, -2), i.capacidad - s_))
-                punto[i.producto] = (s_, q_)
-            puntos.append(punto)
+            puntos.append(politica_en_dias(p, s_dias, q_dias))
     return puntos
+
+
+def politica_en_dias(p: ParametrosSimulacion, s_dias: float, q_dias: float) -> dict[str, tuple[float, float]]:
+    """{producto: (s, Q)} con s y Q en días de venta de cada producto (redondeados a 100 L, con lugar en el tanque)."""
+    consumo_mes = p.litros_mes / 30.0
+    pct = {pr.id: pr.pct_litros for pr in p.productos}
+    punto: dict[str, tuple[float, float]] = {}
+    for i in p.inventario:
+        consumo_dia = consumo_mes * pct[i.producto]
+        s_ = min(round(s_dias * consumo_dia, -2), i.capacidad - 500.0)
+        q_ = max(500.0, min(round(q_dias * consumo_dia, -2), i.capacidad - s_))
+        punto[i.producto] = (s_, q_)
+    return punto
 
 
 @dataclass(frozen=True)

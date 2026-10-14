@@ -845,7 +845,7 @@ def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
         "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
         "z = 1,96 (95 %). La Q no cambia. "
         + ("**Esta corrida usa esta política** (elegida en el menú 🚚)." if en_uso else
-           "Esta corrida **no** la usa: se prende en el menú 🚚 Abastecimiento, y en el Caso de informe compite con las "
+           "Esta corrida **no** la usa: se elige en el menú 🚚 Abastecimiento, y en el Caso de informe compite con las "
            "otras 13 políticas.")
     )
     filas = [{

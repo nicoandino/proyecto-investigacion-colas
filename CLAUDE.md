@@ -94,7 +94,7 @@ Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo
 ## Estado (14/10/2026)
 
 Todo el plan de `ORQUESTADOR.md` está hecho **menos la etapa 7 (Frontend)**, que arranca cuando Nico inicie la skill de
-diseño ("impeccable"). Economía muestra cada importe como **cantidad de la simulación (verificable) × precio del
+diseño ("impeccable"; contexto del producto para el diseño en **`PRODUCT.md`**). Economía muestra cada importe como **cantidad de la simulación (verificable) × precio del
 Registro (supuesto o heredado)**.
 
 ## Rediseño y pulido

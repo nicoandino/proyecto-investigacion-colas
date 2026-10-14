@@ -465,6 +465,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   escenarios y el control 18). **Efecto, año completo con datos reales:** clientes sin combustible **1.423 → 0**, días con
   quiebre **113 → 0**, camiones 314 → 320. Control nuevo (41). `verificar.py` **137/137**; QA `reports/qa_p4_stock.py`: 0
   excepciones, 0 errores de consola (la búsqueda de 30 días termina en 7 s).
+- **F1 ✅ (algoritmos de red).** `sim/flujos.py` (sin Streamlit ni dependencias nuevas): transporte con **rincón
+  noroeste**, **costo mínimo** (empate: la primera celda en orden de lectura, como en las diapositivas) y **MODI /
+  Stepping-Stone** (potenciales, índice de mejora, circuito con θ; ficticio si no está balanceado y celdas con 0 si es
+  degenerado); **matriz de transbordo** de la cátedra (nodos de paso con oferta y demanda B, costo 0 consigo mismos, M sin
+  arco); **flujo de costo mínimo** (caminos más cortos sucesivos con Bellman-Ford) y **flujo máximo** (trayectorias de
+  aumento por BFS) con el **corte mínimo**. **Validación con la cátedra:** el ejemplo de las diapositivas da rincón noroeste
+  $4.200, costo mínimo $4.100 y óptimo **$3.900** desde las dos (igual a enumerar todas las asignaciones); el transbordo
+  P1/P2 → T1/T2 → D1/D2/D3 da **$20.700** con el flujo de costo mínimo **y** con la matriz (B = 2.200; D1 y D2 con demanda
+  3.000 y 3.100); el oleoducto Neuquén → Buenos Aires (TP 5) da **205.000 gal/h**, igual a la capacidad del corte mínimo
+  (Galleta→Buenos Aires + Pirámide→Río Negro). Control nuevo (42). `verificar.py` **139/139**.
 
 ---
 

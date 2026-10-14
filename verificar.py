@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   42. Parte 3, etapa F1: transporte (rincón noroeste, costo mínimo, MODI = enumeración), transbordo
+       ($20.700 con dos métodos) y flujo máximo (205.000 = el corte mínimo) de la cátedra.
    41. Parte 3, etapa P4: el punto de pedido por pronóstico (s = D·L + z·σ·√L) a mano, con z = 0
        la demanda del plazo, y la opción del menú lo usa.
    40. Parte 3, etapa P3: con los índices de la serie real el año tiene los mismos litros, repartidos
@@ -2281,6 +2283,60 @@ def main() -> int:
         + f" · año completo: sin combustible {t_carg['perdidos_sin_combustible']} → {t_pron['perdidos_sin_combustible']}, "
         f"días con quiebre {t_carg['dias_con_quiebre']} → {t_pron['dias_con_quiebre']}, camiones "
         f"{sum(dict(r_carg.pedidos_total).values())} → {sum(dict(r_pron.pedidos_total).values())}",
+    )
+
+    # ------------------------------------------------------------------ 42
+    separador("42. Parte 3, etapa F1: transporte, transbordo y flujo máximo contra la cátedra")
+    import itertools
+    from sim import flujos as fl
+
+    of42, de42, c42 = [100, 300, 300], [300, 200, 200], [[5, 4, 3], [8, 4, 3], [9, 7, 5]]
+    no42 = fl.solucion_inicial(of42, de42, c42, "rincon_noroeste")
+    cm42 = fl.solucion_inicial(of42, de42, c42, "costo_minimo")
+    op_no = fl.resolver_transporte(of42, de42, c42, "rincon_noroeste")
+    op_cm = fl.resolver_transporte(of42, de42, c42)
+    # Enumeración: todas las asignaciones enteras en múltiplos de 100 que cumplen oferta y demanda
+    mejor_enum = min(
+        sum(x * c for fila_x, fila_c in zip(asig, c42) for x, c in zip(fila_x, fila_c))
+        for asig in (
+            ((a, b, 100 - a - b), (d, e, 300 - d - e), (300 - a - d, 200 - b - e, 200 - (100 - a - b) - (300 - d - e)))
+            for a, b, d, e in itertools.product(range(0, 301, 100), repeat=4)
+        )
+        if all(v >= 0 for fila in asig for v in fila)
+    )
+    controlar(
+        no42.costo == 4200 and cm42.costo == 4100 and op_no.costo == op_cm.costo == mejor_enum == 3900
+        and all(abs(sum(f) - o) < 1e-9 for f, o in zip(op_cm.asignacion, of42))
+        and all(abs(sum(f[j] for f in op_cm.asignacion) - d) < 1e-9 for j, d in enumerate(de42)),
+        "Transporte de las diapositivas: rincón noroeste $4.200, costo mínimo $4.100 y óptimo $3.900 (= enumeración)",
+        f"MODI desde el rincón noroeste: {op_no.iteraciones} mejoras · desde el costo mínimo: {op_cm.iteraciones} · "
+        f"óptimo {op_cm.asignacion}",
+    )
+    arcos42 = [fl.ArcoRed(a, b, c) for a, b, c in (
+        ("P1", "T1", 3), ("P1", "T2", 4), ("P2", "T1", 2), ("P2", "T2", 5), ("T1", "T2", 7), ("T1", "D1", 8),
+        ("T1", "D2", 6), ("T2", "D2", 4), ("T2", "D3", 9), ("D1", "D2", 5), ("D2", "D3", 3))]
+    ofertas42 = {"P1": 1000, "P2": 1200, "D1": -800, "D2": -900, "D3": -500}
+    trans42 = fl.flujo_costo_minimo(arcos42, ofertas42)
+    mt42 = fl.matriz_transbordo(arcos42, ofertas42)
+    tr_mat = fl.resolver_transporte(mt42.oferta, mt42.demanda, mt42.costos)
+    k = 1000.0
+    ol42 = [fl.ArcoRed(a, b, 0.0, c * k) for a, b, c in (
+        ("N", "PN", 160), ("PN", "G", 130), ("G", "BA", 125), ("N", "PT", 70), ("PN", "PT", 65), ("PT", "P", 110),
+        ("P", "RN", 80), ("P", "G", 55), ("RN", "BA", 95))]
+    fm42 = fl.flujo_maximo(ol42, "N", "BA")
+    capacidad_corte = sum(a.capacidad for a in ol42 if (a.desde, a.hasta) in fm42.corte)
+    neto = {}
+    for d, h, f in fm42.flujos:
+        neto[d] = neto.get(d, 0.0) - f
+        neto[h] = neto.get(h, 0.0) + f
+    controlar(
+        trans42.costo == tr_mat.costo == 20700 and trans42.valor == 2200 and mt42.b == 2200
+        and mt42.demanda[mt42.columnas.index("D1")] == 3000 and mt42.demanda[mt42.columnas.index("D2")] == 3100
+        and fm42.valor == 205 * k == capacidad_corte
+        and all(abs(v) < 1e-9 for n, v in neto.items() if n not in ("N", "BA"))
+        and all(f <= a.capacidad + 1e-9 for d, h, f in fm42.flujos for a in ol42 if (a.desde, a.hasta) == (d, h)),
+        "Transbordo P1/P2 → T1/T2 → D1/D2/D3 = $20.700 (flujo y matriz B = 2.200); oleoducto = 205.000 gal/h = el corte",
+        f"corte mínimo {fm42.corte} ({capacidad_corte:,.0f}) · conservación en los nodos intermedios",
     )
 
     # ------------------------------------------------------------------

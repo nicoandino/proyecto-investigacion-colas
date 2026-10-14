@@ -35,7 +35,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **137 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **139 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 
@@ -57,9 +57,9 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      137 controles
+verificar.py      139 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
-                  red · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
+                  red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
 reports/          QA con Playwright (usa el Chrome instalado) y generar_datos_reales.py
 research_notes/   notas de investigación verificadas
@@ -69,7 +69,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 137 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 139 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.

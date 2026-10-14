@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   44. Parte 3, etapa F3: el menú arma las cuotas del plan (con los topes de hoy no cambia nada) y la
+       matriz de transbordo de la red real coincide con el flujo de costo mínimo.
    43. Parte 3, etapa F2: plan de costo mínimo sobre la red real (km a mano, con y sin corte), 3 rutas
        independientes = el corte mínimo, y el despacho por cuotas en el motor.
    42. Parte 3, etapa F1: transporte (rincón noroeste, costo mínimo, MODI = enumeración), transbordo
@@ -2381,6 +2383,28 @@ def main() -> int:
         "Despachar según el plan: cuotas exactas por origen y el plazo cambia por la diferencia de viaje",
         f"enero con 50/50: {len(dock)} camiones de Dock Sud y {len(arroyo)} de Arroyo Seco, que tardan "
         f"{plazo_arroyo:.2f} h (36 h − {km_dock - km_arroyo:.1f} km ÷ {red43.velocidad_kmh:g} km/h) · con 100 % Dock Sud, idéntico",
+    )
+
+    # ------------------------------------------------------------------ 44
+    separador("44. Parte 3, etapa F3: del menú al plan y del plan a la simulación")
+    p_hoy, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes(despachar_plan=True))
+    p_40, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes(
+        despachar_plan=True, topes_origen=(("DOCK", 1.0), ("ARROYO", 0.4), ("LUJAN", 0.0))))
+    r_hoy, _ = correr_replica(p_hoy, semilla=1)
+    p_sin44, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes())
+    r_sin44, _ = correr_replica(p_sin44, semilla=1)
+    plan44 = fl.plan_de_abastecimiento(red43, 22, {"DOCK": 1.0, "ARROYO": 0.4})
+    mt44 = fl.matriz_transbordo(fl.arcos_de_ruta(red43), {**dict(plan44.por_origen), "SANRAFAEL": -22})
+    tr44 = fl.resolver_transporte(mt44.oferta, mt44.demanda, mt44.costos)
+    controlar(
+        Ajustes().topes_origen == tuple(_valor("FLU-02")) and p_hoy.red.cuotas_origen == (("DOCK", 1.0),)
+        and tuple(r_hoy.totales) == tuple(r_sin44.totales)
+        and all(abs(dict(p_40.red.cuotas_origen)[o] - f) < 1e-9 for o, f in (("ARROYO", 0.4), ("DOCK", 0.6)))
+        and abs(tr44.costo - plan44.km_total) < 1e-6,
+        "El menú arma las cuotas del plan (con los topes de hoy, la corrida no cambia); la matriz de transbordo de la "
+        "red real da lo mismo que el flujo de costo mínimo",
+        f"cuotas con Arroyo Seco al 40 %: {p_40.red.cuotas_origen} · 22 camiones: {plan44.km_total:,.0f} camión-km por "
+        f"el flujo = {tr44.costo:,.0f} por la matriz ({len(mt44.filas)}×{len(mt44.columnas)}, B = {mt44.b:g})",
     )
 
     # ------------------------------------------------------------------

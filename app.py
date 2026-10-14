@@ -2513,6 +2513,8 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             "reposición: el quiebre sube, y el óptimo de (s, Q) también cambia."
         )
 
+    vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
+
 
 # =============================================================================
 # Pestaña: GNC (Fase 6)
@@ -3187,6 +3189,22 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
             help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
         )
+        st.markdown("**Plan de abastecimiento (flujo de costo mínimo, pestaña 🗺️ Red y rutas)**")
+        topes_previos = dict(previo.topes_origen)
+        t1, t2 = st.columns(2)
+        tope_arroyo = t1.number_input(
+            "Arroyo Seco puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("ARROYO", 0))), 5,
+            key="aj_tope_arroyo", help="FLU-02, supuesto: hoy 0 % (todo sale de Dock Sud).",
+        ) / 100
+        tope_lujan = t2.number_input(
+            "Luján de Cuyo puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("LUJAN", 0))), 5,
+            key="aj_tope_lujan", help="FLU-02, supuesto: hoy 0 % (YPF, sólo emergencia).",
+        ) / 100
+        despachar = st.toggle(
+            "Despachar según el plan", value=previo.despachar_plan, key="aj_despachar_plan",
+            help="Prendido: cada camión sale del origen que indica el plan de costo mínimo (cuotas exactas). Con los "
+                 "topes de hoy el plan es todo desde Dock Sud y la corrida no cambia.",
+        )
         politica_pron = st.toggle(
             "Punto de pedido por pronóstico (stock de seguridad)", value=previo.politica_pronostico,
             key="aj_pol_pronostico",
@@ -3203,6 +3221,8 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
         indices_reales=bool(indices_reales), politica_pronostico=bool(politica_pron),
+        topes_origen=(("DOCK", 1.0), ("ARROYO", float(tope_arroyo)), ("LUJAN", float(tope_lujan))),
+        despachar_plan=bool(despachar),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,

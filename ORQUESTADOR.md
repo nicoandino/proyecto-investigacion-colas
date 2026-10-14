@@ -488,6 +488,15 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Pareditas (1.278 km) y Arroyo Seco deja de convenir; a San Rafael llegan **3 rutas independientes** y el corte mínimo
   son 3 tramos (Luján–Pareditas, Alvear–San Rafael, Luján–La Paz). Control nuevo (43; con 100 % Dock Sud la corrida es
   idéntica). `verificar.py` **141/141**.
+- **F3 ✅ (Red y rutas: el plan del período).** Sección nueva al final de 🗺️ Red y rutas: los topes de Arroyo Seco y Luján
+  y el corte se prueban ahí mismo; tarjetas (camiones del período = los que pidió la simulación, camión-km del plan,
+  diferencia contra "todo desde Dock Sud", rutas independientes), de dónde sale cada camión, los tramos usados, el corte
+  mínimo, y un desplegable con **la misma cuenta como problema de transporte de la cátedra** (orígenes × tanques: rincón
+  noroeste, costo mínimo, óptimo con MODI y ficticio si sobra oferta) y **como transbordo con la matriz B** (da lo mismo que
+  el flujo). Menú 🚚: los topes de Arroyo Seco y Luján y **"Despachar según el plan"** (`Ajustes.topes_origen /
+  despachar_plan` → `cuotas_origen`); con los topes de hoy el plan es todo Dock Sud y la corrida no cambia. Ejemplo, enero
+  con Arroyo Seco al 40 %: −3,9 % de camión-km (20.948 contra 21.809). Control nuevo (44). `verificar.py` **142/142**; QA
+  `reports/qa_f3_plan.py`: 0 excepciones, 0 errores de consola.
 
 ---
 

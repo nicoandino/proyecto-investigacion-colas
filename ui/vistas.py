@@ -854,3 +854,109 @@ def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
         "s cargada": f"{ent(i.punto_pedido)} L",
     } for x, i in zip(filas_calc, p.inventario)]
     st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+
+
+# =============================================================================
+# Flujos en la red (parte 3, F3): el plan del período en Red y rutas
+# =============================================================================
+def seccion_plan_red(p: ParametrosSimulacion, r: ResultadoReplica, topes_menu: dict[str, float]) -> None:
+    """El plan de abastecimiento del período (transbordo), la matriz de transporte y las rutas independientes."""
+    from sim.flujos import (
+        M_GRANDE, arcos_de_ruta, matriz_transbordo, plan_de_abastecimiento, resolver_transporte, rutas_independientes,
+        solucion_inicial,
+    )
+    from sim.red import NOMBRE_NODO, camino_mas_corto
+
+    red = p.red
+    nombres = _nombres(p)
+    st.divider()
+    st.markdown("#### El plan del período: flujos en la red (transbordo, transporte y flujo máximo)")
+    st.caption(
+        "Dijkstra elige la ruta de **cada** camión. Esto mira **todos los camiones del período juntos**: cuántos "
+        "conviene traer de cada origen y por qué tramos, con el **flujo de costo mínimo** (transbordo) en camión-km. Lo "
+        "que limita es **cuánto puede despachar cada origen** (FLU-02: hoy todo sale de Dock Sud; Arroyo Seco y Luján "
+        "son supuestos) y los **cortes**. Probá topes y cortes acá; para que la simulación despache así, prendé "
+        "**'Despachar según el plan'** en el menú 🚚 Abastecimiento."
+    )
+    camiones_por = {pr: n for pr, n in r.pedidos_total if n > 0}
+    camiones = float(sum(camiones_por.values()))
+    if camiones <= 0:
+        st.info("En este período no se pidió ningún camión.", icon="🚚")
+        return
+    cortes = {"ninguno": "Sin cortes"} | {c.id: f"{c.id}: {c.nombre}" for c in red.cortes if c.arcos}
+    c1, c2, c3 = st.columns(3)
+    tope_arroyo = c1.slider("Arroyo Seco puede despachar (%)", 0, 100, int(round(100 * topes_menu.get("ARROYO", 0))), 5,
+                            key="plan_arroyo", help="Terminal de Raízen/Shell (nota 09). Hoy: 0 % (FLU-02).") / 100
+    tope_lujan = c2.slider("Luján de Cuyo puede despachar (%)", 0, 100, int(round(100 * topes_menu.get("LUJAN", 0))), 5,
+                           key="plan_lujan", help="Refinería de YPF: otra empresa, sólo emergencia. Hoy: 0 %.") / 100
+    corte = c3.selectbox("Corte de ruta", list(cortes), format_func=cortes.get, key="plan_corte")
+    cerrados = next((c.arcos for c in red.cortes if c.id == corte), ())
+    topes = {"DOCK": 1.0, "ARROYO": tope_arroyo, "LUJAN": tope_lujan}
+    plan = plan_de_abastecimiento(red, camiones, topes, cerrados)
+    hoy = plan_de_abastecimiento(red, camiones, {"DOCK": 1.0})
+    rutas = rutas_independientes(red, [o for o, t in topes.items() if t > 0], cerrados)
+    _tarjetas([
+        ("Camiones del período", ent(camiones), "los que pidió la simulación (los 4 tanques)"),
+        ("Camión-km del plan (ida)", ent(plan.km_total), f"hoy, todo desde Dock Sud por la ruta más corta: {ent(hoy.km_total)}"),
+        ("Diferencia contra hoy", f"{dec(100 * (plan.km_total - hoy.km_total) / hoy.km_total)} %",
+         "negativo = el plan ahorra kilómetros"),
+        ("Rutas independientes", ent(rutas.valor), "rutas que no comparten ningún tramo (flujo máximo)"),
+    ])
+    if plan.enviados < camiones - 1e-9:
+        st.error(f"Con este corte y estos topes sólo se pueden traer {ent(plan.enviados)} de {ent(camiones)} camiones: "
+                 "ningún origen habilitado llega a San Rafael.", icon="⛔")
+    filas = []
+    for origen, n in plan.por_origen:
+        km = camino_mas_corto(red, origen=origen, cerrados=cerrados).km
+        filas.append({"Origen": NOMBRE_NODO.get(origen, origen), "Camiones": dec(n), "% de los camiones": pct(n, camiones),
+                      "km por camión (ruta más corta)": dec(km), "Camión-km": ent(n * km)})
+    st.markdown("##### De dónde sale cada camión y por dónde viene")
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    nombre_tramo = {frozenset((a.a, a.b)): a.ruta for a in red.arcos}
+    st.dataframe(pd.DataFrame([{
+        "Tramo": f"{NOMBRE_NODO.get(d, d)} → {NOMBRE_NODO.get(h, h)}", "Ruta": nombre_tramo.get(frozenset((d, h)), ""),
+        "Camiones": dec(f)} for d, h, f in plan.tramos]), hide_index=True)
+    st.caption(
+        "El plan es un flujo continuo (puede dar 8,8 camiones); al despachar según el plan, la simulación reparte los "
+        "camiones enteros con cuotas exactas en esa misma proporción. "
+        f"Para aislar San Rafael de los orígenes habilitados hay que cortar **{ent(len(rutas.corte))} tramos** (el corte "
+        "mínimo): " + " · ".join(f"{NOMBRE_NODO.get(a, a)}–{NOMBRE_NODO.get(b, b)}" for a, b in rutas.corte) + "."
+    )
+
+    with st.expander("La misma cuenta como problema de transporte (orígenes × tanques), como en la cátedra"):
+        origenes = [o for o, t in topes.items() if t > 0]
+        oferta = [round(topes[o] * camiones, 6) for o in origenes]
+        productos = list(camiones_por)
+        demanda = [float(camiones_por[x]) for x in productos]
+        km_de = {o: camino_mas_corto(red, origen=o, cerrados=cerrados).km for o in origenes}
+        costos = [[km_de[o] if km_de[o] != float("inf") else M_GRANDE for _ in productos] for o in origenes]
+        no = solucion_inicial(oferta, demanda, costos, "rincon_noroeste")
+        cm = solucion_inicial(oferta, demanda, costos, "costo_minimo")
+        opt = resolver_transporte(oferta, demanda, costos)
+        st.markdown(
+            f"Oferta = tope × camiones; demanda = camiones de cada tanque; costo = km por camión. Rincón noroeste: "
+            f"**{ent(no.costo)}** camión-km · costo mínimo: **{ent(cm.costo)}** · óptimo (MODI / Stepping-Stone, "
+            f"{opt.iteraciones} mejoras): **{ent(opt.costo)}**"
+            + (" · se agregó un **destino ficticio** (sobra oferta) con costo 0." if opt.ficticio == "destino" else ".")
+        )
+        columnas = [nombres[x] for x in productos] + (["Ficticio"] if opt.ficticio == "destino" else [])
+        filas_o = [NOMBRE_NODO.get(o, o) for o in origenes] + (["Ficticio"] if opt.ficticio == "origen" else [])
+        st.dataframe(pd.DataFrame([[dec(v) for v in fila] for fila in opt.asignacion], index=filas_o, columns=columnas))
+        mt = matriz_transbordo(arcos_de_ruta(red, cerrados),
+                               {**{o: n for o, n in plan.por_origen}, red.destino: -plan.enviados})
+        tr = resolver_transporte(mt.oferta, mt.demanda, mt.costos)
+        st.caption(
+            f"Y como **transbordo** con la matriz de la cátedra ({len(mt.filas)} filas × {len(mt.columnas)} columnas, "
+            f"B = {ent(mt.b)}; nodos de paso con oferta y demanda B y costo 0 consigo mismos): {ent(tr.costo)} camión-km, "
+            f"igual que el flujo de costo mínimo ({ent(plan.km_total)})."
+        )
+    _comprobacion([
+        "Plan: flujo de costo mínimo (caminos más cortos sucesivos) desde un nodo que reparte los camiones entre los "
+        "orígenes, cada uno hasta su tope × los camiones; costo = km de cada tramo (RED-*). Control 43 de `verificar.py`.",
+        "Los métodos se probaron con los ejercicios de la cátedra (control 42): transporte $4.200 / $4.100 / $3.900, "
+        "transbordo $20.700 y oleoducto 205.000 gal/h.",
+        "Rutas independientes: flujo máximo con capacidad 1 en cada tramo (FLU-01, teorema de Menger); el corte mínimo son "
+        "los tramos que habría que cortar para aislar la estación.",
+        "El flete en pesos sale de ECO-06 (por km sin dato: 0), por eso el plan se mide en camión-km.",
+    ])

@@ -228,6 +228,8 @@ class Ajustes:
     calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
     indices_reales: bool = False                      # forma mensual de la serie real (PRO-01, parte 3) en vez del calendario
     politica_pronostico: bool = False                 # punto de pedido con el stock de seguridad del pronóstico (P4)
+    topes_origen: tuple[tuple[str, float], ...] = tuple(valor("FLU-02"))   # cuánto puede despachar cada origen (F3)
+    despachar_plan: bool = False                      # los camiones salen según el plan de costo mínimo (F3)
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
     eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
     origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
@@ -262,6 +264,10 @@ class Ajustes:
             )
         if self.politica_pronostico:
             salida.append("política de reposición por pronóstico (stock de seguridad)")
+        if self.topes_origen != base.topes_origen:
+            salida.append("topes de despacho de los orígenes")
+        if self.despachar_plan:
+            salida.append("camiones despachados según el plan de costo mínimo")
         if self.indices_reales:
             salida.append("índices mensuales de la serie real (pronóstico)")
         elif not self.calendario:
@@ -304,6 +310,13 @@ def aplicar_ajustes(
 
         p = replace(p, calendario_demanda=(),
                     estacionalidad=Estacionalidad(tuple(100.0 * i for i in estacionalidad_del_pronostico())))
+    if a.despachar_plan and p.red is not None:
+        # Los camiones salen de cada origen en la proporción del plan de costo mínimo (sim/flujos.py, F3).
+        from sim.flujos import plan_de_abastecimiento
+
+        plan = plan_de_abastecimiento(p.red, 100.0, dict(a.topes_origen))
+        if plan.cuotas:
+            p = replace(p, red=replace(p.red, cuotas_origen=plan.cuotas))
     if a.politica_pronostico:
         # El punto de pedido de cada tanque con el stock de seguridad del pronóstico (sim/pronostico.py, P4).
         from sim.pronostico import politica_por_pronostico

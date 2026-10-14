@@ -90,3 +90,6 @@ tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuen
 **Parte 3 (14/10/2026, en curso):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
 seguridad) y **Flujos en redes** (transbordo / costo mínimo y flujo máximo sobre la red de abastecimiento). Etapas P1–P4,
 F1–F3 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como en la cátedra.
+**Parte 4 (14/10/2026, en curso):** 14 **eventos aleatorios** (personal, equipos, precio, abastecimiento, demanda) que
+se prenden desde el menú; antes se corrige que **el GNC lo carga un playero** (PER-04). Etapas E0–E3 en §20–23; lo que
+falta del orquestador, en §24.

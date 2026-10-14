@@ -497,6 +497,13 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   despachar_plan` → `cuotas_origen`); con los topes de hoy el plan es todo Dock Sud y la corrida no cambia. Ejemplo, enero
   con Arroyo Seco al 40 %: −3,9 % de camión-km (20.948 contra 21.809). Control nuevo (44). `verificar.py` **142/142**; QA
   `reports/qa_f3_plan.py`: 0 excepciones, 0 errores de consola.
+- **C3 ✅ (cierre de la parte 3).** `verificar.py` **142/142**; se repitieron los QA de las partes 3 y 4 sobre la app final
+  (`qa_e0_gnc`, `qa_e3_eventos`, `qa_p3_pronostico`, `qa_p4_stock`, `qa_f3_plan`): 0 excepciones y 0 errores de consola en
+  todos. `CLAUDE.md` dice qué modela ahora (pronóstico y flujos) y `DATOS_REALES.md` trae PRO-01…04 y FLU-01…02.
+  **Para decidir (Nico):** (1) el calendario de temporadas sigue por defecto aunque la serie real dice que en Shell
+  Mendoza el verano no vende más (enero 0,99); se puede pasar a "índices de la serie real" por defecto; (2) el punto de
+  pedido por pronóstico elimina los quiebres del año con datos reales (1.423 → 0 clientes sin combustible) con 6 camiones
+  más: se puede volver la política por defecto. **Parte 3 cerrada.**
 
 ---
 
@@ -587,7 +594,7 @@ Lo de la parte 1 que **no** quedó cubierto por las tandas de la parte 2:
 - **Limpieza:** la barra lateral vieja (`leer_parametros` y el modo clásico de la app) sigue en `app.py` aunque no se usa.
 - **Cierre (etapa 8):** la tabla de §3 y los pendientes de §5 quedaron viejos (no marcan lo hecho en la parte 2).
 
-Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3), sin empezar; **parte 4** (Eventos, E0–E3), cerrada.
+Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3) y **parte 4** (Eventos, E0–E3), cerradas.
 Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico y flujos → pendientes de arriba → frontend**.
 
 ## 25. Avance de la parte 4

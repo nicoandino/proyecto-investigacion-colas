@@ -38,6 +38,12 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   S0–S12 con diferencias pareadas, tornado). `verificar.py`: **142 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
+- **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
+  Energía, PRO-01, ene-2019 – ago-2026); cinco métodos de la cátedra con MAE/MAPE/RMSE; índices mensuales como opción
+  del calendario; punto de pedido con stock de seguridad (s = D·L + z·σ·√L) como opción y candidata de la búsqueda.
+- **Flujos en redes** (parte 3, `sim/flujos.py`): transporte (rincón noroeste, costo mínimo, MODI), transbordo, flujo
+  de costo mínimo y flujo máximo, validados con los ejercicios de la cátedra; plan del período sobre la red real,
+  rutas independientes y "Despachar según el plan".
 
 ## Reglas de oro (no romper)
 
@@ -89,7 +95,7 @@ Rediseño del flujo (etapas 1–4) y pulido en tandas 0–9 (13/10/2026): el pla
 tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuentes se resolvieron con un criterio único
 (`research_notes/…/07_decisiones_fuentes.md`); la app muestra sólo el valor elegido y una frase general.
 
-**Parte 3 (14/10/2026, en curso):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
+**Parte 3 (14/10/2026, cerrada):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
 seguridad) y **Flujos en redes** (transbordo / costo mínimo y flujo máximo sobre la red de abastecimiento). Etapas P1–P4,
 F1–F3 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como en la cátedra.
 **Parte 4 (14/10/2026, cerrada):** 14 **eventos aleatorios** (personal, equipos, precio, abastecimiento, demanda) que

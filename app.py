@@ -37,12 +37,10 @@ from sim.config import (
 )
 from sim.economia_real import (
     MOTIVOS as MOTIVOS_ECO,
-    anualizar,
     avisos as avisos_economia,
     conclusiones as conclusiones_economia,
     decision_s6,
     economia_de,
-    ingreso_promedio_por_producto,
     km_por_viaje,
     margen_de_equilibrio_por_litro,
     resumir_economia,
@@ -121,7 +119,6 @@ from sim.red import (
 from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red, vistas
 from ui.datos_ui import (
     csv_registro,
-    esquema_estacion_html,
     insignia_html,
     tabla_registro,
 )
@@ -1671,57 +1668,6 @@ def pestania_escenarios() -> None:
 # =============================================================================
 # Pestaña: economía
 # =============================================================================
-def _fila_pesos(concepto: str, resumen, ingreso: float | None = None, negrita: bool = False) -> dict:
-    """Una fila del estado de resultados: promedio ± IC 95 % y % de los ingresos."""
-    texto = f"{pesos(resumen.promedio)} ± {pesos(resumen.semiamplitud)}"
-    if negrita:
-        concepto = concepto.upper()
-    return {
-        "Concepto": concepto,
-        "Pesos por mes": texto,
-        "% de los ingresos": (
-            f"{100 * resumen.promedio / ingreso:,.1f} %" if ingreso else ""
-        ),
-    }
-
-
-def estado_de_resultados(p: ParametrosSimulacion, lista, res) -> pd.DataFrame:
-    """Ingresos − costos = margen operativo, y la venta perdida APARTE (no se resta)."""
-    nombres = {pr.id: pr for pr in p.productos}
-    por_producto = ingreso_promedio_por_producto(lista)
-    ingreso = res["ingreso_total"].promedio
-    filas = [{"Concepto": "INGRESOS (margen bruto)", "Pesos por mes": "", "% de los ingresos": ""}]
-    for producto, valor in por_producto.items():
-        unidad = "m³" if nombres[producto].es_gnc else "L"
-        filas.append({
-            "Concepto": f"   Margen {nombres[producto].nombre} ({unidad})",
-            "Pesos por mes": pesos(valor),
-            "% de los ingresos": f"{100 * valor / ingreso:,.1f} %" if ingreso else "",
-        })
-    filas.append(_fila_pesos("   Margen del minimarket", res["ingreso_minimarket"], ingreso))
-    filas.append(_fila_pesos("Total ingresos", res["ingreso_total"], ingreso, True))
-    filas.append({"Concepto": "COSTOS", "Pesos por mes": "", "% de los ingresos": ""})
-    filas.append(_fila_pesos("   Flete (fijo + $/km × km de ida y vuelta)", res["flete"], ingreso))
-    filas.append(_fila_pesos("   Almacenamiento", res["almacenamiento"], ingreso))
-    filas.append(_fila_pesos("   Personal: playeros", res["personal_playeros"], ingreso))
-    filas.append(_fila_pesos("   Personal: cajeros", res["personal_cajeros"], ingreso))
-    filas.append(_fila_pesos("   Personal: encargado", res["personal_encargado"], ingreso))
-    filas.append(_fila_pesos("   Personal: tienda", res["personal_tienda"], ingreso))
-    filas.append(_fila_pesos("Total costos", res["costo_total"], ingreso, True))
-    filas.append(_fila_pesos("MARGEN OPERATIVO (ingresos − costos)", res["margen_operativo"], ingreso, True))
-    filas.append({"Concepto": "COSTO DE OPORTUNIDAD — venta perdida (NO se resta del margen)",
-                  "Pesos por mes": "", "% de los ingresos": ""})
-    claves = {
-        "abandono_espera": "vp_abandono_espera", "cola_llena": "vp_cola_llena",
-        "sin_combustible": "vp_sin_combustible", "corte_gnc": "vp_corte_gnc",
-        "abandono_caja": "vp_abandono_caja",
-    }
-    for clave, etiqueta, _ in MOTIVOS_ECO:
-        filas.append(_fila_pesos(f"   {etiqueta}", res[claves[clave]], ingreso))
-    filas.append(_fila_pesos("Total venta perdida", res["venta_perdida_total"], ingreso, True))
-    return pd.DataFrame(filas)
-
-
 # =============================================================================
 # Pestaña: sensibilidad (Fase 9, §7.8)
 # =============================================================================
@@ -1826,16 +1772,14 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     lista = economia_de(base, eco)
     res = resumir_economia(lista)
     dias = lista[0].dias_mes
-    st.markdown(
-        f"##### Estado de resultados de un mes de {dias} días "
-        f"(promedio ± IC 95 % de {len(lista)} réplicas)"
-    )
+    st.markdown(f"##### Ingresos y costos de un mes de {dias} días")
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Ingresos", escapar_pesos(pesos(res["ingreso_total"].promedio)))
     c2.metric("Costos", escapar_pesos(pesos(res["costo_total"].promedio)))
     margen = res["margen_operativo"]
     c3.metric("Margen operativo", escapar_pesos(pesos(margen.promedio)))
-    c3.caption(escapar_pesos(f"± {pesos(margen.semiamplitud)} (IC 95 %)"))
+    if len(lista) > 1:
+        c3.caption(escapar_pesos(f"± {pesos(margen.semiamplitud)} (IC 95 %)"))
     equilibrio = margen_de_equilibrio_por_litro(lista[0], eco)
     c4.metric("Margen por litro de equilibrio", escapar_pesos(f"${equilibrio:,.0f}/L"))
     c4.caption(escapar_pesos(f"hoy se usa ${eco.margen_por_litro:,.0f}/L (ECO-01)"))
@@ -1851,8 +1795,6 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
             icon="⚖️",
         )
 
-    tabla_resultados = estado_de_resultados(p, lista, res)
-    st.dataframe(tabla_resultados, hide_index=True, height=36 * (len(tabla_resultados) + 1) + 3)
     ingresos = [(n, v) for n, v in (
         ("Combustible líquido", res["ingreso_combustible"].promedio),
         ("GNC", res["ingreso_gnc"].promedio),
@@ -1874,47 +1816,6 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
             f"{km_por_viaje(p):,.0f} km de ida y vuelta desde el origen elegido."
         )
     )
-
-    # ---- Por estación y año estimado (ECO-09)
-    st.markdown("##### Por estación y año estimado")
-    c1, c2 = st.columns([1, 3])
-    replicas = c1.slider("Réplicas por estación", 1, 6, 4, 1, key="eco_rep")
-    c2.caption(
-        f"Corre las 4 estaciones (≈ {4 * replicas * SEGUNDOS_POR_REPLICA:.0f} s, queda en caché). "
-        "Si ya las corriste en **Estaciones**, se reusan."
-    )
-    if st.button("🍂 Calcular la economía por estación", key="btn_eco_est"):
-        with st.spinner(f"Simulando 4 estaciones × {replicas} réplicas…"):
-            resultados_est = correr_estaciones_cacheado(p, replicas, st.session_state.semilla_usada)
-        st.session_state.estaciones = (p, resultados_est)
-    guardado = st.session_state.get("estaciones")
-    if guardado:
-        _, estaciones = guardado
-        filas = []
-        for r in estaciones:
-            e = resumir_economia(economia_de(r, eco))
-            filas.append({
-                "Estación": r.escenario.nombre,
-                "Ingresos": pesos(e["ingreso_total"].promedio),
-                "Costos": pesos(e["costo_total"].promedio),
-                "Margen operativo": f"{pesos(e['margen_operativo'].promedio)} ± "
-                                    f"{pesos(e['margen_operativo'].semiamplitud)}",
-                "Venta perdida (no se resta)": pesos(e["venta_perdida_total"].promedio),
-            })
-        anual = anualizar(estaciones, eco)
-        filas.append({
-            "Estación": "AÑO ESTIMADO (3 × Σ de los 4 meses, ECO-09)",
-            "Ingresos": pesos(anual["ingreso_total"].promedio),
-            "Costos": pesos(anual["costo_total"].promedio),
-            "Margen operativo": f"{pesos(anual['margen_operativo'].promedio)} ± "
-                                f"{pesos(anual['margen_operativo'].semiamplitud)}",
-            "Venta perdida (no se resta)": pesos(anual["venta_perdida_total"].promedio),
-        })
-        st.dataframe(pd.DataFrame(filas), hide_index=True)
-        st.caption(
-            "El año es una **estimación**: 4 meses representativos × 3, no 12 corridas. Con "
-            "estacionalidad neutra los meses sólo difieren por calendario, GNC y ruta."
-        )
 
     # ---- Decisión por escenario (conclusión por pregunta del CASO)
     st.markdown("##### Decisión en $/mes: qué le hace cada escenario al margen")
@@ -1974,7 +1875,6 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
 | Personal | personas-turno × {eco.cobertura_francos:g} (francos) × sueldo: playero ${eco.sueldo_playero_mensual:,.0f}, cajero y tienda ${eco.sueldo_cajero_mensual:,.0f}, encargado ${eco.sueldo_encargado_mensual:,.0f} |
 | **Margen operativo** | **ingresos − costos** (la venta perdida NO entra) |
 | Venta perdida (por motivo) | clientes perdidos × (litros medios × margen + prob. de compra × margen del minimarket); corte de GNC en m³ |
-| Año estimado | 3 × la suma de los 4 meses representativos (ECO-09), réplica a réplica |
 
 La venta perdida es un **costo de oportunidad**: no sale del bolsillo, pero es plata que la
 estación deja sobre la mesa. No se resta del margen (sería contarla dos veces: ya falta el
@@ -2895,7 +2795,7 @@ def pestania_comparar(p: ParametrosSimulacion) -> None:
 # Pestaña: la estación (caso real)
 # =============================================================================
 def pestania_estacion() -> None:
-    """Ficha de la estación, esquema del playón, advertencias y contradicciones."""
+    """Ficha de la estación (los valores; la fuente y el tipo de cada dato están en Datos y fuentes)."""
     st.subheader("La estación: Shell de Av. Balloffet y Los Sauces")
     st.markdown(
         "Estación de servicio **Shell** — Av. Balloffet 1810 esq. Av. Los Sauces, "
@@ -2907,19 +2807,14 @@ def pestania_estacion() -> None:
     columnas = st.columns(2)
     for i, d in enumerate(est):
         with columnas[i % 2]:
-            st.markdown(
-                f"**{d.nombre}** {insignia_html(d)}<br/>"
-                f"<small>{d.valor}</small>"
-                f"<small> — {d.fuente}</small>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"**{d.nombre}**<br/><small>{d.valor}</small>", unsafe_allow_html=True)
 
-    st.markdown("#### El playón: 6 surtidores de doble cara = 12 caras en 3 zonas")
-    st.caption(
-        "S1–S2 nafta (Súper y V-Power) · S3 diésel (G2 y G3) · S4–S6 GNC. Servicio "
-        "atendido por playeros, playa 24 h."
+    st.markdown("#### El playón")
+    st.markdown(
+        "6 surtidores de doble cara = **12 caras en 3 zonas**: S1–S2 nafta (Súper y V-Power) · "
+        "S3 diésel (G2 y G3) · S4–S6 GNC. Servicio atendido por playeros, playa 24 h. "
+        "La pestaña **Animación** lo muestra funcionando."
     )
-    componentes.html(esquema_estacion_html(), height=340)
 
     st.markdown("#### Advertencias (§5.3)")
     for aviso in ADVERTENCIAS:
@@ -3227,8 +3122,27 @@ def pie_de_resultados() -> None:
     st.caption(PIE_NO_AFILIADO)
 
 
+#: La ayuda "?" de Streamlit se abre al pasar el mouse **y** mientras el botón tiene el foco. Un clic con el
+#: mouse le daba el foco, así que la ayuda quedaba abierta hasta hacer otro clic (el "se traba"). Esto hace
+#: que el clic con el mouse no enfoque el botón: la ayuda aparece sólo con el mouse encima y se va al salir.
+#: Con el teclado sigue andando: Tab la abre y Escape (o salir con Tab) la cierra.
+AYUDAS_JS = """<!doctype html><title>ayudas</title><script>
+(function () {
+  try {
+    const doc = window.parent.document;
+    if (doc.__ayudasInstaladas) return;
+    doc.__ayudasInstaladas = true;
+    doc.addEventListener("mousedown", function (e) {
+      if (e.target.closest && e.target.closest("[data-testid='stTooltipIcon'] button")) e.preventDefault();
+    }, true);
+  } catch (err) { /* sin acceso a la página: queda el comportamiento de Streamlit */ }
+})();
+</script>"""
+
+
 def main() -> None:
     st.markdown(css_global(), unsafe_allow_html=True)
+    componentes.html(AYUDAS_JS, height=0)
     vista = st.session_state.get("vista", "inicio")
     if vista == "editar" and "periodo" in st.session_state:
         pantalla_editar()

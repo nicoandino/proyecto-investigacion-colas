@@ -249,3 +249,10 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Causa de raíz del "crash": no se pudo reproducir un cierre del programa; la explicación más probable es la
   re-ejecución completa del script en cada clic durante la búsqueda (que la reiniciaba) con el tablero de un año (≈ 3,8 MB)
   reenviado cada vez. Con el fragmento, durante la búsqueda sólo se re-ejecuta el fragmento.
+- **Tanda 1 ✅ (limpieza).** La estación: sin insignias ni fuente por dato (siguen en Datos y fuentes) y sin la imagen del
+  playón (una línea de texto). Tablero: "Shell Shop". Economía: sin el estado de resultados detallado ni "Por estación y año
+  estimado" (quedan tarjetas y cascada; el ± IC sólo si hay réplicas). **Ayuda "?"**, causa de raíz medida con Playwright:
+  Streamlit la abre al pasar el mouse **y mientras el botón tiene el foco**; un clic le daba el foco y quedaba abierta hasta
+  otro clic. Arreglo: un script mínimo (iframe invisible, mismo origen) evita que el clic con el mouse enfoque el botón, y el
+  cartel deja de atrapar el mouse (`pointer-events: none`). Medido: abre con el mouse, se va 0,3 s después de salir (también
+  tras un clic), Tab la abre y Escape la cierra. QA `reports/qa_tanda1_limpieza.py`: 0 excepciones, 0 errores de consola.

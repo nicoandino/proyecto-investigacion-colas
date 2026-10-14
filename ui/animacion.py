@@ -500,7 +500,7 @@ function dibujarCanvas(i) {
 // ---------------- paneles ----------------
 function panelDerecho(i, esperando) {
   const colaC = F.colaCaja[i], ocupC = F.cajasOcup[i], MAXP = 9;
-  let h = `<div class="titulo">Minimarket</div><div class="chico">"Shell Select" (nombre sin confirmar) · entra el ${Math.round(CONFIG.probCompra * 100)} %</div>`;
+  let h = `<div class="titulo">Shell Shop</div><div class="chico">minimarket · entra el ${Math.round(CONFIG.probCompra * 100)} %</div>`;
   h += `<div class="chico" style="margin-top:8px">Fila para pagar</div><svg width="100%" height="30" viewBox="0 0 270 30">`;
   for (let k = 0; k < Math.min(colaC, MAXP); k++) h += persona(14 + k * 28, 18, P.panel2);
   if (colaC > MAXP) h += texto(14 + MAXP * 28, 22, `+${colaC - MAXP}`, 13, { peso: 800 });

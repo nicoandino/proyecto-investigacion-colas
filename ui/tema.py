@@ -176,6 +176,10 @@ def css_global() -> str:
         f"[data-testid='stAppViewContainer'] {{ box-shadow: inset 0 -2px 0 {ROJO}; }}"
         f"[data-testid='stHeader'] {{ background: {FONDO}; }}"
         f"[data-testid='stSidebar'] {{ background: {FONDO_PANEL}; }}"
+        # Ayuda "?": el cartel no atrapa el mouse (si no, al cruzarlo quedaba abierto).
+        "[data-testid='stTooltipContent'] { pointer-events: none !important; }"
+        # El iframe invisible que instala el arreglo de la ayuda no ocupa lugar.
+        "[data-testid='stElementContainer']:has(iframe[srcdoc*='__ayudasInstaladas']) { display: none; }"
         # Insignias de los datos (§8.4)
         ".insignia { display: inline-block; border-radius: 8px; padding: 1px 8px; "
         "font-size: 0.78rem; font-weight: 600; margin-left: 6px; vertical-align: middle; }"

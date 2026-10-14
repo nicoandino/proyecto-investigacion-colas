@@ -77,7 +77,7 @@ from sim.escenarios import (
     es_significativa,
     para_mes,
 )
-from sim.datos import ADVERTENCIAS, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
+from sim.datos import AVISO_FUENTES, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id
 from sim.distribuciones import Aleatorio
 from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
@@ -282,7 +282,7 @@ def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, 
             pct_gnc = st.slider(
                 "Clientes GNC (% de las llegadas)", 0, 25, int(round(base.pct_gnc * 100)), 1,
                 help="DEM-05 (estimación): el GNC es ≈ 3 % de los clientes, aunque se le "
-                     "dedican 6 de las 12 caras (alerta de coherencia C8).",
+                     "dedican 6 de las 12 caras (C8).",
             ) / 100.0
         surtidores = base.surtidores
     else:
@@ -1997,8 +1997,8 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
     if p.gnc is not None:
         caras_gnc = sum(gr.caras for gr in p.grupos if "gnc" in gr.productos)
         lineas.append(
-            f"Alerta de coherencia (C8): {caras_gnc} de {sum(gr.caras for gr in p.grupos)} caras "
-            f"son de GNC para ≈ {p.pct_gnc:.0%} de los clientes."
+            f"GNC: {caras_gnc} de {sum(gr.caras for gr in p.grupos)} caras son de GNC para ≈ "
+            f"{p.pct_gnc:.0%} de los clientes: la capacidad de GNC sobra para esa demanda."
         )
     for linea in lineas:
         st.markdown(f"- {escapar_pesos(linea)}")
@@ -2456,13 +2456,11 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
 
     caras_gnc = sum(gr.caras for gr in p.grupos if "gnc" in gr.productos)
     caras_total = sum(gr.caras for gr in p.grupos)
-    st.warning(
-        f"**Alerta de coherencia (C8):** {caras_gnc} de {caras_total} caras "
-        f"({caras_gnc / caras_total:.0%}) son de GNC, pero los clientes GNC son ≈ "
-        f"{p.pct_gnc:.0%} de las llegadas. Con {g.compresores} compresores, los compresores "
-        f"están ocupados el {base.prom('util_compresores') * 100:.1f} % del tiempo: o la "
-        f"estación está sobredimensionada en GNC, o la demanda GNC está subestimada. Es "
-        f"lo primero que hay que relevar con el encargado (§12, prioridad 5).",
+    st.info(
+        f"**Lo que muestra el modelo:** {caras_gnc} de {caras_total} caras "
+        f"({caras_gnc / caras_total:.0%}) son de GNC y los clientes GNC son ≈ {p.pct_gnc:.0%} de las "
+        f"llegadas, así que los {g.compresores} compresores están ocupados sólo el "
+        f"{base.prom('util_compresores') * 100:.1f} % del tiempo: la capacidad de GNC sobra para esa demanda.",
         icon="⚖️",
     )
 
@@ -2816,30 +2814,11 @@ def pestania_estacion() -> None:
         "La pestaña **Animación** lo muestra funcionando."
     )
 
-    st.markdown("#### Advertencias (§5.3)")
-    for aviso in ADVERTENCIAS:
-        st.markdown(f"- {aviso}")
-
-    st.markdown("#### Contradicciones entre fuentes (§4.2)")
+    st.info(AVISO_FUENTES, icon="ℹ️")
     st.caption(
-        "El valor adoptado se ve en la pestaña **Datos y fuentes**. Las alternativas "
-        "que perdieron quedan como ejes del análisis de sensibilidad."
-    )
-    st.dataframe(
-        pd.DataFrame(
-            [
-                {
-                    "ID": c.id,
-                    "Tema": c.tema,
-                    "Impacto": c.impacto,
-                    "Valor adoptado": c.adoptado,
-                    "Alternativas": c.alternativas,
-                }
-                for c in CONTRADICCIONES
-            ]
-        ),
-        hide_index=True,
-        height=360,
+        "Cuando dos fuentes no coincidían se eligió una con un criterio único (oficial antes que secundaria, "
+        "más reciente, más local y, ante empate, la más conservadora). El valor elegido, su fuente y el "
+        "criterio de cada caso están en la pestaña **Datos y fuentes**."
     )
 
 
@@ -2847,19 +2826,16 @@ def pestania_estacion() -> None:
 # Pestaña: datos y fuentes (el Registro completo)
 # =============================================================================
 def pestania_datos_fuentes() -> None:
-    """El Registro de datos completo, con filtros, alternativas y CSV (§8.2)."""
-    st.subheader("Registro de datos (§5.1)")
+    """El Registro de datos (valor elegido, fuente, tipo y confianza) y cómo se resolvió cada contradicción."""
+    st.subheader("Registro de datos")
     st.caption(
-        "Todo parámetro del modelo tiene su `Dato` con fuente, nivel de evidencia, tipo "
-        "y confianza. Las alternativas que perdieron las contradicciones de §4.2 quedan "
-        "en el Registro y entran al análisis de sensibilidad. Todavía no hay datos de la "
-        "propia estación: el relevamiento (§12) los cargará como `observacion` (🔵)."
+        "Todo número del modelo tiene su `Dato` con fuente, nivel de evidencia, tipo y confianza. "
+        + AVISO_FUENTES
     )
 
-    tabla = tabla_registro()
+    tabla = tabla_registro(con_alternativas=False)
     filtro_tipo = st.multiselect(
-        "Filtrar por tipo",
-        ["dato", "estimacion", "observacion", "supuesto", "heredado", "alternativa"],
+        "Filtrar por tipo", ["dato", "estimacion", "observacion", "supuesto", "heredado"],
     )
     vista = tabla if not filtro_tipo else tabla[tabla["Tipo"].isin(filtro_tipo)]
     st.dataframe(vista, hide_index=True, height=420)
@@ -2869,14 +2845,23 @@ def pestania_datos_fuentes() -> None:
         data=csv_registro(),
         file_name="registro_datos_shell_san_rafael.csv",
         mime="text/csv",
-        help="Incluye todas las filas, las alternativas de §4.2 y las contradicciones.",
+        help="Incluye todas las filas, los valores que se descartaron (ejes de sensibilidad) y las decisiones.",
     )
 
-    st.markdown("#### Contradicciones y alternativas (§4.2)")
-    for c in CONTRADICCIONES:
-        with st.expander(f"{c.id} · {c.tema} — impacto {c.impacto}"):
-            st.markdown(f"**Valor adoptado:** {c.adoptado}")
-            st.markdown(f"**Alternativas (sensibilidad):** {c.alternativas}")
+    st.markdown("#### Cuando las fuentes no coincidían: qué se eligió y por qué")
+    st.caption(
+        "Criterio único, en orden: que la fuente mida lo mismo; oficial o primaria (y vigente) antes que "
+        "secundaria; más reciente; más específica de San Rafael o Mendoza; ante empate, la más conservadora. "
+        "Detalle en research_notes/…/07_decisiones_fuentes.md."
+    )
+    st.dataframe(
+        pd.DataFrame(
+            [{"ID": c.id, "Tema": c.tema, "Valor elegido": c.adoptado, "Por qué": c.criterio}
+             for c in CONTRADICCIONES]
+        ),
+        hide_index=True,
+        height=36 * (len(CONTRADICCIONES) + 1) + 3,
+    )
 
 
 # =============================================================================

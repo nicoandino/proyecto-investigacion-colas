@@ -50,76 +50,110 @@ class Dato:
 # =============================================================================
 @dataclass(frozen=True)
 class Contradiccion:
-    """Una contradicción entre fuentes y su resolución (§4.1)."""
+    """Una contradicción entre fuentes y su resolución con el criterio único de la nota 07.
+
+    Criterio (en orden): 0) que mida la misma cosa; 1) oficial o primaria y vigente; 2) más reciente;
+    3) más específica de San Rafael/Mendoza; 4) empate → la más conservadora.
+    """
 
     id: str
     tema: str
     impacto: str
-    adoptado: str
-    alternativas: str
+    adoptado: str           # el valor elegido (lo único que muestra la app)
+    alternativas: str       # las que perdieron (quedan como ejes de sensibilidad)
+    criterio: str = ""      # qué paso del criterio decidió y por qué
 
 
 CONTRADICCIONES: tuple[Contradiccion, ...] = (
     Contradiccion("C1", "Horario de la playa", "Medio",
-                  "24 h (Shell API `twenty_four_hour`, nivel 2; los turnos nocturnos de ambos documentos lo confirman).",
-                  "S10: cierre nocturno 22–06 (DATOS §5, sin fuente)."),
+                  "24 h, todos los días.",
+                  "S10: cierre nocturno 22–06 (DATOS §5, sin fuente).",
+                  "Oficial: API de Shell (twenty_four_hour, 5/10/2026)."),
     Contradiccion("C2", "Demanda mensual", "Alto",
-                  "270.000 L/mes (estimación, confianza baja-media): convergencia de fuentes débiles (informe regional, promedio nacional 270–380k, punto de equilibrio 315–400k).",
-                  "150.000 y 400.000 L/mes como ejes de sensibilidad."),
+                  "270.000 L/mes (estimación).",
+                  "150.000 y 400.000 L/mes como ejes de sensibilidad.",
+                  "Más específica: estimación regional, dentro del promedio nacional (270–380 mil) y del punto de "
+                  "equilibrio (315–400 mil). No hay fuente oficial de esta estación."),
     Contradiccion("C3", "Litros vs. autos", "Crítico",
-                  "Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente, §14.2).",
-                  "— (los documentos confundían litros/día con autos/día, error ×35–50)."),
+                  "Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente).",
+                  "— (los documentos confundían litros/día con autos/día, error ×35–50).",
+                  "Misma cosa: no es una disputa de datos sino de unidades."),
     Contradiccion("C4", "Entrada al minimarket", "Bajo-medio",
-                  "20 % (el único con fuente declarada, aunque débil).",
-                  "15 % · 30 % · 45 %."),
+                  "20 % de los clientes atendidos.",
+                  "15 % · 30 % · 45 %.",
+                  "Primaria: es la única cifra con fuente declarada."),
     Contradiccion("C5", "Personal", "Alto",
-                  "Playeros (noche·mañana·tarde) = 1·2·2; 1 caja; encargado y tienda sólo como costo (único desglose por rol, DATOS §4).",
-                  "Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno). Con 2 playeros ρ_pico = 0,86."),
+                  "Playeros (noche · mañana · tarde) = 1 · 2 · 2; 1 caja; encargado y tienda sólo como costo.",
+                  "Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno).",
+                  "Más específica: DATOS §4 es el único desglose por rol y turno."),
     Contradiccion("C6", "Mix diésel G2/G3", "Medio",
-                  "55 % / 45 % del diésel (tabla con fuente declarada, Surtidores.com.ar ago-2026) y ambos activos (Secretaría de Energía).",
-                  "75/25 (ONBOARDING) y 100/0 (sólo G2)."),
+                  "55 % G2 / 45 % G3 del diésel; se venden los dos.",
+                  "75/25 (ONBOARDING) y 100/0 (sólo G2).",
+                  "Más reciente y con fuente: Surtidores.com.ar (ago-2026); la Secretaría de Energía confirma ambos "
+                  "productos."),
     Contradiccion("C7", "Mezcla de producto", "Medio",
-                  "Mezcla en LITROS (DATOS §7, normalizada a los 4 líquidos: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %); GNC = 3 % de los clientes.",
-                  "GNC 11 % (parque GNC ENARGAS); mezcla por flota."),
-    Contradiccion("C8", "GNC: 6 caras vs. 2–3 %", "Medio",
-                  "Se modela como está y la app muestra una alerta de coherencia (6 caras para ≈ 3 % de los clientes).",
-                  "GNC 3 % / 11 % / 20 %."),
+                  "En litros: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %; GNC = 3 % de los clientes.",
+                  "GNC 11 % (parque GNC ENARGAS); mezcla por flota.",
+                  "Misma cosa: el 11 % de ENARGAS es el parque de autos a GNC, no los clientes de esta estación."),
+    Contradiccion("C8", "GNC: 6 caras vs. ≈ 3 % de los clientes", "Medio",
+                  "La estación se modela como está (6 caras, 3 % de clientes GNC).",
+                  "GNC 3 % / 11 % / 20 %.",
+                  "Misma cosa: las caras se observaron y el 3 % es la demanda; que los compresores queden poco "
+                  "usados es un resultado del modelo."),
     Contradiccion("C9", "GNC en invierno", "Alto en invierno",
-                  "Corte TOTAL por episodios (2 × 6 días jun–ago), contrato interrumpible, 3 compresores (20–25 autos/h × 7 min ÷ 60 ≈ 2,6; cifra sin fuente). No citar 'Res. ENARGAS 409/2026'.",
-                  "Contrato firme (sin cortes); ventanas horarias (17–01, 09–24); −50 % de capacidad; migración 0–60 %."),
+                  "Corte total por episodios (2 × 6 días, jun–ago), contrato interrumpible, 3 compresores.",
+                  "Contrato firme (sin cortes); ventanas horarias (17–01, 09–24); −50 % de capacidad; migración 0–60 %.",
+                  "Oficial (ENARGAS, abr-2026) para la forma del corte y más específica (Sitio Andino, San Rafael "
+                  "2022) para la duración."),
     Contradiccion("C10", "Estacionalidad", "Medio",
-                  "Neutra (1,00) por defecto + presets 'leve' y 'proxy turístico'. La ocupación hotelera no es ventas de combustible.",
-                  "Leve ±6 %; proxy turístico (DATOS §6)."),
+                  "Neutra por mes + calendario de temporadas (verano, vacaciones de invierno de Mendoza, resto del "
+                  "invierno) editable.",
+                  "Leve ±6 %; proxy turístico (DATOS §6).",
+                  "Misma cosa: la ocupación hotelera no es venta de combustible; el calendario es un supuesto "
+                  "moderado (nota 08)."),
     Contradiccion("C11", "Tiempo de servicio", "Medio",
-                  "Nafta/diésel Triangular(2,5,8) min · GNC (5,7,12) · minimarket (2,4,10) (fuentes argentinas con URL, sin medición local).",
-                  "Nota 03: (2,4;3,7;5,0) para nafta y GNC 10–30 min (probablemente incluye espera)."),
+                  "Nafta/diésel Triangular(2, 5, 8) min · GNC (5, 7, 12) · minimarket (2, 4, 10).",
+                  "Nota 03: (2,4; 3,7; 5,0) para nafta y GNC 10–30 min (probablemente incluye la espera).",
+                  "Empate → conservadora: ninguna es local ni más reciente; la media de 5 min no subestima la espera."),
     Contradiccion("C12", "Litros por carga", "Alto",
-                  "Carga media = 0,5 × tanque: Triangular(0,20·T; 0,30·T; 1,00·T) (único anclaje empírico: nota 03, ≈ 30 % del tanque).",
-                  "Preset alto (media 0,8·T, 'carga casi llena') y bajo (0,3·T). Para los mismos litros cambia ×0,6/×1,7 la cantidad de clientes."),
+                  "Carga Triangular(0,20·T; 0,30·T; 1,00·T): media 0,5 × tanque.",
+                  "Preset alto (media 0,8·T) y bajo (0,3·T).",
+                  "Primaria: único anclaje empírico (nota 03, ≈ 30 % del tanque)."),
     Contradiccion("C13", "Tanques de vehículos", "Bajo",
-                  "Auto 47 L (Autocosmos OK-orig); camión 300 L como supuesto (la 'Alta' de DATOS no tiene fuente).",
-                  "Auto 42–52 L; camión 120–600 L."),
+                  "Auto 47 L; camión 300 L.",
+                  "Auto 42–52 L; camión 120–600 L.",
+                  "Primaria: ficha del fabricante (Autocosmos) para el auto; el camión es un supuesto sin fuente mejor."),
     Contradiccion("C14", "Servicios", "Bajo",
-                  "Sólo lo de la lista oficial Shell (shop, baño, aire y agua). Nombre del shop: 'Shell Select (nombre sin confirmar)'. No se modela lavadero.",
-                  "DATOS §5 suma lavado/Agroservice (no figuran en la lista oficial)."),
+                  "Shop (en la app, «Shell Shop»), baño, aire y agua. No se modela lavadero.",
+                  "DATOS §5 suma lavado/Agroservice.",
+                  "Oficial: lista de servicios de Shell."),
     Contradiccion("C15", "Autoservicio", "Medio",
-                  "Servicio atendido (Shell API: full_service + manned).",
-                  "S9 autoservicio (Decreto 46/2025, Res. 147/2025 — no verificados): −1 playero por turno."),
+                  "Servicio atendido por playeros.",
+                  "S9 autoservicio: −1 playero por turno.",
+                  "Oficial: API de Shell (full_service, manned)."),
     Contradiccion("C16", "Perfil horario", "Medio",
-                  "La tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18; §14.3). La afirmación 'madrugada = 1/40 del pico' no se usa (su propia tabla la contradice).",
-                  "Perfil heredado (picos 08 y 19 con factor 2,0)."),
+                  "Tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18).",
+                  "Perfil heredado (picos 08 y 19 con factor 2,0).",
+                  "Más específica: el perfil heredado es del proyecto hipotético."),
     Contradiccion("C17", "Fin de semana / quincena", "Bajo-medio",
-                  "Fin de semana ×1,30 normalizado al mes (§14.4). Quincena = escenario S12, no default.",
-                  "×1,24 – ×1,50."),
+                  "Fin de semana × 1,30, normalizado al mes. La quincena es un escenario aparte.",
+                  "× 1,24 – × 1,50.",
+                  "Empate → conservadora: valor central del rango de la única fuente (DATOS §2)."),
     Contradiccion("C18", "Salarios", "Medio",
-                  "Costos totales estimados: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 (FECRA; la URL dice enero-2026). Vigencia a verificar.",
-                  "Básico sin adicionales."),
+                  "Costo con adicionales: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 por mes "
+                  "(enero-2026).",
+                  "Básico sin adicionales.",
+                  "Oficial del sector (FECRA); el básico subestima lo que cuesta un empleado."),
     Contradiccion("C19", "Precios", "Informativo",
-                  "Referencia: DATOS §7 (sept-2026): Súper $2.141 · Premium $2.300+ · G2 $2.116 · G3 $2.641 · GNC $699/m³ (oct-2025). El modelo usa márgenes, no precios.",
-                  "Nota 01 (Mendoza, 6/5/2026); precios de la propia estación congelados (SE, 2025)."),
+                  "Súper $2.141 · Premium $2.300 · G2 $2.116 · G3 $2.641 · GNC $699/m³ (sept-2026).",
+                  "Nota 01 (Mendoza, 6/5/2026); precios de la propia estación en la Secretaría de Energía (2025).",
+                  "Más reciente: los de la Secretaría de Energía son oficiales pero están congelados desde 2025 "
+                  "(no vigentes)."),
     Contradiccion("C20", "Otros", "Nulo",
-                  "Registrar y mostrar; ninguno entra al modelo (Mercuria, estaciones en San Rafael 15–20, tránsito RN 143, temperatura jul).",
-                  "—"),
+                  "Informativos: ninguno entra al modelo (Mercuria, estaciones en San Rafael, tránsito RN 143, "
+                  "temperatura de julio).",
+                  "—",
+                  "No hay valor que elegir."),
 )
 
 
@@ -167,11 +201,11 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "grupo / DATOS §5 (Shell API: unknown)", "grupo",
                     "C1", (("06–22", "06–22", "DATOS_OPERACIONALES §5"),),
                     "playa 24 h; el shop se asume 24 h", None, None),
-          "24 h sin confirmar"),
+          "24 h (supuesto: igual que la playa)"),
         ("EST-07", ("Servicios", "—", "A", "dato", "media",
                     "lista oficial Shell + DATOS §5", "investigacion",
                     "C14", (), "lavado/Agroservice no figuran en la lista oficial", None, None),
-          "tienda (\"Shell Select\", ≈ 140 m², nombre sin confirmar), baño, aire y agua, "
+          "tienda (Shell Shop, ≈ 140 m²), baño, aire y agua, "
           "servicio atendido, pago en surtidor/móvil, tarjeta de flota"),
         ("EST-08", ("Calzadas", "—", "A", "dato", "media",
                     "Vialidad / OSM", "investigacion",
@@ -184,7 +218,7 @@ REGISTRO: tuple[Dato, ...] = tuple(
         ("EST-10", ("Contexto corporativo", "—", "E", "dato", "media",
                     "nota 01 (jun-2026) / DATOS §5 ('1/9/2026')", "investigacion",
                     "C20", (), "venta a Mercuria con cierre pendiente", None, None),
-          "venta a Mercuria (jun-2026, cierre pendiente según nota 01)"),
+          "venta a Mercuria (firmada en jun-2026; informativo)"),
 
         # -------------------------------------------- B. Surtidores y personal
         ("SUR-00", ("Grupos de la estación real (zona · caras · productos)", "caras",
@@ -318,7 +352,7 @@ REGISTRO: tuple[Dato, ...] = tuple(
         ("DEM-05", ("Clientes GNC (% de las llegadas)", "%", "B", "estimacion", "baja",
                     "DATOS §7", "datos_operacionales",
                     "C8", (("11 %", 0.11, "parque GNC ENARGAS"), ("20 %", 0.20, "orquestador")),
-                    "6 caras para ≈ 3 % de los clientes: alerta de coherencia C8",
+                    "6 caras para ≈ 3 % de los clientes: la capacidad de GNC sobra (C8, resultado del modelo)",
                     0.03, 0.20),
           0.03),
         ("DEM-06", ("Estacionalidad mensual (12 factores)", "factor", "B", "supuesto",
@@ -357,7 +391,7 @@ REGISTRO: tuple[Dato, ...] = tuple(
         ("DEM-09", ("Eventos (opcionales)", "—", "B", "dato", "baja",
                     "DATOS §6", "datos_operacionales",
                     "", (), "Vendimia 17–26 ene +30–50 % · Las Leñas (jun-ago) +30 % · "
-                           "Carnaval +40 % · vacaciones de invierno 9–20 jul", None, None),
+                           "Carnaval +40 % · vacaciones de invierno 6–17 jul (DGE 2026, nota 08)", None, None),
           "Vendimia, Las Leñas, Carnaval, vacaciones de invierno (escenarios, no default)"),
         ("DEM-10", ("Cierre de ruta y demanda", "—", "B", "supuesto", "sin_dato",
                     "DATOS §6", "datos_operacionales",
@@ -945,21 +979,12 @@ MAPA_PARAMETROS: dict[str, str] = {
 
 
 # =============================================================================
-# Advertencias que la app debe mostrar (§5.3)
+# Aclaración general sobre las fuentes
 # =============================================================================
-ADVERTENCIAS: tuple[str, ...] = (
-    "Cada contradicción de §4.2 se muestra con el valor adoptado y las alternativas.",
-    "Los precios de la propia estación en la Secretaría de Energía están congelados "
-    "(2025) y hubo subas del 15 % en 2 meses.",
-    "`[RESUMEN]`: tanques de pick-up y moto, cilindro de GNC y tiempo de GNC no fueron "
-    "verificados en el original.",
-    "Cifras 'confirmadas' sin URL: 270.000 L/mes, 20 % de minimarket, 'Res. ENARGAS "
-    "409/2026' y compresor 20–25 autos/h.",
-    "Alerta de coherencia (C8): 6 caras de GNC para ≈ 3 % de los clientes.",
-    "Dock Sud es el origen documentado para una Shell de Mendoza capital (2023).",
-    "El GNC se mide en m³, no en litros.",
-    "Sin datos de la propia estación: hoy todo es estimación o supuesto hasta el "
-    "relevamiento (§12).",
+#: La única aclaración general sobre las fuentes que muestra la app. Las contradicciones se resolvieron con el
+#: criterio de la nota 07, pero elegir la mejor fuente no convierte una estimación en una medición.
+AVISO_FUENTES = (
+    "Los valores provienen de fuentes públicas y estimaciones; la estación no aporta mediciones propias."
 )
 
 PIE_NO_AFILIADO = (

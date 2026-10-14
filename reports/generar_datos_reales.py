@@ -87,10 +87,15 @@ def main() -> None:
             )
         lineas.append("")
 
-    lineas += ["## Contradicciones entre fuentes y cuál se adoptó", "",
-               "| ID | Tema | Impacto | Valor adoptado | Alternativas |", "|---|---|---|---|---|"]
+    lineas += ["## Contradicciones entre fuentes: qué se eligió y por qué", "",
+               "Criterio único (nota 07): que mida lo mismo; oficial o primaria y vigente; más reciente; más "
+               "específica de San Rafael/Mendoza; ante empate, la más conservadora.", "",
+               "| ID | Tema | Impacto | Valor elegido | Por qué | Descartadas (sensibilidad) |",
+               "|---|---|---|---|---|---|"]
     for c in CONTRADICCIONES:
-        lineas.append(f"| {c.id} | {c.tema} | {c.impacto} | {texto(c.adoptado)} | {texto(c.alternativas)} |")
+        lineas.append(
+            f"| {c.id} | {c.tema} | {c.impacto} | {texto(c.adoptado)} | {texto(c.criterio)} | {texto(c.alternativas)} |"
+        )
     lineas += [
         "",
         "## Lo que todavía no sabemos (a relevar en la estación)",

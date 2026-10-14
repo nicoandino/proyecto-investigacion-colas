@@ -77,12 +77,12 @@ def fila_registro(dato: Dato) -> dict:
     }
 
 
-def tabla_registro(solo_motor: bool = False) -> pd.DataFrame:
-    """El Registro completo como DataFrame (con una fila por alternativa)."""
+def tabla_registro(solo_motor: bool = False, con_alternativas: bool = True) -> pd.DataFrame:
+    """El Registro completo como DataFrame (con una fila por alternativa, salvo `con_alternativas=False`)."""
     filas = []
     for d in REGISTRO:
         filas.append(fila_registro(d))
-        for nombre, alt, fuente in d.alternativas:
+        for nombre, alt, fuente in (d.alternativas if con_alternativas else ()):
             filas.append({
                 "ID": f"{d.id} · alternativa",
                 "Dato": f"{d.nombre} — alternativa: {nombre}",
@@ -114,8 +114,9 @@ def csv_registro() -> str:
             "ID": [c.id for c in CONTRADICCIONES],
             "Tema": [c.tema for c in CONTRADICCIONES],
             "Impacto": [c.impacto for c in CONTRADICCIONES],
-            "Valor adoptado": [c.adoptado for c in CONTRADICCIONES],
-            "Alternativas (sensibilidad)": [c.alternativas for c in CONTRADICCIONES],
+            "Valor elegido": [c.adoptado for c in CONTRADICCIONES],
+            "Criterio": [c.criterio for c in CONTRADICCIONES],
+            "Descartadas (sensibilidad)": [c.alternativas for c in CONTRADICCIONES],
         }
     ).to_csv(buffer, index=False, sep=";")
     return buffer.getvalue()

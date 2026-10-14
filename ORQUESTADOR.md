@@ -256,3 +256,11 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   otro clic. Arreglo: un script mínimo (iframe invisible, mismo origen) evita que el clic con el mouse enfoque el botón, y el
   cartel deja de atrapar el mouse (`pointer-events: none`). Medido: abre con el mouse, se va 0,3 s después de salir (también
   tras un clic), Tab la abre y Escape la cierra. QA `reports/qa_tanda1_limpieza.py`: 0 excepciones, 0 errores de consola.
+- **Tanda 2 ✅ (contradicciones).** Criterio único en `research_notes/…/07_decisiones_fuentes.md`: (0) que mida lo mismo,
+  (1) oficial o primaria y vigente, (2) más reciente, (3) más local, (4) empate → la más conservadora. Cada `Contradiccion`
+  tiene ahora su `criterio`; ningún valor del motor cambió (todas las decisiones confirman lo adoptado, salvo las fechas de
+  vacaciones de invierno: 6–17 jul, DGE 2026, que se usan en la tanda 5). `ADVERTENCIAS` se reemplazó por `AVISO_FUENTES`, la
+  única frase general. La estación ya no muestra advertencias ni contradicciones; Datos y fuentes muestra el valor elegido y
+  "por qué" (las alternativas siguen en el Registro y en el CSV porque son los extremos del tornado). La "alerta C8" pasa a
+  ser una observación del modelo (la capacidad de GNC sobra para esa demanda). `DATOS_REALES.md` regenerado. QA
+  `reports/qa_tanda2_fuentes.py`: 0 excepciones, 0 errores de consola; `verificar.py` 118/118.

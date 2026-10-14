@@ -25,11 +25,11 @@
 | EST-03 | Bandera | Shell (SHELL C.A.P.S.A., id 674) | — | 🟢 dato | la estación | alta | Secretaría de Energía | — |
 | EST-04 | Coordenadas | −34,62833 ; −68,35832 | ° | 🟢 dato | la estación | alta | OSM / relevamiento del grupo | — |
 | EST-05 | Horario de la playa | 24 h (abre todos los días) | h | 🟢 dato | la estación | alta | Shell API `twenty_four_hour` (leída el 5/10/2026) | — |
-| EST-06 | Horario del minimarket | 24 h sin confirmar | h | 🟠 supuesto | la estación | baja | grupo / DATOS §5 (Shell API: unknown) | 06–22 = 06–22 |
-| EST-07 | Servicios | tienda ("Shell Select", ≈ 140 m², nombre sin confirmar), baño, aire y agua, servicio atendido, pago en surtidor/móvil, tarjeta de flota | — | 🟢 dato | la estación | media | lista oficial Shell + DATOS §5 | — |
+| EST-06 | Horario del minimarket | 24 h (supuesto: igual que la playa) | h | 🟠 supuesto | la estación | baja | grupo / DATOS §5 (Shell API: unknown) | 06–22 = 06–22 |
+| EST-07 | Servicios | tienda (Shell Shop, ≈ 140 m²), baño, aire y agua, servicio atendido, pago en surtidor/móvil, tarjeta de flota | — | 🟢 dato | la estación | media | lista oficial Shell + DATOS §5 | — |
 | EST-08 | Calzadas | Balloffet = RN 143 (tramo urbano, 4 carriles, 60 km/h); Los Sauces = RP 158 | — | 🟢 dato | la estación | media | Vialidad / OSM | — |
 | EST-09 | Cercanía | otras Shell a 2,26 y 3,60 km; ninguna estación a < 1,5 km | km | 🟢 dato | San Rafael | alta | relevamiento del grupo (OSM) | — |
-| EST-10 | Contexto corporativo | venta a Mercuria (jun-2026, cierre pendiente según nota 01) | — | 🟢 dato | Argentina / otro | media | nota 01 (jun-2026) / DATOS §5 ('1/9/2026') | — |
+| EST-10 | Contexto corporativo | venta a Mercuria (firmada en jun-2026; informativo) | — | 🟢 dato | Argentina / otro | media | nota 01 (jun-2026) / DATOS §5 ('1/9/2026') | — |
 
 ## Surtidores y compresores
 
@@ -195,30 +195,32 @@
 | MOD-02 | Simulación con datos reales: sin azar (determinista) | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): con datos reales no se sortea nada | con azar = False |
 | MOD-01 | Modelo de la estación (real vs. clásico) | True | — | 🟠 supuesto | la estación | sin_dato | orquestador (el clásico reproduce los dorados, §10.1) | clasico = False |
 
-## Contradicciones entre fuentes y cuál se adoptó
+## Contradicciones entre fuentes: qué se eligió y por qué
 
-| ID | Tema | Impacto | Valor adoptado | Alternativas |
-|---|---|---|---|---|
-| C1 | Horario de la playa | Medio | 24 h (Shell API `twenty_four_hour`, nivel 2; los turnos nocturnos de ambos documentos lo confirman). | S10: cierre nocturno 22–06 (DATOS §5, sin fuente). |
-| C2 | Demanda mensual | Alto | 270.000 L/mes (estimación, confianza baja-media): convergencia de fuentes débiles (informe regional, promedio nacional 270–380k, punto de equilibri… | 150.000 y 400.000 L/mes como ejes de sensibilidad. |
-| C3 | Litros vs. autos | Crítico | Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente, §14.2). | — (los documentos confundían litros/día con autos/día, error ×35–50). |
-| C4 | Entrada al minimarket | Bajo-medio | 20 % (el único con fuente declarada, aunque débil). | 15 % · 30 % · 45 %. |
-| C5 | Personal | Alto | Playeros (noche·mañana·tarde) = 1·2·2; 1 caja; encargado y tienda sólo como costo (único desglose por rol, DATOS §4). | Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno). Con 2 playeros ρ_pico = 0,86. |
-| C6 | Mix diésel G2/G3 | Medio | 55 % / 45 % del diésel (tabla con fuente declarada, Surtidores.com.ar ago-2026) y ambos activos (Secretaría de Energía). | 75/25 (ONBOARDING) y 100/0 (sólo G2). |
-| C7 | Mezcla de producto | Medio | Mezcla en LITROS (DATOS §7, normalizada a los 4 líquidos: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %); GNC = 3 % de los clientes. | GNC 11 % (parque GNC ENARGAS); mezcla por flota. |
-| C8 | GNC: 6 caras vs. 2–3 % | Medio | Se modela como está y la app muestra una alerta de coherencia (6 caras para ≈ 3 % de los clientes). | GNC 3 % / 11 % / 20 %. |
-| C9 | GNC en invierno | Alto en invierno | Corte TOTAL por episodios (2 × 6 días jun–ago), contrato interrumpible, 3 compresores (20–25 autos/h × 7 min ÷ 60 ≈ 2,6; cifra sin fuente). No cita… | Contrato firme (sin cortes); ventanas horarias (17–01, 09–24); −50 % de capacidad; migración 0–60 %. |
-| C10 | Estacionalidad | Medio | Neutra (1,00) por defecto + presets 'leve' y 'proxy turístico'. La ocupación hotelera no es ventas de combustible. | Leve ±6 %; proxy turístico (DATOS §6). |
-| C11 | Tiempo de servicio | Medio | Nafta/diésel Triangular(2,5,8) min · GNC (5,7,12) · minimarket (2,4,10) (fuentes argentinas con URL, sin medición local). | Nota 03: (2,4;3,7;5,0) para nafta y GNC 10–30 min (probablemente incluye espera). |
-| C12 | Litros por carga | Alto | Carga media = 0,5 × tanque: Triangular(0,20·T; 0,30·T; 1,00·T) (único anclaje empírico: nota 03, ≈ 30 % del tanque). | Preset alto (media 0,8·T, 'carga casi llena') y bajo (0,3·T). Para los mismos litros cambia ×0,6/×1,7 la cantidad de clientes. |
-| C13 | Tanques de vehículos | Bajo | Auto 47 L (Autocosmos OK-orig); camión 300 L como supuesto (la 'Alta' de DATOS no tiene fuente). | Auto 42–52 L; camión 120–600 L. |
-| C14 | Servicios | Bajo | Sólo lo de la lista oficial Shell (shop, baño, aire y agua). Nombre del shop: 'Shell Select (nombre sin confirmar)'. No se modela lavadero. | DATOS §5 suma lavado/Agroservice (no figuran en la lista oficial). |
-| C15 | Autoservicio | Medio | Servicio atendido (Shell API: full_service + manned). | S9 autoservicio (Decreto 46/2025, Res. 147/2025 — no verificados): −1 playero por turno. |
-| C16 | Perfil horario | Medio | La tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18; §14.3). La afirmación 'madrugada = 1/40 del pico' no se usa (su propia tabla la contradice). | Perfil heredado (picos 08 y 19 con factor 2,0). |
-| C17 | Fin de semana / quincena | Bajo-medio | Fin de semana ×1,30 normalizado al mes (§14.4). Quincena = escenario S12, no default. | ×1,24 – ×1,50. |
-| C18 | Salarios | Medio | Costos totales estimados: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 (FECRA; la URL dice enero-2026). Vigencia a verificar. | Básico sin adicionales. |
-| C19 | Precios | Informativo | Referencia: DATOS §7 (sept-2026): Súper $2.141 · Premium $2.300+ · G2 $2.116 · G3 $2.641 · GNC $699/m³ (oct-2025). El modelo usa márgenes, no precios. | Nota 01 (Mendoza, 6/5/2026); precios de la propia estación congelados (SE, 2025). |
-| C20 | Otros | Nulo | Registrar y mostrar; ninguno entra al modelo (Mercuria, estaciones en San Rafael 15–20, tránsito RN 143, temperatura jul). | — |
+Criterio único (nota 07): que mida lo mismo; oficial o primaria y vigente; más reciente; más específica de San Rafael/Mendoza; ante empate, la más conservadora.
+
+| ID | Tema | Impacto | Valor elegido | Por qué | Descartadas (sensibilidad) |
+|---|---|---|---|---|---|
+| C1 | Horario de la playa | Medio | 24 h, todos los días. | Oficial: API de Shell (twenty_four_hour, 5/10/2026). | S10: cierre nocturno 22–06 (DATOS §5, sin fuente). |
+| C2 | Demanda mensual | Alto | 270.000 L/mes (estimación). | Más específica: estimación regional, dentro del promedio nacional (270–380 mil) y del punto de equilibrio (315–400 mil). No hay fuente oficial de e… | 150.000 y 400.000 L/mes como ejes de sensibilidad. |
+| C3 | Litros vs. autos | Crítico | Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente). | Misma cosa: no es una disputa de datos sino de unidades. | — (los documentos confundían litros/día con autos/día, error ×35–50). |
+| C4 | Entrada al minimarket | Bajo-medio | 20 % de los clientes atendidos. | Primaria: es la única cifra con fuente declarada. | 15 % · 30 % · 45 %. |
+| C5 | Personal | Alto | Playeros (noche · mañana · tarde) = 1 · 2 · 2; 1 caja; encargado y tienda sólo como costo. | Más específica: DATOS §4 es el único desglose por rol y turno. | Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno). |
+| C6 | Mix diésel G2/G3 | Medio | 55 % G2 / 45 % G3 del diésel; se venden los dos. | Más reciente y con fuente: Surtidores.com.ar (ago-2026); la Secretaría de Energía confirma ambos productos. | 75/25 (ONBOARDING) y 100/0 (sólo G2). |
+| C7 | Mezcla de producto | Medio | En litros: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %; GNC = 3 % de los clientes. | Misma cosa: el 11 % de ENARGAS es el parque de autos a GNC, no los clientes de esta estación. | GNC 11 % (parque GNC ENARGAS); mezcla por flota. |
+| C8 | GNC: 6 caras vs. ≈ 3 % de los clientes | Medio | La estación se modela como está (6 caras, 3 % de clientes GNC). | Misma cosa: las caras se observaron y el 3 % es la demanda; que los compresores queden poco usados es un resultado del modelo. | GNC 3 % / 11 % / 20 %. |
+| C9 | GNC en invierno | Alto en invierno | Corte total por episodios (2 × 6 días, jun–ago), contrato interrumpible, 3 compresores. | Oficial (ENARGAS, abr-2026) para la forma del corte y más específica (Sitio Andino, San Rafael 2022) para la duración. | Contrato firme (sin cortes); ventanas horarias (17–01, 09–24); −50 % de capacidad; migración 0–60 %. |
+| C10 | Estacionalidad | Medio | Neutra por mes + calendario de temporadas (verano, vacaciones de invierno de Mendoza, resto del invierno) editable. | Misma cosa: la ocupación hotelera no es venta de combustible; el calendario es un supuesto moderado (nota 08). | Leve ±6 %; proxy turístico (DATOS §6). |
+| C11 | Tiempo de servicio | Medio | Nafta/diésel Triangular(2, 5, 8) min · GNC (5, 7, 12) · minimarket (2, 4, 10). | Empate → conservadora: ninguna es local ni más reciente; la media de 5 min no subestima la espera. | Nota 03: (2,4; 3,7; 5,0) para nafta y GNC 10–30 min (probablemente incluye la espera). |
+| C12 | Litros por carga | Alto | Carga Triangular(0,20·T; 0,30·T; 1,00·T): media 0,5 × tanque. | Primaria: único anclaje empírico (nota 03, ≈ 30 % del tanque). | Preset alto (media 0,8·T) y bajo (0,3·T). |
+| C13 | Tanques de vehículos | Bajo | Auto 47 L; camión 300 L. | Primaria: ficha del fabricante (Autocosmos) para el auto; el camión es un supuesto sin fuente mejor. | Auto 42–52 L; camión 120–600 L. |
+| C14 | Servicios | Bajo | Shop (en la app, «Shell Shop»), baño, aire y agua. No se modela lavadero. | Oficial: lista de servicios de Shell. | DATOS §5 suma lavado/Agroservice. |
+| C15 | Autoservicio | Medio | Servicio atendido por playeros. | Oficial: API de Shell (full_service, manned). | S9 autoservicio: −1 playero por turno. |
+| C16 | Perfil horario | Medio | Tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18). | Más específica: el perfil heredado es del proyecto hipotético. | Perfil heredado (picos 08 y 19 con factor 2,0). |
+| C17 | Fin de semana / quincena | Bajo-medio | Fin de semana × 1,30, normalizado al mes. La quincena es un escenario aparte. | Empate → conservadora: valor central del rango de la única fuente (DATOS §2). | × 1,24 – × 1,50. |
+| C18 | Salarios | Medio | Costo con adicionales: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 por mes (enero-2026). | Oficial del sector (FECRA); el básico subestima lo que cuesta un empleado. | Básico sin adicionales. |
+| C19 | Precios | Informativo | Súper $2.141 · Premium $2.300 · G2 $2.116 · G3 $2.641 · GNC $699/m³ (sept-2026). | Más reciente: los de la Secretaría de Energía son oficiales pero están congelados desde 2025 (no vigentes). | Nota 01 (Mendoza, 6/5/2026); precios de la propia estación en la Secretaría de Energía (2025). |
+| C20 | Otros | Nulo | Informativos: ninguno entra al modelo (Mercuria, estaciones en San Rafael, tránsito RN 143, temperatura de julio). | No hay valor que elegir. | — |
 
 ## Lo que todavía no sabemos (a relevar en la estación)
 

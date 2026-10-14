@@ -35,7 +35,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **142 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **143 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -63,7 +63,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      142 controles
+verificar.py      143 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -75,7 +75,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 142 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 143 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.

@@ -54,6 +54,11 @@ def _horas(h: float) -> str:
     return "—" if h <= 0 else f"{dec(h)} h"
 
 
+def _md(texto: str) -> str:
+    """Escapa el $ para Markdown: dos $ en una línea se leen como una fórmula LaTeX (regla de CLAUDE.md)."""
+    return texto.replace("$", r"\$")
+
+
 def _pesos(x: float) -> str:
     return f"$ {ent(x)}"
 
@@ -730,9 +735,9 @@ def pestania_eventos(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametr
         "stock o corte de GNC). Son parte de los perdidos de Indicadores: no se suman aparte.",
         "Un playero menos = una reserva en el recurso de playeros hasta el cambio de turno (06, 14 o 22 h), igual que los "
         "turnos; la estación parada (corte de luz, asalto) reserva todos los playeros y compresores.",
-        f"Horas extra (licencia cubierta): 8 h por día de licencia dentro del período × valor de la hora "
+        _md(f"Horas extra (licencia cubierta): 8 h por día de licencia dentro del período × valor de la hora "
         f"({_pesos(eco.sueldo_playero_mensual)} ÷ {ent(_valor_registro('EVT-15'))} h = {_pesos(eco.sueldo_playero_mensual / float(_valor_registro('EVT-15')))}) "
-        "× 1,5 (× 2 el domingo; LCT art. 201). Entra en los costos de Economía.",
+        "× 1,5 (× 2 el domingo; LCT art. 201). Entra en los costos de Economía."),
         "Aumento de precio: el margen por litro queda igual (pedido del grupo), así que no cambia la ganancia; lo que se ve "
         "es la gente que se adelanta a cargar el día anterior.",
         "Frecuencias y duraciones: supuestos del grupo (no hay registros de la estación); detalle en Datos y fuentes (EVT-00…15).",
@@ -954,9 +959,57 @@ def seccion_plan_red(p: ParametrosSimulacion, r: ResultadoReplica, topes_menu: d
     _comprobacion([
         "Plan: flujo de costo mínimo (caminos más cortos sucesivos) desde un nodo que reparte los camiones entre los "
         "orígenes, cada uno hasta su tope × los camiones; costo = km de cada tramo (RED-*). Control 43 de `verificar.py`.",
-        "Los métodos se probaron con los ejercicios de la cátedra (control 42): transporte $4.200 / $4.100 / $3.900, "
-        "transbordo $20.700 y oleoducto 205.000 gal/h.",
+        _md("Los métodos se probaron con los ejercicios de la cátedra (control 42): transporte $4.200 / $4.100 / "
+            "$3.900, transbordo $20.700 y oleoducto 205.000 gal/h."),
         "Rutas independientes: flujo máximo con capacidad 1 en cada tramo (FLU-01, teorema de Menger); el corte mínimo son "
         "los tramos que habría que cortar para aislar la estación.",
         "El flete en pesos sale de ECO-06 (por km sin dato: 0), por eso el plan se mide en camión-km.",
     ])
+
+
+
+# =============================================================================
+# §24 · Inventario: cada camión, de punta a punta
+# =============================================================================
+def tabla_camiones(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """Cada camión del período: cuándo se pidió y llegó, de dónde salió, por dónde vino, km, litros y flete."""
+    from sim.red import NOMBRE_NODO, ruta_del_viaje
+
+    st.markdown("##### 5. Cada camión, de punta a punta")
+    if not r.camiones or p.red is None:
+        st.caption("En este período no se pidió ningún camión.")
+        return
+    nombres = _nombres(p)
+    elegidos = st.multiselect("Tanques", list(dict.fromkeys(x.producto for x in r.camiones)),
+                              default=list(dict.fromkeys(x.producto for x in r.camiones)),
+                              format_func=nombres.get, key="camiones_tanques")
+    filas, total_km, total_flete = [], 0.0, 0.0
+    for k, x in enumerate(r.camiones, start=1):
+        origen = x.origen or p.red.origen
+        camino, como = ruta_del_viaje(p.red, origen, x.demora_ruta, x.causa)
+        flete = eco.costo_pedido + eco.flete_por_km * 2.0 * camino.km
+        if x.producto not in elegidos:
+            continue
+        total_km += camino.km
+        total_flete += flete
+        llego = "todavía en camino" if x.t_llegada > p.duracion else _cuando(p, x.t_llegada)
+        filas.append({
+            "N°": k,
+            "Tanque": nombres[x.producto],
+            "Se pidió": _cuando(p, x.t_pedido),
+            "Llegó": llego,
+            "Plazo": f"{dec((x.t_llegada - x.t_pedido) / 60)} h",
+            "Origen": NOMBRE_NODO.get(origen, origen) + (" (redirigido)" if x.redirigido else ""),
+            "Ruta": " → ".join(NOMBRE_NODO.get(n, n) for n in camino.ruta),
+            "km (ida)": dec(camino.km),
+            "Cómo vino": como + (f" (+{dec(x.demora_ruta / 60)} h, {x.causa})" if x.demora_ruta > 0 else ""),
+            "Litros": ent(x.litros),
+            "Flete": _pesos(flete),
+        })
+    st.dataframe(pd.DataFrame(filas), hide_index=True, height=min(36 * (len(filas) + 1) + 3, 460))
+    st.caption(_md(
+        f"{ent(len(filas))} camiones de los tanques elegidos ({ent(len(r.camiones))} en total = los pedidos de "
+        f"Indicadores) · {ent(total_km)} km de ida · flete {_pesos(total_flete)} = {ent(len(filas))} × "
+        f"{_pesos(eco.costo_pedido)} fijo + {_pesos(eco.flete_por_km)}/km × km de ida y vuelta (ECO-06, heredado sin "
+        "fuente). El plazo es el de INV-01 más la diferencia de viaje si salió de otro origen y la demora de un corte."
+    ))

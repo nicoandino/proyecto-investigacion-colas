@@ -246,6 +246,30 @@ def muestrear_plazos(
     return sin_corte, con_corte
 
 
+def ruta_del_viaje(red: ParametrosRed, origen: str, demora_min: float, causa: str) -> tuple[Camino, str]:
+    """(camino recorrido, cómo) de un camión: la ruta óptima desde su origen, o el desvío si el corte lo obligó.
+
+    Si el viaje tuvo demora por un corte, el modelo suma mín(desvío, espera): si la demora coincide con lo que alarga
+    el camino sin el tramo cortado, el camión se desvió; si es menor, esperó a que se reabriera (misma ruta).
+    """
+    optimo = camino_mas_corto(red, origen=origen)
+    if demora_min <= 0 or not causa:
+        return optimo, "ruta óptima"
+    if causa == "obra":
+        return optimo, "ruta óptima con la obra"
+    cerrados: tuple[tuple[str, str], ...] = ()
+    if causa.startswith("corte E"):
+        cerrados = corte_de(red, causa.split()[-1]).arcos
+    else:                                   # "corte en la <ruta>": el tramo de esa ruta que está en el camino
+        nombre = causa.removeprefix("corte en la ").strip()
+        en_camino = arcos_de_la_ruta(optimo.ruta)
+        cerrados = tuple((a.a, a.b) for a in red.arcos if a.ruta == nombre and _clave(a.a, a.b) in en_camino)
+    desvio = camino_mas_corto(red, origen=origen, cerrados=cerrados)
+    if desvio.ruta and abs((desvio.minutos - optimo.minutos) - demora_min) < 1e-6:
+        return desvio, "desvío por el corte"
+    return optimo, "esperó que reabrieran"
+
+
 def rutas_posibles(red: ParametrosRed, origen: str | None = None) -> list[Camino]:
     """Todas las rutas simples (sin repetir nodos) del origen al destino, de la más corta a la más larga.
 

@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   45. §24, G1: la tabla de camiones tiene un camión por pedido y la ruta recorrida se reconstruye
+       (desvío o espera).
    44. Parte 3, etapa F3: el menú arma las cuotas del plan (con los topes de hoy no cambia nada) y la
        matriz de transbordo de la red real coincide con el flujo de costo mínimo.
    43. Parte 3, etapa F2: plan de costo mínimo sobre la red real (km a mano, con y sin corte), 3 rutas
@@ -1023,8 +1025,11 @@ def main() -> int:
         reemplazar(p, red=reemplazar(red, escenario_corte="ninguno")), semilla=71
     )[0]
     r_enero = correr_replica(p, semilla=71)[0]
+    # (la lista de camiones guarda el origen: sin red queda vacío; el resto de cada camión tiene que coincidir)
+    def _sin_origen(r_):
+        return reemplazar(r_, camiones=tuple((x.producto, x.t_pedido, x.t_llegada, x.litros) for x in r_.camiones))
     controlar(
-        r_sin == r_ning == r_enero,
+        _sin_origen(r_sin) == _sin_origen(r_ning) == _sin_origen(r_enero),
         "Sin cortes (o con cortes sorteados fuera de jun–ago) el resultado es idéntico al de sin red",
         f"plazo {r_sin.plazo_entrega:.4f} h en los tres casos",
     )
@@ -2405,6 +2410,29 @@ def main() -> int:
         "red real da lo mismo que el flujo de costo mínimo",
         f"cuotas con Arroyo Seco al 40 %: {p_40.red.cuotas_origen} · 22 camiones: {plan44.km_total:,.0f} camión-km por "
         f"el flujo = {tr44.costo:,.0f} por la matriz ({len(mt44.filas)}×{len(mt44.columnas)}, B = {mt44.b:g})",
+    )
+
+    # ------------------------------------------------------------------ 45
+    separador("45. §24, G1: la tabla de camiones (cada pedido, su ruta y sus km)")
+    from sim.red import demora_si_encuentra_el_corte, ruta_del_viaje
+
+    r45, _ = correr_replica(base43, semilla=1)
+    d_dock = demora_si_encuentra_el_corte(red43, "E4")
+    d_arroyo = demora_si_encuentra_el_corte(dataclasses.replace(red43, origen="ARROYO"), "E4")
+    desvio, como_d = ruta_del_viaje(red43, "DOCK", d_dock, "corte E4")
+    espera, como_e = ruta_del_viaje(red43, "ARROYO", d_arroyo, "corte E4")
+    normal, como_n = ruta_del_viaje(red43, "DOCK", 0.0, "")
+    controlar(
+        len(r45.camiones) == sum(dict(r45.pedidos_total).values()) > 0
+        and all(x.t_pedido >= base43.calentamiento for x in r45.camiones)
+        and abs(sum(x.litros for x in r45.camiones) - sum(i.cantidad_pedido for i in base43.inventario
+                                                          for x in r45.camiones if x.producto == i.producto)) < 1e-6
+        and como_d == "desvío por el corte" and desvio.ruta == ("DOCK", "LUJAN", "PAREDITAS", "SANRAFAEL")
+        and como_e == "esperó que reabrieran" and espera.ruta == ("ARROYO", "ALVEAR", "SANRAFAEL")
+        and como_n == "ruta óptima" and abs(normal.km - km_dock) < 1e-9,
+        "Un camión por pedido (= los pedidos de Indicadores); la ruta recorrida se reconstruye: desvío o espera",
+        f"enero: {len(r45.camiones)} camiones · con E4, Dock Sud se desvía ({desvio.km:,.1f} km, +{d_dock / 60:.1f} h) y "
+        f"Arroyo Seco espera ({d_arroyo / 60:.0f} h, misma ruta)",
     )
 
     # ------------------------------------------------------------------

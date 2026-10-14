@@ -505,6 +505,17 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   pedido por pronóstico elimina los quiebres del año con datos reales (1.423 → 0 clientes sin combustible) con 6 camiones
   más: se puede volver la política por defecto. **Parte 3 cerrada.**
 
+## 26. Pendientes de §24 (Nico eligió 1, 2 y 4 el 14/10/2026)
+
+- **G1 ✅ (tabla de camiones).** `ResultadoReplica.camiones` (cada `PedidoCamion` del período medido) y
+  `red.ruta_del_viaje` (la ruta que hizo cada camión: la óptima desde su origen, el **desvío** si la demora coincide con lo
+  que alarga el camino sin el tramo cortado, o la misma ruta si **esperó** que reabrieran). Inventario, sección **5. Cada
+  camión, de punta a punta**: N°, tanque, cuándo se pidió y llegó, plazo, origen (y si se redirigió), ruta, km, cómo vino
+  (con la demora y la causa), litros y flete (ECO-06), con filtro por tanque y el total que cierra con los pedidos de
+  Indicadores. El control 19 ahora compara los camiones sin el origen (sin red queda vacío). Se corrigió que dos `$` en un
+  mismo texto de pantalla se leían como fórmula (pie de la tabla, horas extra de Eventos y comprobación del plan de red).
+  Control nuevo (45). `verificar.py` **143/143**.
+
 ---
 
 # Parte 4 — Eventos aleatorios que alteran la estación (14/10/2026)

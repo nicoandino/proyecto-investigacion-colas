@@ -1283,6 +1283,7 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
         )
 
     vistas.bloque_stock_seguridad(p)
+    vistas.tabla_camiones(p, base.replicas[0], eco)
 
     st.caption(
         "¿Cuál sería la mejor política (s, Q) de cada tanque? Esa búsqueda está en el **Caso de informe** (botón "

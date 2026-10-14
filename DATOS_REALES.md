@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 119 datos · 🟢 dato 37 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 51
+**Resumen:** 120 datos · 🟢 dato 37 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 52
 
 ## La estación
 
@@ -190,6 +190,7 @@
 | CAL-04 | Día animado | 2 | día | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 | CAL-05 | Intervalo de la traza | 0.5 | min | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 | CAL-08 | Temporadas del menú inicial | (('Verano', (12, 3)), ('Otoño', (3, 3)), ('Invierno', (6, 3)), ('Primavera', (9, 3))) | mes de inicio · meses | 🟠 supuesto | la estación | sin_dato | estaciones meteorológicas del hemisferio sur (elección del grupo) | — |
+| CAL-09 | Semana representativa de cada temporada (escenario único) | ((('Verano', (1, 12)), ('Otoño', (4, 13)), ('Invierno', (8, 10)), ('Primavera', (10, 12)), ('Vacaciones de invierno', (7, 6))), 7) | mes, día · días | 🟠 supuesto | la estación | sin_dato | grupo (13/10/2026): una semana de lunes a domingo en el medio de cada temporada, fuera de los cortes de GNC habituales; la de vacaciones es la prim… | — |
 | CAL-07 | Grabar la animación de todos los días | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): se anima todo el período, un día cada 5 s | — |
 | CAL-06 | Horizonte | mes | — | 🟠 supuesto | la estación | sin_dato | orquestador | — |
 

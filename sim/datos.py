@@ -884,6 +884,15 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "Verano dic–feb · Otoño mar–may · Invierno jun–ago · Primavera sep–nov, de mes "
                     "entero; el verano cruza el año", None, None),
           (("Verano", (12, 3)), ("Otoño", (3, 3)), ("Invierno", (6, 3)), ("Primavera", (9, 3)))),
+        ("CAL-09", ("Semana representativa de cada temporada (escenario único)", "mes, día · días", "A",
+                    "supuesto", "sin_dato",
+                    "grupo (13/10/2026): una semana de lunes a domingo en el medio de cada temporada, fuera de "
+                    "los cortes de GNC habituales; la de vacaciones es la primera semana del receso (DEM-15)",
+                    "grupo", "", (),
+                    "verano 12/ene · otoño 13/abr · invierno 10/ago · primavera 12/oct · vacaciones de invierno "
+                    "6/jul; 7 días cada una", None, None),
+          ((("Verano", (1, 12)), ("Otoño", (4, 13)), ("Invierno", (8, 10)), ("Primavera", (10, 12)),
+            ("Vacaciones de invierno", (7, 6))), 7)),
         ("CAL-07", ("Grabar la animación de todos los días", "—", "A", "supuesto", "sin_dato",
                     "pedido del grupo (6/10/2026): se anima todo el período, un día cada 5 s",
                     "grupo", "", (), "se graba un cuadro cada `dt_traza` minutos en todo el período",

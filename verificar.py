@@ -1901,6 +1901,25 @@ def main() -> int:
         f"julio con calendario: {dict(r31.totales)['llegadas']} llegadas en {len(traza31.llegadas_dia_hora)} días",
     )
 
+    # ------------------------------------------------------------------ 32
+    separador("32. Parte 2, tanda 6: el escenario único (micro simulación de una semana)")
+    from sim.periodo import FRANJAS, EscenarioUnico
+
+    eu_hoy = EscenarioUnico(playeros=2, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media")
+    p32 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), eu_hoy.periodo()), animar_todo=False)
+    p32_hoy = eu_hoy.escenario(p32).aplicar(p32)
+    p32_mas = EscenarioUnico(playeros=3, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media").escenario(p32).aplicar(p32)
+    p32_max = EscenarioUnico(playeros=2, franja="Todo el día", temporada="Otoño", clientela="máxima").escenario(p32).aplicar(p32)
+    controlar(
+        correr_replica(p32_hoy, 1)[0] == correr_replica(p32, 1)[0]
+        and dict(p32_mas.turnos)[7.0] == 3 and dict(p32_mas.turnos)[10.0] == 2
+        and p32_max.playeros_por_turno == (2, 2, 2) and p32_max.litros_mes > 400_000
+        and eu_hoy.periodo().dias == 7 and eu_hoy.horas() == (7, 8, 9),
+        "El escenario único 'como hoy' da lo mismo que la corrida base; los playeros y la clientela cambian lo pedido",
+        f"{eu_hoy.periodo().texto} · turnos con 3 en el pico: {p32_mas.turnos} · clientela máxima: "
+        f"{p32_max.litros_mes:,.0f} L/mes con el doble en el pico",
+    )
+
     # ------------------------------------------------------------------
     print()
     if _fallas == 0:

@@ -46,12 +46,16 @@ from sim.economia_real import (
     resumir_economia,
 )
 from sim.periodo import (
+    CLIENTELAS,
+    FRANJAS,
     MARGENES_REGISTRO,
+    SEMANAS,
     MESES as MESES_PERIODO,
     NIVELES_DEMANDA,
     TEMPORADAS,
     Ajustes,
     Edicion,
+    EscenarioUnico,
     Periodo,
     anio_completo,
     aplicar_ajustes,
@@ -1270,8 +1274,10 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
             icon="⚠️",
         )
 
-    st.divider()
-    seccion_mejor_politica(p, eco)
+    st.caption(
+        "¿Cuál sería la mejor política (s, Q) de cada tanque? Esa búsqueda está en el **Caso de informe** (botón "
+        "en el menú principal), fuera del flujo normal porque prueba 13 políticas."
+    )
 
 
 # --- Búsqueda de la mejor política (s, Q): de a una política por vez ------------------
@@ -1444,14 +1450,6 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
             }
         )
     st.dataframe(pd.DataFrame(resumen), hide_index=True)
-    if ahorro_total > 0 and st.button(
-        "✅ Usar las mejores políticas",
-        help="Vuelve a simular el período con la mejor política de cada tanque.",
-    ):
-        st.session_state.politica_sugerida_real = {
-            producto: (m.punto_pedido, m.cantidad_pedido) for producto, m in mejores.items()
-        }
-        st.rerun()
 
     elegido = st.selectbox(
         "Ver el detalle de", list(costos), format_func=lambda x: nombres[x], key="detalle_pol_real"
@@ -1822,51 +1820,9 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         )
     )
 
-    # ---- Decisión por escenario (conclusión por pregunta del CASO)
-    st.markdown("##### Decisión en $/mes: qué le hace cada escenario al margen")
-    comparacion = st.session_state.get("comparacion")
-    if not comparacion:
-        st.info("Corré los escenarios en la pestaña **Escenarios** y acá aparece lo que cada "
-                "uno suma o resta al margen mensual.", icon="🧪")
-    else:
-        _, mes_usado, resultados_cmp = comparacion
-        conc = conclusiones_economia(resultados_cmp, eco)
-        tabla = pd.DataFrame([
-            {
-                "ID": c.id,
-                "Escenario": c.nombre,
-                "Pregunta": c.pregunta,
-                "Δ margen por mes": f"{pesos(c.d_margen.promedio)} ± {pesos(c.d_margen.semiamplitud)}",
-                "Δ personal": pesos(c.d_personal.promedio),
-                "Δ ingresos": pesos(c.d_ingreso.promedio),
-                "Δ venta perdida (no se resta)": pesos(c.d_venta_perdida.promedio),
-                "Veredicto": c.veredicto,
-            }
-            for c in conc
-        ])
-        st.markdown(f"Mes de la comparación: **{MESES[mes_usado - 1]}**; Δ contra S0, con la "
-                    "diferencia pareada y su IC 95 %.")
-        st.dataframe(tabla, hide_index=True, height=38 * (len(tabla) + 1))
-        st.plotly_chart(
-            graficos_escenarios.grafico_delta_margen(
-                conc, "Δ del margen operativo mensual contra S0 (promedio ± IC 95 % de la diferencia)"),
-            key="g_delta_margen",
-        )
-        d6 = decision_s6(resultados_cmp, eco)
-        if d6:
-            st.markdown(escapar_pesos(
-                f"**S6 — ¿un playero más en el pico o más stock?** Playero extra: "
-                f"{pesos(d6['d_playero'].promedio)} ± {pesos(d6['d_playero'].semiamplitud)} por mes "
-                f"(cuesta {pesos(d6['costo_playero'].promedio)} de personal). Stock extra: "
-                f"{pesos(d6['d_stock'].promedio)} ± {pesos(d6['d_stock'].semiamplitud)} por mes. "
-                f"Diferencia (playero − stock): {pesos(d6['playero_menos_stock'].promedio)} ± "
-                f"{pesos(d6['playero_menos_stock'].semiamplitud)} → **{d6['mejor']}**."
-            ))
-        st.caption(
-            "Veredicto según el IC 95 % de la diferencia con S0: *suma margen* y *resta margen* "
-            "son efectos que no se explican por azar; *no se distingue* quiere decir que con "
-            "estas réplicas y estos márgenes placeholder no se puede afirmar nada."
-        )
+    st.caption(
+        "Lo que cada escenario S0–S12 le suma o resta al margen mensual está en el **Caso de informe** (menú principal)."
+    )
 
     with st.expander("Cómo se calcula"):
         st.markdown(escapar_pesos(
@@ -1945,6 +1901,55 @@ y se informa aparte.
         )
 
 
+def seccion_decision(eco: ParametrosEconomicos) -> None:
+    """Caso de informe: qué le hace cada escenario del catálogo al margen mensual (Fase 8)."""
+    st.markdown("##### Decisión en $/mes: qué le hace cada escenario al margen")
+    comparacion = st.session_state.get("comparacion")
+    if not comparacion:
+        st.info("Corré los escenarios arriba y acá aparece lo que cada uno suma o resta al margen mensual.",
+                icon="🧪")
+    else:
+        _, mes_usado, resultados_cmp = comparacion
+        conc = conclusiones_economia(resultados_cmp, eco)
+        tabla = pd.DataFrame([
+            {
+                "ID": c.id,
+                "Escenario": c.nombre,
+                "Pregunta": c.pregunta,
+                "Δ margen por mes": f"{pesos(c.d_margen.promedio)} ± {pesos(c.d_margen.semiamplitud)}",
+                "Δ personal": pesos(c.d_personal.promedio),
+                "Δ ingresos": pesos(c.d_ingreso.promedio),
+                "Δ venta perdida (no se resta)": pesos(c.d_venta_perdida.promedio),
+                "Veredicto": c.veredicto,
+            }
+            for c in conc
+        ])
+        st.markdown(f"Mes de la comparación: **{MESES[mes_usado - 1]}**; Δ contra S0, con la "
+                    "diferencia pareada y su IC 95 %.")
+        st.dataframe(tabla, hide_index=True, height=38 * (len(tabla) + 1))
+        st.plotly_chart(
+            graficos_escenarios.grafico_delta_margen(
+                conc, "Δ del margen operativo mensual contra S0 (promedio ± IC 95 % de la diferencia)"),
+            key="g_delta_margen",
+        )
+        d6 = decision_s6(resultados_cmp, eco)
+        if d6:
+            st.markdown(escapar_pesos(
+                f"**S6 — ¿un playero más en el pico o más stock?** Playero extra: "
+                f"{pesos(d6['d_playero'].promedio)} ± {pesos(d6['d_playero'].semiamplitud)} por mes "
+                f"(cuesta {pesos(d6['costo_playero'].promedio)} de personal). Stock extra: "
+                f"{pesos(d6['d_stock'].promedio)} ± {pesos(d6['d_stock'].semiamplitud)} por mes. "
+                f"Diferencia (playero − stock): {pesos(d6['playero_menos_stock'].promedio)} ± "
+                f"{pesos(d6['playero_menos_stock'].semiamplitud)} → **{d6['mejor']}**."
+            ))
+        st.caption(
+            "Veredicto según el IC 95 % de la diferencia con S0: *suma margen* y *resta margen* "
+            "son efectos que no se explican por azar; *no se distingue* quiere decir que con "
+            "estas réplicas y estos márgenes placeholder no se puede afirmar nada."
+        )
+
+
+
 # =============================================================================
 # Pestaña: conclusión
 # =============================================================================
@@ -1954,118 +1959,81 @@ def escapar_pesos(texto: str) -> str:
 
 
 def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
-    """Diagnóstico de la estación real y respuesta a las preguntas del CASO en $/mes."""
-    base = buscar(st.session_state.resultados, "Base")
+    """La conclusión de ESTA corrida: cada frase sale de sus resultados (no hay texto fijo)."""
+    r = st.session_state.resultados[0].replicas[0]
     eco = st.session_state.parametros_eco
-    economia_base = resumir_economia(economia_de(st.session_state.resultados[0], eco))
+    periodo: Periodo = st.session_state.periodo
+    economia = resumir_economia(economia_de(st.session_state.resultados[0], eco))
+    t = dict(r.totales)
+    dias = max(r.dias_medidos, 1)
+    llegadas = max(t["llegadas"], 1)
+    por_espera = t["perdidos_espera"] + t["perdidos_cola_llena"]
+    por_stock = t["perdidos_sin_combustible"]
+    por_gnc = t["perdidos_corte_gnc"]
+    perdidos = por_espera + por_stock + por_gnc
+    vacios = sum(q[1] for q in r.quiebres)
+    horas_vacio = sum(q[2] for q in r.quiebres)
+    causas = {f[0]: f[1:] for f in r.litros_perdidos_causa}
+    venta_perdida = sum(sum(v) * eco.margen_de(pr) for pr, v in causas.items())
 
-    st.subheader("Diagnóstico de la estación real")
-    st.info(
-        "Los pesos usan márgenes y flete **placeholder** (ECO-01/02/03/06, sin fuente): sirven "
-        "para ordenar las decisiones y ver su tamaño relativo, no son todavía cifras del "
-        "negocio. Las decisiones se leen mejor mirando el IC 95 % que el número solo.",
-        icon="🧭",
-    )
-    perdidos_espera = base.prom("perdidos_cola_dia")
-    perdidos_cola_llena = base.prom("perdidos_cola_llena_dia")
-    perdidos_nafta = base.prom("perdidos_sin_combustible_dia")
-    perdidos_total = perdidos_espera + perdidos_cola_llena + perdidos_nafta
-    lineas = [
-        f"La estación recibe **{base.prom('llegadas_dia'):,.0f} clientes por día** "
-        f"({base.prom('litros_vendidos_dia'):,.0f} L de combustible líquido vendidos por día) "
-        f"con 12 caras y playeros {p.playeros_por_turno[0]} · {p.playeros_por_turno[1]} · "
-        f"{p.playeros_por_turno[2]} (noche · mañana · tarde).",
-        f"La espera promedio es de {base.prom('espera_surtidor'):.1f} min, pero en la hora "
-        f"pico trepa a {base.prom('espera_pico'):.1f} min "
-        f"(± {base.resumen['espera_pico'].semiamplitud:.1f}, IC 95 %). Las caras están "
-        f"ocupadas el {base.prom('util_surtidores') * 100:.0f} % del tiempo y los playeros "
-        f"el {base.prom('util_playeros') * 100:.0f} %.",
-        f"ρ analítico en la hora pico: **{p.rho_pico:.2f}** con "
-        f"{max(p.playeros_por_turno)} playeros. Con ρ cerca de 1 la dotación está al límite: "
-        f"depende de C5 (dotación), C11 (tiempo de servicio) y C12 (litros por carga).",
-        f"Se pierden {perdidos_total:.1f} clientes por día: {perdidos_espera:.1f} por "
-        f"esperar demasiado, {perdidos_cola_llena:.1f} por cola llena y "
-        f"{perdidos_nafta:.1f} por falta de combustible. Son "
-        f"{pesos(economia_base['venta_perdida_total'].promedio)} por mes de venta no realizada "
-        f"(costo de oportunidad, con márgenes placeholder). El margen operativo del mes es "
-        f"{pesos(economia_base['margen_operativo'].promedio)} ± "
-        f"{pesos(economia_base['margen_operativo'].semiamplitud)}.",
-        f"Nivel de servicio de combustible: {base.prom('nivel_servicio') * 100:.1f} %.",
-    ]
-    if p.gnc is not None and base.prom("gnc_afectados_dia") > 0:
-        lineas.append(
-            f"GNC: el corte de invierno afecta a {base.prom('gnc_afectados_dia'):.1f} clientes "
-            f"por día (promedio del período): {base.prom('migrados_gnc_dia'):.1f} pasan a Súper "
-            f"y {base.prom('perdidos_corte_gnc_dia'):.1f} se pierden "
-            f"({base.prom('m3_gnc_perdidos_dia'):.0f} m³ por día sin vender)."
-        )
-    if p.gnc is not None:
-        caras_gnc = sum(gr.caras for gr in p.grupos if "gnc" in gr.productos)
-        lineas.append(
-            f"GNC: {caras_gnc} de {sum(gr.caras for gr in p.grupos)} caras son de GNC para ≈ "
-            f"{p.pct_gnc:.0%} de los clientes: la capacidad de GNC sobra para esa demanda."
-        )
-    for linea in lineas:
-        st.markdown(f"- {escapar_pesos(linea)}")
-
-    costos_real = st.session_state.get("costos_real")
-    if costos_real:
-        ahorros = ahorro_por_producto(costos_real)
-        nombres = {pr.id: pr.nombre for pr in p.productos}
-        st.markdown("#### Reposición")
-        st.markdown(
-            escapar_pesos(
-                f"- Con la mejor política de cada tanque se ahorran **{pesos(sum(ahorros.values()))} "
-                f"por mes** (márgenes y flete placeholder). Por producto: "
-                + " · ".join(f"{nombres[k]} {pesos(v)}" for k, v in ahorros.items())
-                + "."
-            )
+    st.subheader(f"Conclusión: {periodo.titulo.lower()} ({periodo.texto})")
+    principal = max((por_espera, "la atención (colas y playeros)"), (por_stock, "el abastecimiento (tanques vacíos)"),
+                    (por_gnc, "los cortes de GNC"))
+    if perdidos <= 0.005 * llegadas:
+        st.success(
+            f"La estación atiende **casi toda** la demanda del período: se perdieron {vistas.ent(perdidos)} de "
+            f"{vistas.ent(llegadas)} clientes ({vistas.pct(perdidos, llegadas)}).", icon="✅",
         )
     else:
-        st.info(
-            "Todavía no se buscó la mejor política de reposición de cada tanque: "
-            "andá a **Inventario** y apretá *Buscar la mejor política*.",
-            icon="🛢️",
-        )
-
-    st.markdown("#### Respuestas a las preguntas del CASO, en $/mes")
-    comparacion = st.session_state.get("comparacion")
-    if not comparacion:
-        st.info(
-            "Corré los escenarios en la pestaña **Escenarios** y acá aparece la respuesta a "
-            "cada pregunta (¿alcanza la dotación?, ¿qué pasa con el corte de GNC?, ¿playero "
-            "extra o stock?…) en pesos por mes.",
-            icon="🧪",
-        )
-    else:
-        _, mes_usado, resultados_cmp = comparacion
-        for c in conclusiones_economia(resultados_cmp, eco):
-            st.markdown(escapar_pesos(
-                f"- **{c.id} — {c.pregunta}** · {c.nombre}: **{c.veredicto}** "
-                f"(Δ margen {pesos(c.d_margen.promedio)} ± {pesos(c.d_margen.semiamplitud)} "
-                f"por mes; personal {pesos(c.d_personal.promedio)}; venta perdida "
-                f"{pesos(c.d_venta_perdida.promedio)})."
-            ))
-        d6 = decision_s6(resultados_cmp, eco)
-        if d6:
-            st.success(escapar_pesos(
-                f"**S6:** entre un playero más en el pico y más stock, conviene "
-                f"**{d6['mejor']}**."
-            ))
-        st.caption(f"Comparación en {MESES[mes_usado - 1]}; Δ contra S0 con diferencia pareada.")
-
-    if perdidos_nafta > (perdidos_espera + perdidos_cola_llena) * 1.5:
-        st.error(
-            "Se pierden más clientes por falta de combustible que por espera: el cuello "
-            "de botella es el abastecimiento, no la dotación.",
-            icon="🛢️",
-        )
-    elif (perdidos_espera + perdidos_cola_llena) > perdidos_nafta * 1.5:
         st.warning(
-            "Se pierden más clientes por espera que por falta de combustible: el cuello "
-            "de botella es la capacidad de atención (playeros en el pico).",
-            icon="🚗",
+            f"Se perdieron **{vistas.ent(perdidos)} clientes** ({vistas.pct(perdidos, llegadas)}); la causa principal es "
+            f"**{principal[1]}** ({vistas.ent(principal[0])} clientes).", icon="🧭",
         )
+
+    lineas = [
+        f"**Demanda:** llegaron {vistas.ent(llegadas)} clientes en {dias} días (≈ {vistas.ent(llegadas / dias)} por día) y se "
+        f"vendieron {vistas.ent(r.litros_vendidos_dia - r.m3_gnc_vendidos_dia)} L de nafta y diésel por día.",
+        f"**Colas:** la espera promedio fue {vistas.dec(r.espera_surtidor)} min y en la hora pico ({r.hora_pico:02d} h) "
+        f"{vistas.dec(r.espera_pico)} min. ρ analítico en el pico: **{vistas.dec(p.rho_pico, 2)}** con "
+        f"{max(p.playeros_por_turno)} playeros"
+        + (" (al límite: más de 0,85)." if p.rho_pico >= 0.85 else " (con margen)."),
+        f"**Por qué se perdieron clientes:** {vistas.ent(t['perdidos_espera'])} se cansaron de esperar, "
+        f"{vistas.ent(t['perdidos_cola_llena'])} encontraron la cola llena, {vistas.ent(por_stock)} no pudieron cargar por "
+        f"falta de stock y {vistas.ent(por_gnc)} se fueron por el corte de GNC.",
+        f"**Tanques:** "
+        + (f"quedaron vacíos {vistas.ent(vacios)} veces, {vistas.dec(horas_vacio)} h en total (sumando los tanques)."
+           if vacios else "ningún tanque quedó vacío.")
+        + (f" Hubo {vistas.ent(t['dias_con_quiebre'])} días con clientes sin cargar por falta de stock."
+           if t["dias_con_quiebre"] else ""),
+        f"**GNC:** "
+        + (f"{vistas.ent(t['dias_con_corte_gnc'])} días con corte; {vistas.ent(t['migrados_gnc'])} clientes pasaron a Súper y "
+           f"{vistas.ent(por_gnc)} se perdieron." if t["dias_con_corte_gnc"] else "no hubo cortes en este período."),
+        escapar_pesos(
+            f"**Plata (márgenes heredados sin fuente):** margen operativo del mes "
+            f"{pesos(economia['margen_operativo'].promedio)}; la venta que no se hizo vale ≈ {pesos(venta_perdida)} en "
+            f"el período (costo de oportunidad, no se resta del margen)."
+        ),
+    ]
+    for linea in lineas:
+        st.markdown(f"- {linea}")
+
+    st.markdown("#### Qué conviene probar después")
+    sugerencias = []
+    if por_espera > 0.005 * llegadas or p.rho_pico >= 0.85:
+        sugerencias.append("Un **escenario único** (menú principal) con un playero más en la franja del pico, para ver "
+                           "cuánto baja la espera y cuántos clientes se recuperan.")
+    if vacios or por_stock:
+        sugerencias.append("En el **Caso de informe**, la búsqueda de la mejor política (s, Q): los quiebres dependen de "
+                           "cuándo y cuánto se pide.")
+    if por_gnc:
+        sugerencias.append("En el menú, la opción de **más cortes de GNC en todo el invierno** para ver el peor caso.")
+    if st.session_state.get("modo") != "editada" and r.cola_surtidor < 0.1:
+        sugerencias.append("**Editar simulación** (con azar o el doble de demanda en el pico): sin azar los clientes "
+                           "llegan a intervalos exactos y casi no se forman colas.")
+    if not sugerencias:
+        sugerencias.append("Otro período (por ejemplo, el verano o las vacaciones de invierno) para comparar.")
+    for linea in sugerencias:
+        st.markdown(f"- {linea}")
 
     st.divider()
     st.markdown("**Supuestos del modelo** (lo que hay que aclarar al presentarlo)")
@@ -2734,7 +2702,7 @@ def pestania_comparar(p: ParametrosSimulacion) -> None:
     with st.expander("El catálogo: qué cambia cada escenario y qué pregunta contesta"):
         st.dataframe(tabla_catalogo(p_mes), hide_index=True)
         st.caption(
-            "S1 (día típico por estación) es la pestaña **Estaciones del año**. S6 compara "
+            "S1 (día típico por estación) se ve simulando cada estación desde el menú. S6 compara "
             "**S2 +1** (un playero más en el pico) contra **S6** (más stock): el costo en "
             "$/mes de cada opción llega con la economía real (Fase 8)."
         )
@@ -3085,6 +3053,149 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
     )
 
 
+def menu_escenario_unico() -> EscenarioUnico:
+    """Las cuatro cosas que se eligen para el escenario único."""
+    previo: EscenarioUnico = st.session_state.get("eu_previo") or EscenarioUnico()
+    c1, c2, c3, c4 = st.columns(4)
+    playeros = int(c1.number_input("Playeros en la franja", 1, 6, previo.playeros, 1, key="eu_playeros",
+                                   help="Hoy (PER-01): 1 de noche, 2 de mañana y 2 de tarde."))
+    franja = c2.selectbox("Franja horaria", list(FRANJAS), index=list(FRANJAS).index(previo.franja), key="eu_franja")
+    temporada = c3.selectbox("Temporada", list(SEMANAS), index=list(SEMANAS).index(previo.temporada), key="eu_temporada",
+                             help="Se simula una semana representativa (CAL-09), de lunes a domingo.")
+    clientela = c4.selectbox(
+        "Clientela", CLIENTELAS, index=CLIENTELAS.index(previo.clientela), key="eu_clientela",
+        format_func=lambda n: {"poca": "Poca (150.000 L/mes)", "media": "Media (270.000 L/mes)",
+                               "alta": "Alta (400.000 L/mes)", "máxima": "Máxima (alta y el doble en el pico)"}[n],
+    )
+    return EscenarioUnico(playeros=playeros, franja=franja, temporada=temporada, clientela=clientela)
+
+
+def simular_escenario_unico(eu: EscenarioUnico) -> None:
+    """Corre la semana del escenario (sin azar) y pasa a su pantalla."""
+    periodo = eu.periodo()
+    base, eco = aplicar_ajustes(
+        con_periodo(ParametrosSimulacion().datos_reales(), periodo), ParametrosEconomicos(), ajustes_actuales()
+    )
+    p = replace(eu.escenario(base).aplicar(base), animar_todo=False)
+    with st.spinner(f"Simulando: {eu.titulo}…"):
+        resultado, traza = correr_replica(p, semilla=1, con_traza=True)
+    st.session_state.eu_previo = eu
+    st.session_state.escenario_unico = (eu, periodo, p, eco, resultado, traza)
+    st.session_state.vista = "escenario"
+
+
+def pantalla_escenario_unico() -> None:
+    """Sólo los datos del escenario elegido, en su franja, y una conclusión armada con esos resultados."""
+    eu, periodo, p, eco, r, traza = st.session_state.escenario_unico
+    c1, c2 = st.columns([5, 1])
+    c1.title("🎯 Escenario único")
+    if c2.button("← Volver al menú", key="btn_volver_eu"):
+        st.session_state.vista = "inicio"
+        st.rerun()
+    st.info(f"**{eu.titulo}** · {periodo.texto}. Datos del Registro, sin azar; se muestra sólo la franja elegida.",
+            icon="🎯")
+
+    horas = eu.horas()
+    dias = p.dias
+    llegadas = sum(traza.llegadas_dia_hora[d][h] for d in range(dias) for h in horas)
+    suma = sum(traza.espera_dia_hora[d][h][0] for d in range(dias) for h in horas)
+    cant = sum(traza.espera_dia_hora[d][h][1] for d in range(dias) for h in horas)
+    espera = suma / cant if cant else 0.0
+    perdidos = sum(traza.perdidos_por_hora[h] for h in horas)
+    por_hora = llegadas / dias / len(horas)
+    rho = por_hora * (1.0 - p.pct_gnc) * p.media_servicio_liquidos() / 60.0 / eu.playeros
+    vistas_ent, vistas_dec = vistas.ent, vistas.dec
+    filas = st.columns(5)
+    for col, (titulo, valor_, nota) in zip(filas, (
+        ("Clientes por hora", vistas_dec(por_hora), "promedio de la franja, todos los productos"),
+        ("Playeros", vistas_ent(eu.playeros), "en la franja"),
+        ("ρ (ocupación teórica)", vistas_dec(rho, 2), "llegadas × servicio ÷ playeros; ≥ 1 no alcanza"),
+        ("Espera promedio", f"{vistas_dec(espera)} min", "de los atendidos en la franja"),
+        ("Clientes perdidos", vistas_ent(perdidos / dias), f"por día en la franja ({vistas_ent(perdidos)} en la semana)"),
+    )):
+        col.metric(titulo, valor_, border=True)
+        col.caption(nota)
+
+    st.markdown("##### Hora por hora (promedio de los 7 días)")
+    st.dataframe(pd.DataFrame({
+        "Hora": [f"{h:02d}–{h + 1:02d}" for h in horas],
+        "Clientes que llegaron": [vistas_dec(sum(traza.llegadas_dia_hora[d][h] for d in range(dias)) / dias) for h in horas],
+        "Espera promedio (min)": [
+            vistas_dec(sum(traza.espera_dia_hora[d][h][0] for d in range(dias))
+                       / max(1, sum(traza.espera_dia_hora[d][h][1] for d in range(dias))))
+            for h in horas
+        ],
+        "Se fueron sin cargar": [vistas_dec(traza.perdidos_por_hora[h] / dias) for h in horas],
+    }), hide_index=True)
+
+    st.markdown("##### Conclusión de este escenario")
+    if rho >= 1.0 or perdidos > 0.05 * max(llegadas, 1):
+        st.error(
+            f"Con {eu.playeros} playero{'s' if eu.playeros != 1 else ''} la franja **no alcanza**: ρ = {vistas_dec(rho, 2)} "
+            f"y se va sin cargar el {vistas.pct(perdidos, llegadas)} de los que llegan en esas horas.", icon="🚗",
+        )
+    elif rho >= 0.85 or espera > 3.0:
+        st.warning(
+            f"La franja está **al límite**: ρ = {vistas_dec(rho, 2)} y la espera promedio es {vistas_dec(espera)} min; "
+            f"cualquier aumento de clientes la satura.", icon="⚠️",
+        )
+    else:
+        st.success(
+            f"La franja **alcanza con margen**: ρ = {vistas_dec(rho, 2)}, espera de {vistas_dec(espera)} min y "
+            f"{vistas_ent(perdidos)} clientes perdidos en la semana.", icon="✅",
+        )
+    t = dict(r.totales)
+    extras = []
+    if t["perdidos_sin_combustible"]:
+        extras.append(f"en la semana hubo {vistas_ent(t['perdidos_sin_combustible'])} clientes sin cargar por falta de stock "
+                      f"(es de todo el día, no sólo de la franja)")
+    if t["dias_con_corte_gnc"]:
+        extras.append(f"hubo {vistas_ent(t['dias_con_corte_gnc'])} días con el GNC cortado")
+    if extras:
+        st.caption("Además, " + "; ".join(extras) + ".")
+    st.caption(
+        f"ρ = {vistas_dec(por_hora)} clientes por hora × {vistas_dec(100 * (1 - p.pct_gnc), 0)} % que usan playero × "
+        f"{vistas_dec(p.media_servicio_liquidos())} min de servicio ÷ 60 ÷ {eu.playeros} playeros. El GNC no usa playero."
+    )
+    st.plotly_chart(graficos.grafico_perfil_horario(traza, dias), key="g_eu_perfil")
+    st.divider()
+    st.caption(PIE_NO_AFILIADO)
+
+
+def pantalla_informe() -> None:
+    """Caso de informe: la búsqueda de la mejor política, el catálogo S0–S12 y el tornado, fuera del flujo normal."""
+    periodo = st.session_state.get("periodo_informe") or por_meses(7, 7)
+    p, eco = aplicar_ajustes(
+        con_periodo(ParametrosSimulacion().datos_reales(), periodo), ParametrosEconomicos(), ajustes_actuales()
+    )
+    p = replace(p, animar_todo=False)
+    if "semilla_usada" not in st.session_state:
+        st.session_state.semilla_usada = 1
+    c1, c2 = st.columns([5, 1])
+    c1.title("📑 Caso de informe")
+    if c2.button("← Volver al menú", key="btn_volver_informe"):
+        st.session_state.vista = "inicio"
+        st.rerun()
+    st.info(
+        f"Período: **{periodo.titulo}** — {periodo.texto} (el elegido en el menú). La búsqueda de la mejor política usa "
+        f"los datos reales (sin azar); el catálogo y el tornado usan **azar con réplicas**, porque comparan escenarios "
+        f"con diferencias pareadas e intervalos de confianza.", icon="📑",
+    )
+    p_azar = replace(p, determinista=False)
+    t1, t2, t3 = st.tabs(["🔎 Mejor política de reposición", "⚖️ Escenarios S0–S12 y decisión en $/mes",
+                          "🌪️ Sensibilidad (tornado)"])
+    with t1:
+        seccion_mejor_politica(p, eco)
+    with t2:
+        pestania_comparar(p_azar)
+        st.divider()
+        seccion_decision(eco)
+    with t3:
+        pestania_sensibilidad(p_azar, eco)
+    st.divider()
+    st.caption(PIE_NO_AFILIADO)
+
+
 def pantalla_inicio() -> None:
     st.title("⛽ Simulador de la Estación Shell — San Rafael")
     st.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
@@ -3114,6 +3225,30 @@ def pantalla_inicio() -> None:
     if st.button("▶ Simular con datos reales", type="primary", disabled=periodo is None):
         st.session_state.ajustes = ajustes
         simular_periodo(periodo)
+        st.rerun()
+
+    st.divider()
+    st.markdown("#### O un escenario único")
+    st.caption(
+        "Una micro simulación de **una semana** que muestra sólo ese escenario: cuántos playeros hay en una franja, en "
+        "qué temporada y con cuánta clientela. Usa los datos del Registro y los ajustes de arriba, sin azar."
+    )
+    eu = menu_escenario_unico()
+    if st.button("🎯 Simular el escenario único", key="btn_escenario_unico"):
+        st.session_state.ajustes = ajustes
+        simular_escenario_unico(eu)
+        st.rerun()
+
+    st.divider()
+    st.markdown("#### Caso de informe")
+    st.caption(
+        "El análisis completo para el informe, fuera del flujo normal (tarda más): la búsqueda de la mejor política de "
+        "reposición, el catálogo de escenarios S0–S12 con su decisión en $/mes y el tornado de sensibilidad."
+    )
+    if st.button("📑 Abrir el caso de informe", key="btn_informe"):
+        st.session_state.ajustes = ajustes
+        st.session_state.periodo_informe = periodo
+        st.session_state.vista = "informe"
         st.rerun()
     st.divider()
     st.caption(PIE_NO_AFILIADO)
@@ -3255,18 +3390,17 @@ def main() -> None:
     if vista == "editar" and "periodo" in st.session_state:
         pantalla_editar()
         return
+    if vista == "escenario" and "escenario_unico" in st.session_state:
+        pantalla_escenario_unico()
+        return
+    if vista == "informe":
+        pantalla_informe()
+        return
     if vista != "resultados" or "resultados" not in st.session_state:
         pantalla_inicio()
         return
 
     # --- Resultados ---------------------------------------------------------------------
-    # "Usar las mejores políticas" (pestaña Inventario): se aplican y se vuelve a simular.
-    sugerida = st.session_state.pop("politica_sugerida_real", None)
-    if sugerida is not None:
-        correr_todo(
-            con_politicas(st.session_state.parametros, sugerida),
-            st.session_state.parametros_eco, 1, st.session_state.semilla_usada,
-        )
     encabezado_resultados()
 
     p_corrida: ParametrosSimulacion = st.session_state.parametros
@@ -3283,7 +3417,7 @@ def main() -> None:
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
         "🏪 La estación", "🎬 Animación", "📊 Indicadores", "🎲 Demanda", "🛢️ Inventario",
-        "🗺️ Red y rutas", "🔥 GNC", "⚖️ Escenarios", "💰 Economía", "📝 Conclusión",
+        "🗺️ Red y rutas", "🔥 GNC", "💰 Economía", "📝 Conclusión",
         "📖 Modelo y método", "📚 Datos y fuentes",
     ]
     if editada:
@@ -3310,8 +3444,6 @@ def main() -> None:
         pestania_red(p_corrida)
     with pestanias["🔥 GNC"]:
         pestania_gnc(p_corrida)
-    with pestanias["⚖️ Escenarios"]:
-        pestania_comparar(p_corrida)
     with pestanias["💰 Economía"]:
         pestania_economia_real(p_corrida, st.session_state.parametros_eco)
     with pestanias["📝 Conclusión"]:

@@ -298,3 +298,17 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   del día y el día a día: sin filtros hasta 7 días, selector de fechas hasta 31, y además estación / mes / vacaciones de
   invierno si la corrida es más larga. Controles nuevos (31); DEM-14 clasificado en el tornado. `verificar.py` **124/124**;
   QA `reports/qa_tanda5_calendario.py`: 0 excepciones, 0 errores de consola.
+- **Tanda 6 ✅ (escenario único, conclusión y caso de informe).** `sim/periodo.py`: `EscenarioUnico` (playeros, franja,
+  temporada, clientela) que arma un `Escenario` declarativo (el mismo objeto del catálogo) con `turnos_con_refuerzo` y los
+  picos de `sim/escenarios.py` (**intacto**); la semana representativa de cada temporada es **CAL-09** (lunes a domingo:
+  12/1, 13/4, 10/8, 12/10 y 6/7 para las vacaciones). Clientela: poca/media/alta = DEM-01; máxima = alta y el doble en el pico
+  (DEM-13). Menú: "🎯 Simular el escenario único" abre una pantalla **sólo con ese escenario**: tarjetas de la franja (clientes
+  por hora, playeros, ρ teórico, espera, perdidos), hora por hora, perfil del día y una **conclusión armada con esos números**
+  (no alcanza / al límite / alcanza con margen). Sale la pestaña Escenarios. La **Conclusión** del flujo normal se arma con los
+  resultados de la corrida (veredicto por la causa principal de pérdida, demanda, colas y ρ, pérdidas por causa, tanques, GNC,
+  plata) y sugiere qué probar según lo que pasó; ya no menciona escenarios ni la búsqueda. **"📑 Caso de informe"** (botón del
+  menú, fuera del flujo normal): la búsqueda de la mejor política (datos reales), el catálogo S0–S12 + la decisión en $/mes
+  (sacada de Economía) y el tornado (estos dos con azar y réplicas, porque usan diferencias pareadas). Se quitó "Usar las
+  mejores políticas" (el informe muestra, no aplica). Control nuevo (32). `verificar.py` **125/125**; QA
+  `reports/qa_tanda6_escenario.py`: 0 excepciones, 0 errores de consola (2 → 4 playeros en el pico de verano con clientela
+  máxima: ρ 2,67 → 1,34 y perdidos 59 % → 26 %).

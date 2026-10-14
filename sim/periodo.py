@@ -17,15 +17,18 @@ from datetime import date, timedelta
 
 from sim.config import (
     ANO_REFERENCIA,
+    Escenario,
     ParametrosEconomicos,
     ParametrosGNC,
     ParametrosSimulacion,
     PerfilHorario,
     dias_del_mes,
+    turnos_con_refuerzo,
     turnos_de,
 )
 from sim.datos import valor
 from sim.distribuciones import AleatorioDeterminista
+from sim.escenarios import PICOS
 from sim.gnc import MESES_INVIERNO, calendario_de_episodios, episodios_con_fechas
 
 MESES = (
@@ -269,4 +272,71 @@ def aplicar_ajustes(
     if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
         p = replace(p, pct_gnc=a.pct_gnc)
     return p, eco
+
+
+# =============================================================================
+# El escenario único (parte 2, tanda 6): una micro simulación de una semana
+# =============================================================================
+#: Franjas horarias que se pueden elegir: los picos son los de S2 (sim/escenarios.py) y el día entero.
+FRANJAS: dict[str, tuple[float, float]] = {
+    "Pico de la mañana (07–10 h)": PICOS[0],
+    "Pico de la tarde (16–18 h)": PICOS[1],
+    "Todo el día": (0.0, 24.0),
+}
+#: Nivel de clientela: poca, media y alta son DEM-01 (bajo, adoptado, alto); máxima = alta y el doble en el pico (DEM-13).
+CLIENTELAS = ("poca", "media", "alta", "máxima")
+#: Semana representativa de cada temporada (CAL-09): nombre → (mes, día) del lunes en que empieza.
+SEMANAS: dict[str, tuple[int, int]] = dict(valor("CAL-09")[0])
+DIAS_ESCENARIO: int = int(valor("CAL-09")[1])
+
+
+@dataclass(frozen=True)
+class EscenarioUnico:
+    """Lo que se elige para el escenario único: cuántos playeros, en qué franja, temporada y clientela."""
+
+    playeros: int = 2
+    franja: str = "Pico de la mañana (07–10 h)"
+    temporada: str = "Verano"
+    clientela: str = "media"
+
+    @property
+    def titulo(self) -> str:
+        return (
+            f"{self.playeros} playero{'s' if self.playeros != 1 else ''} · {self.franja.lower()} · "
+            f"{self.temporada.lower()} · clientela {self.clientela}"
+        )
+
+    def horas(self) -> tuple[int, ...]:
+        """Las horas enteras del día que caen en la franja."""
+        desde, hasta = FRANJAS[self.franja]
+        return tuple(range(int(desde), int(hasta)))
+
+    def periodo(self) -> Periodo:
+        mes, dia = SEMANAS[self.temporada]
+        return Periodo("escenario", f"Semana de {self.temporada.lower()}", (mes, dia), DIAS_ESCENARIO)
+
+    def escenario(self, p: ParametrosSimulacion) -> Escenario:
+        """Los cambios sobre `p`, como un `Escenario` declarativo (el mismo objeto que usa el catálogo S0–S12)."""
+        cambios: dict[str, object] = {}
+        desde, hasta = FRANJAS[self.franja]
+        n = max(1, int(self.playeros))
+        if (desde, hasta) == (0.0, 24.0):
+            cambios["playeros_por_turno"] = (n, n, n)
+            cambios["turnos"] = turnos_de((n, n, n))
+        else:
+            # Los playeros que hay en esa franja según los turnos (PER-01), y el refuerzo (±) que falta hasta n.
+            vigente = [m for h, m in turnos_de(p.playeros_por_turno) if h <= desde][-1]
+            cambios["turnos"] = turnos_con_refuerzo(p.playeros_por_turno, ((desde, hasta, n - vigente),))
+        nivel = "alta" if self.clientela == "máxima" else self.clientela
+        litros = litros_de_nivel(nivel)
+        if self.clientela == "máxima":
+            factores = p.perfil.factores
+            nuevos = tuple(f * valor("DEM-13") if h in HORAS_PICO else f for h, f in enumerate(factores))
+            litros *= sum(nuevos) / sum(factores)
+            cambios["perfil"] = PerfilHorario(nuevos)
+        cambios["litros_mes"] = litros
+        return Escenario(
+            nombre="Escenario único", descripcion=self.titulo, surtidores=p.surtidores, cajas=p.cajas,
+            id="EU", pregunta="¿cómo anda la estación en esta situación?", cambios=tuple(cambios.items()),
+        )
 

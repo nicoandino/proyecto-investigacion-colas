@@ -256,6 +256,8 @@ class PedidoCamion:
     litros: float
     demora_ruta: float       # minutos que sumó un corte de ruta (0 si no hubo)
     causa: str               # "" · "corte E2" · "obra" · ...
+    origen: str = ""         # nodo de la red que despachó el camión (tanda 8)
+    redirigido: bool = False  # el origen habitual no pudo y salió de otro
 
 
 class Indicadores:

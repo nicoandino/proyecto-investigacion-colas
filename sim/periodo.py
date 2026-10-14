@@ -226,6 +226,8 @@ class Ajustes:
     pct_gnc: float = float(valor("DEM-05"))
     calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
+    eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
+    origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
 
     def cambios(self) -> list[str]:
         """Lo que difiere del Registro, en palabras (para el encabezado de los resultados)."""
@@ -243,6 +245,10 @@ class Ajustes:
             salida.append("más cortes de GNC en todo el invierno")
         if abs(self.pct_gnc - base.pct_gnc) > 1e-9:
             salida.append(f"{self.pct_gnc:.0%} de clientes GNC")
+        if self.eventos_abastecimiento:
+            salida.append("eventos aleatorios de abastecimiento")
+        if self.origenes_no_disponibles:
+            salida.append("orígenes marcados como no disponibles")
         if not self.calendario:
             salida.append("sin calendario de temporadas")
         elif self.factores != base.factores:
@@ -269,6 +275,12 @@ def aplicar_ajustes(
         costo_almacenamiento_litro_mes=a.almacenamiento, sueldo_playero_mensual=a.sueldo_playero,
     )
     p = replace(p, gnc=gnc_con_ajustes(p.gnc, a), calendario_demanda=a.factores if a.calendario else ())
+    if p.red is not None and (a.eventos_abastecimiento or a.origenes_no_disponibles):
+        p = replace(p, red=replace(
+            p.red, origenes_alternativos=tuple(valor("RED-19")),
+            prob_origen_no_disponible=float(valor("RED-20")) if a.eventos_abastecimiento else 0.0,
+            origenes_no_disponibles=tuple(a.origenes_no_disponibles),
+        ))
     if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
         p = replace(p, pct_gnc=a.pct_gnc)
     return p, eco

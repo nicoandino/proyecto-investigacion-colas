@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 120 datos · 🟢 dato 37 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 52
+**Resumen:** 124 datos · 🟢 dato 37 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 55
 
 ## La estación
 
@@ -132,6 +132,10 @@
 | RED-08 | Arco LAPAZ–LUJAN | 141.0 | km | 🟢 dato | Mendoza | media | nota 06 §1.2 (RN 7) | — |
 | RED-09 | Arco DOCK–ALVEAR | 903.8 | km | 🟢 dato | Mendoza | media | nota 06 §1.3 (no verificada) | — |
 | RED-10 | Arco DOCK–LUJAN | 1056.5 | km | 🟢 dato | Mendoza | media | nota 06 §1.3 (no verificada) | — |
+| RED-18 | Arco ARROYO–ALVEAR (terminal de Arroyo Seco, Santa Fe) | 806.0 | km | 🟡 estimación | Argentina / otro | media | OSRM sobre OpenStreetMap (perfil auto), consultado 13-oct-2026, cálculo propio; la terminal es de Raízen/Shell (venta a Mercuria, jun-2026, nota 09) | — |
+| RED-19 | Orígenes alternativos del camión, en orden | ('ARROYO', 'LUJAN') | — | 🟠 supuesto | Mendoza | media | nota 09: Arroyo Seco (terminal de Raízen/Shell, misma empresa) y después Luján de Cuyo (refinería YPF, último recurso). La Paz y Pareditas son cruc… | — |
+| RED-20 | Probabilidad de que un origen no pueda cumplir un pedido | 0.05 | prob. | 🟠 supuesto | Mendoza | sin_dato | grupo (13/10/2026); sin estadística: faltantes de Shell en Mendoza en jul y oct de 2023 (Los Andes, Sitio Andino) | 0 % = 0.0 · 15 % = 0.15 |
+| RED-21 | Demora de redirigir un pedido a otro origen | 12.0 | h | 🟠 supuesto | Mendoza | sin_dato | grupo (13/10/2026): volver a gestionar el pedido con otra terminal | — |
 | RED-11 | Velocidad del camión | 70.0 | km/h | 🟠 supuesto | Mendoza | sin_dato | orquestador (entre 80 km/h legales y 60 urbanos) | — |
 | RED-12 | Escenario de cortes de ruta | aleatorio | — | 🟠 supuesto | Mendoza | sin_dato | orquestador (CASO §6.1; 3 cortes documentados en jul/ago-2026) | ninguno = ninguno · E1 = E1 · E2 = E2 · E3 = E3 · E4 = E4 |
 | RED-13 | Probabilidad de que un viaje encuentre un corte (jun–ago) | 0.1 | prob. | 🟠 supuesto | Mendoza | sin_dato | orquestador (CASO §6.1: no hay estadística de cortes) | sin cortes = 0.0 · 30 % = 0.3 |

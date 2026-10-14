@@ -1920,6 +1920,39 @@ def main() -> int:
         f"{p32_max.litros_mes:,.0f} L/mes con el doble en el pico",
     )
 
+    # ------------------------------------------------------------------ 33
+    separador("33. Parte 2, tanda 8: rutas alternativas y orígenes alternativos del camión")
+    from sim.red import camino_mas_corto as _cmc, rutas_posibles
+
+    rutas33 = rutas_posibles(p30.red)
+    controlar(
+        rutas33[0].ruta == _cmc(p30.red).ruta and abs(rutas33[0].km - _cmc(p30.red).km) < 1e-9
+        and all(a.km <= b.km for a, b in zip(rutas33, rutas33[1:]))
+        and len({c.ruta for c in rutas33}) == len(rutas33),
+        "La primera de las rutas posibles es la de Dijkstra y están ordenadas de mejor a peor",
+        f"{len(rutas33)} rutas desde Dock Sud: " + " · ".join(f"{c.km:,.0f} km" for c in rutas33),
+    )
+    _, eco33 = None, ParametrosEconomicos()
+    corrida33 = {}
+    for etiqueta, aj in (("apagado", Ajustes(calendario=False)),
+                          ("sin Dock Sud", Ajustes(calendario=False, origenes_no_disponibles=("DOCK",))),
+                          ("eventos", Ajustes(calendario=False, eventos_abastecimiento=True))):
+        p33, _ = aplicar_ajustes(dataclasses.replace(p30, fecha_inicio=(1, 1), dias=365), eco33, aj)
+        ind33, _ = simular(p33, semilla=1)
+        corrida33[etiqueta] = (ind33, correr_replica(p33, 1)[0])
+    base33 = correr_replica(dataclasses.replace(p30, fecha_inicio=(1, 1), dias=365), 1)[0]
+    plazos_arroyo = {round((x.t_llegada - x.t_pedido) / 60.0, 1) for x in corrida33["sin Dock Sud"][0].pedidos}
+    esperado_arroyo = round(36.0 + (_cmc(p30.red, origen="ARROYO").minutos - _cmc(p30.red).minutos) / 60.0 + 12.0, 1)
+    ev = corrida33["eventos"][1].pedidos_por_origen
+    controlar(
+        corrida33["apagado"][1] == base33
+        and all(x.origen == "ARROYO" and x.redirigido for x in corrida33["sin Dock Sud"][0].pedidos)
+        and plazos_arroyo == {esperado_arroyo}
+        and 0 < sum(x[2] for x in ev) <= 0.08 * sum(x[1] for x in ev),
+        "Apagado no cambia nada; sin Dock Sud todo sale de Arroyo Seco con su plazo; con eventos se redirige ≈ 1 de cada 20",
+        f"plazo desde Arroyo Seco {sorted(plazos_arroyo)} h (esperado {esperado_arroyo}) · año con eventos: {ev}",
+    )
+
     # ------------------------------------------------------------------
     print()
     if _fallas == 0:

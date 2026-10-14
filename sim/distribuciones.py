@@ -49,6 +49,11 @@ STREAMS = (
     # Parte 2, tanda 4: más cortes de GNC en todo el invierno y el invierno frío que los alarga.
     "cortes_extra_gnc",
     "invierno_frio",
+    # Parte 2, tanda 8: si el origen puede cumplir cada pedido, un stream por producto (como los plazos).
+    "origen_super",
+    "origen_vpower",
+    "origen_diesel_g2",
+    "origen_diesel_g3",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

@@ -312,3 +312,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   mejores políticas" (el informe muestra, no aplica). Control nuevo (32). `verificar.py` **125/125**; QA
   `reports/qa_tanda6_escenario.py`: 0 excepciones, 0 errores de consola (2 → 4 playeros en el pico de verano con clientela
   máxima: ρ 2,67 → 1,34 y perdidos 59 % → 26 %).
+- **Tanda 8 ✅ (red y rutas; se hizo antes que la 7).** Nota `research_notes/…/09_origenes_alternativos.md`: **La Paz y
+  Pareditas no se agregan** (son cruces de ruta, no plantas); se agrega la **terminal de Arroyo Seco** (Raízen/Shell, en la
+  venta a Mercuria) con un arco de 806 km a General Alvear (OSRM, estimación: **RED-18**), y Luján de Cuyo (YPF) queda como
+  último recurso. Registro: RED-19 (orden: Arroyo Seco, Luján), RED-20 (5 % de pedidos que el origen no puede cumplir,
+  supuesto) y RED-21 (12 h de demora por redirigir). Motor: `ParametrosRed.origenes_alternativos /
+  prob_origen_no_disponible / origenes_no_disponibles` (apagados por defecto: el camión sale siempre de Dock Sud, sin sortear
+  nada), `red.origen_del_pedido` y `extra_por_origen` (plazo = base − viaje desde Dock Sud + viaje desde el origen usado +
+  12 h), cuatro streams nuevos al final (`origen_<producto>`), y cada `PedidoCamion` guarda su origen. `red.rutas_posibles`
+  enumera las rutas simples (la primera coincide con Dijkstra). Pantalla Red y rutas: las otras rutas de mejor a peor con
+  distancia, viaje y plazo; la tabla de orígenes (qué es, distancia, plazo, estado, camiones de la corrida); Arroyo Seco en
+  el mapa y en la tabla de cortes. Menú: "🚚 Abastecimiento" con el interruptor de eventos y el marcado manual de orígenes.
+  Control nuevo (33). `verificar.py` **127/127**; QA `reports/qa_tanda8_red.py` (Dock Sud marcado: 21 camiones desde Arroyo
+  Seco a 46,6 h): 0 excepciones, 0 errores de consola.

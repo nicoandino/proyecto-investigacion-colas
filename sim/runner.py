@@ -124,6 +124,7 @@ class ResultadoReplica:
     # (producto, sin combustible, se cansó de esperar, cola llena, GNC cortado sin pasar a Súper)
     quiebres: tuple[tuple[str, int, float, float], ...] = ()
     # (tanque, cuántas veces se vació, horas vacío en total, horas del quiebre más largo)
+    pedidos_por_origen: tuple[tuple[str, int, int], ...] = ()   # (origen, camiones, redirigidos); vacío = todos del habitual
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -147,6 +148,7 @@ NO_METRICAS = {
     "tiempo_sin_stock",
     "litros_perdidos_causa",
     "quiebres",
+    "pedidos_por_origen",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -222,6 +224,7 @@ def correr_replica(
     ind, traza = simular(p, semilla=semilla, con_traza=con_traza)
     c = ind.c
     dias = max(p.dias_medidos, 1)
+    medidos = [x for x in ind.pedidos if x.t_pedido >= p.calentamiento]
 
     esperas_por_hora = [ind.por_hora.espera_promedio(h) for h in range(24)]
     espera_pico = max(esperas_por_hora)
@@ -362,6 +365,12 @@ def correr_replica(
             _resumen_quiebres(pr, episodios, p.calentamiento, p.duracion)
             for pr, episodios in ind.quiebres.items()
         ) if p.estacion_real else (),
+        pedidos_por_origen=tuple(
+            (o, sum(1 for x in medidos if x.origen == o), sum(1 for x in medidos if x.origen == o and x.redirigido))
+            for o in dict.fromkeys(x.origen for x in medidos)
+        ) if p.estacion_real and p.red is not None and (
+            p.red.origenes_alternativos or p.red.origenes_no_disponibles
+        ) else (),   # sin orígenes alternativos todos salen del habitual: vacío (la corrida neutra no cambia)
     )
     return resultado, traza
 

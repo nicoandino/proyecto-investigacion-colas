@@ -37,7 +37,7 @@ homogéneo.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 import simpy
@@ -46,7 +46,7 @@ from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion, Tr
 from sim.distribuciones import Aleatorio, AleatorioDeterminista
 from sim.estadisticas import Indicadores, PedidoCamion
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
-from sim.red import demora_de_viaje, mes_del_dia
+from sim.red import demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
 MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
@@ -776,10 +776,15 @@ class EstacionDeServicio:
         # encuentra un corte, se le SUMA la demora (desvío o espera, la menor).
         demora = 0.0
         causa = ""
+        origen, redirigido = "", False
         if self.p.red is not None:
+            # Tanda 8: ¿de qué origen sale? (sin orígenes alternativos, el habitual sin sortear nada)
+            origen, redirigido = origen_del_pedido(self.p.red, self.az, f"origen_{producto}")
+            red_viaje = replace(self.p.red, origen=origen) if redirigido else self.p.red
+            plazo += extra_por_origen(self.p.red, origen, redirigido)
             dia = int(self.env.now // MINUTOS_POR_DIA) + 1
             demora, causa = demora_de_viaje(
-                self.p.red,
+                red_viaje,
                 self.env.now,
                 mes_del_dia(self.p.fecha_inicio, dia),
                 self.az,
@@ -791,7 +796,7 @@ class EstacionDeServicio:
                 self.ind.demora_ruta.agregar(demora / 60.0)
         plazo += demora
         self.ind.pedidos.append(
-            PedidoCamion(producto, self.env.now, self.env.now + plazo, cantidad, demora, causa)
+            PedidoCamion(producto, self.env.now, self.env.now + plazo, cantidad, demora, causa, origen, redirigido)
         )
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
         pedido = (self.env.now, plazo, demora)

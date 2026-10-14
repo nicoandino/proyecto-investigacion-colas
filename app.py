@@ -123,6 +123,7 @@ from sim.red import (
     descripcion_ruta,
     dias_de_mes_en_corrida,
     muestrear_plazos,
+    rutas_posibles,
 )
 from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red, vistas
 from ui.datos_ui import (
@@ -2283,8 +2284,8 @@ def pestania_red(p: ParametrosSimulacion) -> None:
 
     st.subheader("Red de abastecimiento del camión")
     st.caption(
-        "El camión sale del origen por el **camino más corto** (Dijkstra sobre los km de 10 "
-        "arcos, nota 06). Un corte demora el viaje sólo si el arco cerrado está en ese camino: "
+        "El camión sale del origen por el **camino más corto** (Dijkstra sobre los km de la red, "
+        "notas 06 y 09). Un corte demora el viaje sólo si el arco cerrado está en ese camino: "
         "con origen Dock Sud, el corte nevado de la RN 143 Pareditas–San Rafael no está en la "
         "ruta. La demora se suma al plazo base (INV-01)."
     )
@@ -2297,6 +2298,75 @@ def pestania_red(p: ParametrosSimulacion) -> None:
              "la carga y la descarga.",
         border=True,
     )
+
+    plazo_medio = p.inventario[0].plazo_entrega.media
+    st.markdown("##### Las otras rutas posibles, de mejor a peor")
+    rutas = rutas_posibles(red)
+    st.dataframe(pd.DataFrame([
+        {
+            "N°": k + 1,
+            "Ruta": " → ".join(NOMBRE_NODO[n] for n in c.ruta),
+            "Distancia": f"{vistas.dec(c.km)} km",
+            f"Viaje a {red.velocidad_kmh:.0f} km/h": f"{vistas.dec(c.minutos / 60)} h",
+            "Plazo de entrega promedio": f"{vistas.dec(plazo_medio + (c.minutos - optimo.minutos) / 60)} h",
+            "Más que la óptima": "— (la óptima)" if k == 0 else f"+{vistas.dec((c.minutos - optimo.minutos) / 60)} h",
+        }
+        for k, c in enumerate(rutas)
+    ]), hide_index=True)
+    st.caption(
+        f"Todas las rutas sin repetir ciudades desde {NOMBRE_NODO[red.origen]}. Plazo promedio = {vistas.dec(plazo_medio)} h "
+        f"(INV-01, que ya incluye el viaje por la óptima) + lo que tarda de más esa ruta. Los cortes de ruta usan "
+        f"estas mismas rutas para desviarse."
+    )
+
+    st.markdown("##### De dónde puede salir el camión")
+    r = st.session_state.resultados[0].replicas[0]
+    usados = {o: (n, red_) for o, n, red_ in r.pedidos_por_origen} or {
+        red.origen: (sum(n for _, n in r.pedidos_total), 0)
+    }
+    descripcion = {
+        "DOCK": "refinería de Shell/Raízen (origen documentado)",
+        "ARROYO": "terminal de despacho de Raízen/Shell (Santa Fe)",
+        "LUJAN": "refinería de YPF (último recurso: otra empresa)",
+    }
+    alternativos = tuple(valor("RED-19"))
+    filas = []
+    for o in ("DOCK", *alternativos):
+        camino = camino_mas_corto(red, origen=o)
+        extra = 0.0 if o == red.origen else camino.minutos - optimo.minutos + red.demora_redireccion_h * 60.0
+        if o in red.origenes_no_disponibles:
+            estado = "no disponible (marcado en el menú)"
+        elif o == red.origen:
+            estado = "habitual"
+        elif o in red.origenes_alternativos:
+            estado = f"alternativo n.º {red.origenes_alternativos.index(o) + 1}"
+        else:
+            estado = "alternativo (apagado)"
+        n, redirigidos = usados.get(o, (0, 0))
+        filas.append({
+            "Origen": NOMBRE_NODO[o],
+            "Qué es": descripcion.get(o, ""),
+            "Distancia a la estación": f"{vistas.dec(camino.km)} km",
+            "Plazo promedio": f"{vistas.dec(plazo_medio + extra / 60)} h",
+            "Estado": estado,
+            "Camiones de esta corrida": vistas.ent(n),
+        })
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    total_redirigidos = sum(x[2] for x in r.pedidos_por_origen)
+    if red.origenes_alternativos:
+        st.caption(
+            f"Eventos de abastecimiento {'prendidos' if red.prob_origen_no_disponible > 0 else 'apagados'}"
+            + (f" ({vistas.dec(100 * red.prob_origen_no_disponible, 0)} % de los pedidos, RED-20)"
+               if red.prob_origen_no_disponible > 0 else "")
+            + f". Si un origen no puede, el pedido pasa al siguiente con su ruta, su distancia y "
+            f"{vistas.dec(red.demora_redireccion_h, 0)} h de demora por volver a gestionarlo (RED-21). En esta corrida se "
+            f"redirigieron {vistas.ent(total_redirigidos)} camiones."
+        )
+    else:
+        st.caption(
+            "Eventos de abastecimiento apagados (menú): el camión sale siempre de Dock Sud por la ruta óptima. La Paz y "
+            "Pareditas son cruces de ruta, no plantas de despacho (nota 09)."
+        )
 
     corte_activo = next((c for c in red.cortes if c.id == red.escenario_corte), None)
     cerrados = corte_activo.arcos if corte_activo else ()
@@ -2330,6 +2400,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             {
                 "Corte": f"{corte.id} · {corte.nombre}",
                 "Dock Sud": _demora_texto(red, "DOCK", corte),
+                "Arroyo Seco": _demora_texto(red, "ARROYO", corte),
                 "Luján de Cuyo": _demora_texto(red, "LUJAN", corte),
             }
         )
@@ -3046,10 +3117,34 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             )
             factores.append((clave, round(1 + cambio / 100.0, 4)))
 
+    with st.expander("🚚 Abastecimiento: de dónde sale el camión"):
+        eventos = st.toggle(
+            "Eventos aleatorios de abastecimiento", value=previo.eventos_abastecimiento, key="aj_eventos",
+            help="Apagado: el camión sale siempre de Dock Sud por la ruta óptima.",
+        )
+        st.caption(
+            f"Prendido, un origen puede no cumplir un pedido ({valor('RED-20'):.0%} de las veces, RED-20, supuesto) y el "
+            f"pedido pasa al siguiente: **Arroyo Seco** (terminal de Raízen/Shell) y después **Luján de Cuyo** (refinería "
+            f"de YPF), con su propia ruta y {valor('RED-21'):.0f} h de demora por volver a gestionarlo. Sin azar es una "
+            f"cuota: 1 de cada 20 pedidos de cada producto, así que en un mes casi no aparece. Sólo los líquidos (el GNC "
+            f"sale de la red de gas). La Paz y Pareditas no se incluyen: son cruces de ruta, no plantas (nota 09)."
+        )
+        opciones_origen = ("DOCK", *valor("RED-19"))
+        no_disponibles = st.multiselect(
+            "Marcar a mano como no disponible", opciones_origen,
+            default=[o for o in previo.origenes_no_disponibles if o in opciones_origen],
+            format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
+            help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
+        )
+        if len(no_disponibles) == len(opciones_origen):
+            st.warning("Si ninguno está disponible, el pedido sale igual de Dock Sud con la demora de redirección.",
+                       icon="⚠️")
+
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
-        factores=tuple(factores),
+        factores=tuple(factores), eventos_abastecimiento=bool(eventos),
+        origenes_no_disponibles=tuple(no_disponibles),
     )
 
 

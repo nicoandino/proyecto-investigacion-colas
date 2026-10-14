@@ -448,6 +448,8 @@ NO_ES_EJE: dict[str, str] = {
     "RED-12": "son los escenarios de corte S4 (pestaña Escenarios), no un valor",
     "GNC-03": "las formas del corte son el escenario S3 (pestaña Escenarios)",
     "GNC-07": "herramienta de análisis (forzar el corte adentro): la base del tornado ya la usa",
+    "RED-20": "sólo vale con 'eventos aleatorios de abastecimiento' (menú), apagados en la base; el plazo "
+              "del camión ya es el eje INV-01",
     "DEM-14": "calendario de temporadas: opción del menú, neutro en la base del tornado; la forma estacional "
               "de la demanda ya es el eje C10 (DEM-06)",
     "GNC-08": "opción del menú ('más cortes en todo el invierno'), apagada en la base; la cantidad de cortes "

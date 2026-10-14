@@ -31,6 +31,7 @@ _POSICION_NODO = {
     "MONTECOMAN": (-67.90, -34.60),
     "LAPAZ": (-67.55, -33.46),
     "DOCK": (-65.9, -35.45),
+    "ARROYO": (-65.9, -33.6),
 }
 
 #: Dónde va el rótulo de cada nodo (San Rafael y Monte Comán están pegados).
@@ -43,6 +44,7 @@ _POSICION_TEXTO = {
     "MONTECOMAN": "top right",
     "LAPAZ": "top center",
     "DOCK": "bottom center",
+    "ARROYO": "top center",
 }
 
 _LAYOUT = dict(
@@ -120,7 +122,7 @@ def grafico_red(
             )
         )
     fig.update_layout(
-        title="Red de abastecimiento (posiciones aproximadas; Dock Sud está a ≈ 900 km, fuera de escala)",
+        title="Red de abastecimiento (posiciones aproximadas; Dock Sud y Arroyo Seco están a ≈ 800–900 km, fuera de escala)",
         xaxis=dict(visible=False, range=[-70.4, -65.4]),
         yaxis=dict(visible=False, range=[-35.8, -32.6]),
         **{**_LAYOUT, "hovermode": "closest", "height": 600,

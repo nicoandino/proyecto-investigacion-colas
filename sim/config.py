@@ -442,6 +442,7 @@ _ARCOS_REGISTRO = (
     ("RED-08", "LAPAZ", "LUJAN", "RN 7", False),
     ("RED-09", "DOCK", "ALVEAR", "ruta sin verificar", False),
     ("RED-10", "DOCK", "LUJAN", "ruta sin verificar", False),
+    ("RED-18", "ARROYO", "ALVEAR", "RN 33 / RN 188 (OSRM)", False),
 )
 
 
@@ -460,7 +461,7 @@ def cortes_desde_registro() -> tuple[CorteRuta, ...]:
 
 
 #: Nombre del origen en INV-05 → nodo de la red.
-_NODO_DE_ORIGEN = {"Dock Sud": "DOCK", "Luján de Cuyo": "LUJAN"}
+_NODO_DE_ORIGEN = {"Dock Sud": "DOCK", "Luján de Cuyo": "LUJAN", "Arroyo Seco": "ARROYO"}
 
 
 @dataclass(frozen=True)
@@ -477,6 +478,11 @@ class ParametrosRed:
     prob_corte_viaje: float = valor("RED-13")           # sólo en meses con cortes
     duracion_aleatoria: Triangular = Triangular(*valor("RED-14"))
     meses_corte: tuple[int, ...] = valor("RED-17")
+    # Orígenes alternativos (parte 2, tanda 8): apagados por defecto. El menú prende RED-19/20.
+    origenes_alternativos: tuple[str, ...] = ()          # a cuáles se redirige, en orden
+    prob_origen_no_disponible: float = 0.0               # prob. de que un origen no pueda cumplir el pedido
+    origenes_no_disponibles: tuple[str, ...] = ()        # marcados a mano como no disponibles
+    demora_redireccion_h: float = valor("RED-21")        # sólo si un pedido se redirige
 
     def __post_init__(self) -> None:
         nodos = {n for a in self.arcos for n in (a.a, a.b)}
@@ -486,6 +492,10 @@ class ParametrosRed:
             raise ValueError("La velocidad del camión tiene que ser positiva.")
         if not 0.0 <= self.prob_corte_viaje <= 1.0:
             raise ValueError("La probabilidad de corte tiene que estar entre 0 y 1.")
+        if not 0.0 <= self.prob_origen_no_disponible <= 1.0 or self.demora_redireccion_h < 0:
+            raise ValueError("prob_origen_no_disponible entre 0 y 1; demora_redireccion_h ≥ 0.")
+        if any(o not in nodos for o in (*self.origenes_alternativos, *self.origenes_no_disponibles)):
+            raise ValueError("Los orígenes alternativos tienen que ser nodos de la red.")
         validos = {"ninguno", "aleatorio", *(c.id for c in self.cortes)}
         if self.escenario_corte not in validos:
             raise ValueError(f"Escenario de corte desconocido: {self.escenario_corte}.")

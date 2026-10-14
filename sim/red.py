@@ -52,6 +52,7 @@ NOMBRE_NODO = {
     "ALVEAR": "General Alvear",
     "MONTECOMAN": "Monte Comán",
     "LAPAZ": "La Paz",
+    "ARROYO": "Arroyo Seco",
 }
 
 #: Etiquetas de los escenarios de corte para la interfaz.
@@ -245,6 +246,58 @@ def muestrear_plazos(
     return sin_corte, con_corte
 
 
+def rutas_posibles(red: ParametrosRed, origen: str | None = None) -> list[Camino]:
+    """Todas las rutas simples (sin repetir nodos) del origen al destino, de la más corta a la más larga.
+
+    La red tiene 9 nodos: recorrerla entera es instantáneo y la primera ruta coincide con la de Dijkstra.
+    """
+    origen = origen or red.origen
+    vecinos: dict[str, list[tuple[str, float]]] = {}
+    for arco in red.arcos:
+        vecinos.setdefault(arco.a, []).append((arco.b, arco.km))
+        vecinos.setdefault(arco.b, []).append((arco.a, arco.km))
+    salida: list[Camino] = []
+
+    def visitar(nodo: str, km: float, ruta: list[str]) -> None:
+        if nodo == red.destino:
+            salida.append(Camino(km, km / red.velocidad_kmh * 60.0, tuple(ruta)))
+            return
+        for siguiente, largo in vecinos.get(nodo, ()):
+            if siguiente not in ruta:
+                visitar(siguiente, km + largo, ruta + [siguiente])
+
+    visitar(origen, 0.0, [origen])
+    return sorted(salida, key=lambda c: (c.km, c.ruta))
+
+
+def origen_del_pedido(red: ParametrosRed, az: Aleatorio, stream: str) -> tuple[str, bool]:
+    """(origen que despacha el pedido, si se redirigió).
+
+    Sin orígenes alternativos ni marcados no disponibles: el habitual, sin sortear nada. Si no, se prueba el
+    habitual y después los alternativos en orden; cada uno puede estar marcado a mano o fallar con la
+    probabilidad `prob_origen_no_disponible` (sin azar, una cuota exacta). Si ninguno puede, sale del habitual
+    con la demora de redirección.
+    """
+    if not red.origenes_alternativos and not red.origenes_no_disponibles:
+        return red.origen, False
+    for origen in (red.origen, *red.origenes_alternativos):
+        falla = origen in red.origenes_no_disponibles
+        if not falla and red.prob_origen_no_disponible > 0:
+            falla = az.bernoulli(red.prob_origen_no_disponible, stream)
+        if not falla:
+            return origen, origen != red.origen
+    return red.origen, True
+
+
+def extra_por_origen(red: ParametrosRed, origen: str, redirigido: bool) -> float:
+    """Minutos que se suman al plazo base por salir de otro origen: (viaje desde ese origen − viaje desde el
+    habitual) + la demora de redirección si se redirigió."""
+    if not redirigido:
+        return 0.0
+    diferencia = camino_mas_corto(red, origen=origen).minutos - camino_mas_corto(red).minutos
+    return diferencia + red.demora_redireccion_h * 60.0
+
+
 def dias_de_mes_en_corrida(inicio: tuple[int, int], dias: int) -> set[int]:
     """Meses de calendario que toca una corrida (para avisar si no incluye jun–ago)."""
     return {mes_del_dia(inicio, d) for d in range(1, dias + 1)}
@@ -265,4 +318,7 @@ __all__ = [
     "dias_de_mes_en_corrida",
     "mes_del_dia",
     "muestrear_plazos",
+    "origen_del_pedido",
+    "extra_por_origen",
+    "rutas_posibles",
 ]

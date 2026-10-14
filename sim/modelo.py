@@ -1046,6 +1046,17 @@ class EstacionDeServicio:
                         self.ind.contar_grupo(grupo, "abandonos_playero")
                         return False
 
+                if auto.producto == "gnc":
+                    # El GNC lo carga un playero (PER-04) y además usa un COMPRESOR: el playero
+                    # queda con el auto mientras espera el compresor y mientras carga.
+                    self.ind.playeros_ocupados.sumar(self.env.now, +1)
+                    auto.espera_playero = False
+                    try:
+                        return (yield from self._cargar_gnc(
+                            auto, grupo, self.env.now - auto.t_llegada))
+                    finally:
+                        self.ind.playeros_ocupados.sumar(self.env.now, -1)
+
                 # Pudo haberse acabado el combustible mientras hacía la cola.
                 if not self.hay_combustible(auto):
                     self.registrar_perdida(auto, motivo="sin_combustible")
@@ -1063,8 +1074,8 @@ class EstacionDeServicio:
 
                 self.ind.playeros_ocupados.sumar(self.env.now, -1)
         else:
-            # El GNC no retiene playero (PER-04: sólo conecta la manguera), pero sí un
-            # COMPRESOR mientras carga: el compresor, no las 6 caras, limita el GNC.
+            # Alternativa de PER-04 (autoservicio de GNC): sin playero, sólo el COMPRESOR
+            # mientras carga: el compresor, no las 6 caras, limita el GNC.
             return (yield from self._cargar_gnc(auto, grupo, espera_cara))
         return True
 

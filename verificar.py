@@ -55,6 +55,9 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   35. Parte 4, etapa E0: el GNC lo carga un playero (autos cargando = playeros ocupados en cada
+       cuadro; ρ con los minutos del GNC; el autoservicio queda como alternativa).
+
    32. Etapa 4: los totales enteros cierran por zona, producto, hora y día, y el tiempo sin
        combustible por tanque es coherente con los días de quiebre.
 
@@ -1976,6 +1979,40 @@ def main() -> int:
         "Cada aviso de 'bajo nivel' es un camión pedido con el tanque en o bajo s; los cortes coinciden con el calendario",
         f"invierno: {len(avisos)} avisos de pedido, {len(descargas)} descargas, {len(cortes34)} cortes de GNC "
         f"(el más bajo: {min(a[3] for a in avisos):.0%} del tanque)",
+    )
+
+    # ------------------------------------------------------------------ 35
+    separador("35. Parte 4, etapa E0: el GNC lo carga un playero (PER-04)")
+    p35 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(7, 7)), animar_todo=True)
+    auto35 = dataclasses.replace(p35, grupos=tuple(
+        dataclasses.replace(g, requiere_playero=False) if g.id == "C" else g for g in p35.grupos))
+    _, traza35 = simular(p35, semilla=1, con_traza=True)
+    # En cada cuadro: autos cargando (con su playero) en las zonas con playero = playeros ocupados
+    descuadres = sum(
+        1 for c in traza35.cuadros
+        if sum(1 for i, g in enumerate(c.grupos) if p35.grupos[i].requiere_playero
+               for k in g[1] if k >= 0 and (k & 1) == 0) != c.playeros_ocupados
+    )
+    gnc_con_playero = sum(
+        1 for c in traza35.cuadros for i, g in enumerate(c.grupos)
+        if "gnc" in p35.grupos[i].productos for k in g[1] if k >= 0 and (k & 1) == 0
+    )
+    r35, _ = correr_replica(p35, semilla=1)
+    ra35, _ = correr_replica(auto35, semilla=1)
+    t35, ta35 = dict(r35.totales), dict(ra35.totales)
+    lam = p35.perfil.tasa_maxima(p35.autos_por_dia)
+    rho_mano = lam * ((1 - p35.pct_gnc) * p35.media_servicio_liquidos()
+                      + p35.pct_gnc * p35.carga_gnc.media) / p35.playeros_maximos
+    rho_auto = lam * (1 - p35.pct_gnc) * p35.media_servicio_liquidos() / p35.playeros_maximos
+    controlar(
+        _valor("PER-04") is True and p35.gnc_con_playero and not auto35.gnc_con_playero
+        and descuadres == 0 and gnc_con_playero > 0
+        and abs(p35.rho_pico - rho_mano) < 1e-12 and abs(auto35.rho_pico - rho_auto) < 1e-12
+        and t35["llegadas"] == ta35["llegadas"] and t35["atendidos"] <= ta35["atendidos"],
+        "El GNC usa playero: autos cargando = playeros ocupados en cada cuadro, y ρ cuenta los minutos del GNC",
+        f"julio: {len(traza35.cuadros)} cuadros sin descuadre ({gnc_con_playero} cuadros-auto de GNC con playero) · "
+        f"ρ pico {auto35.rho_pico:.3f} → {p35.rho_pico:.3f} · atendidos {ta35['atendidos']} (autoservicio) → "
+        f"{t35['atendidos']} (con playero)",
     )
 
     # ------------------------------------------------------------------

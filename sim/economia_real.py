@@ -143,6 +143,12 @@ def economia_mensual(
     valor_cliente = (
         p.litros_medios_por_cliente * eco.margen_por_litro + p.prob_compra * eco.margen_compra
     )
+    # El GNC que no se vendió POR EL CORTE (los clientes de GNC que se cansan de esperar al playero o al
+    # compresor van con su motivo, como cualquier cliente).
+    m3_corte = next((c[4] for c in r.litros_perdidos_causa if c[0] == "gnc"), None)
+    m3_corte_dia = (
+        m3_corte / max(r.dias_medidos, 1) if m3_corte is not None else r.m3_gnc_perdidos_dia
+    )
     perdidas: dict[str, float] = {}
     for clave, _, campo in MOTIVOS:
         clientes = float(getattr(r, campo)) * dias
@@ -150,7 +156,7 @@ def economia_mensual(
             perdidas[clave] = clientes * eco.margen_compra       # ya cargó: sólo falta la compra
         elif clave == "corte_gnc":
             perdidas[clave] = (
-                r.m3_gnc_perdidos_dia * dias * eco.margen_gnc
+                m3_corte_dia * dias * eco.margen_gnc
                 + clientes * p.prob_compra * eco.margen_compra
             )
         else:

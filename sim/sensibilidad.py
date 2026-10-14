@@ -200,8 +200,8 @@ def _cierre_nocturno(p, eco):
     return replace(p, **cambios_cierre_nocturno(p)), eco
 
 
-def _gnc_retiene_playero(p, eco):
-    grupos = tuple(replace(g, requiere_playero=True) if g.id == "C" else g for g in p.grupos)
+def _gnc_autoservicio(p, eco):
+    grupos = tuple(replace(g, requiere_playero=False) if g.id == "C" else g for g in p.grupos)
     return replace(p, grupos=grupos), eco
 
 
@@ -234,7 +234,7 @@ def _construir_ejes() -> tuple[_Eje, ...]:
                _gnc(episodios=_alto("GNC-02"), dias_por_episodio=_alto("GNC-06"),
                     migracion_a_nafta=_bajo("GNC-04"))),
               (f"{_alt('SUR-06', '2')} compresores", _gnc(compresores=_alt("SUR-06", "2"))),
-              ("el GNC retiene playero", _gnc_retiene_playero)),
+              ("GNC en autoservicio (sin playero)", _gnc_autoservicio)),
              nota="la base fuerza los episodios de corte adentro del mes (si no, el azar los deja afuera)"),
         _Eje("C10", "Estacionalidad", "C10", ("DEM-06",),
              (("leve ±6 %", _p(estacionalidad=ESTACIONALIDAD_LEVE)),

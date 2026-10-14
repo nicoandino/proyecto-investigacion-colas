@@ -232,7 +232,7 @@ class Grupo:
     nombre: str
     caras: int                 # una cara = un vehículo a la vez
     productos: tuple[str, ...]
-    requiere_playero: bool = True   # PER-04: el GNC sólo conecta la manguera
+    requiere_playero: bool = True   # PER-04: también el GNC lo carga un playero
 
 
 @dataclass(frozen=True)
@@ -364,7 +364,7 @@ def grupos_desde_registro() -> tuple[Grupo, ...]:
     return (
         Grupo("A", "Nafta", 4, ("super", "vpower"), requiere_playero=True),
         Grupo("B", "Diésel", 2, ("diesel_g2", "diesel_g3"), requiere_playero=True),
-        Grupo("C", "GNC", 6, ("gnc",), requiere_playero=False),
+        Grupo("C", "GNC", 6, ("gnc",), requiere_playero=valor("PER-04")),
     )
 
 
@@ -1028,6 +1028,19 @@ class ParametrosSimulacion:
         return base + extra
 
     @property
+    def gnc_con_playero(self) -> bool:
+        """¿El GNC lo carga un playero? (PER-04, la zona del GNC de la estación real)."""
+        return any(g.requiere_playero for g in self.grupos if "gnc" in g.productos)
+
+    def media_servicio_playero(self) -> float:
+        """Minutos de playero por cliente que llega (promedio sobre todos los productos).
+
+        Nafta y diésel: TIE-02 (+ extra de camión); GNC: TIE-04, sólo si lo carga un playero (PER-04).
+        """
+        gnc = self.carga_gnc.media if self.gnc_con_playero else 0.0
+        return (1.0 - self.pct_gnc) * self.media_servicio_liquidos() + self.pct_gnc * gnc
+
+    @property
     def litros_por_dia(self) -> float:
         """Consumo diario esperado de combustible (líquidos)."""
         if self.estacion_real:
@@ -1048,9 +1061,8 @@ class ParametrosSimulacion:
         el cuello son los playeros (PER-01), no las caras.
         """
         if self.estacion_real:
-            # Sólo los clientes de nafta y diésel usan playero (el GNC no, PER-04).
-            lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia) * (1.0 - self.pct_gnc)
-            return (lambda_pico * self.media_servicio_liquidos()) / self.playeros_maximos
+            lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia)
+            return (lambda_pico * self.media_servicio_playero()) / self.playeros_maximos
         lambda_pico = self.perfil.tasa_maxima(self.autos_por_dia)
         return (lambda_pico * self.carga.media) / self.surtidores
 

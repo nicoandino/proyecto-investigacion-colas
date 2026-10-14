@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 124 datos · 🟢 dato 37 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 55
+**Resumen:** 124 datos · 🟢 dato 38 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 54
 
 ## La estación
 
@@ -35,7 +35,7 @@
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
-| SUR-00 | Grupos de la estación real (zona · caras · productos) | (('A', 'Nafta', 4, ('super', 'vpower'), True), ('B', 'Diésel', 2, ('diesel_g2', 'diesel_g3'), True), ('C', 'GNC', 6, ('gnc',), False)) | caras | 🟢 dato | la estación | media | capturas de Google Maps (grupo) + Secretaría de Energía | — |
+| SUR-00 | Grupos de la estación real (zona · caras · productos) | (('A', 'Nafta', 4, ('super', 'vpower'), True), ('B', 'Diésel', 2, ('diesel_g2', 'diesel_g3'), True), ('C', 'GNC', 6, ('gnc',), True)) | caras | 🟢 dato | la estación | media | capturas de Google Maps (grupo) + Secretaría de Energía | — |
 | SUR-01 | Caras por surtidor | 2 | caras | 🟢 dato | la estación | media | capturas de Google Maps (grupo) | — |
 | SUR-02 | Grupo A (nafta) | S1, S2 → 4 caras → Súper y V-Power | caras | 🟢 dato | la estación | media | capturas de Google Maps (grupo) · V3 | — |
 | SUR-03 | Grupo B (diésel) | S3 → 2 caras → G2 y G3 | caras | 🟢 dato | la estación | media | capturas del grupo + Secretaría de Energía | sólo G2 = sólo G2 |
@@ -50,7 +50,7 @@
 | PER-01 | Playeros por turno (noche·mañana·tarde) | (1, 2, 2) | personas | 🟡 estimación | la estación | baja | DATOS §4 (único desglose por rol) | 2·3·3 = (2, 3, 3) |
 | PER-02 | Cajeros (cajas) por turno | (1, 1, 1) | cajas | 🟡 estimación | la estación | baja | DATOS §4 | — |
 | PER-03 | Encargado / personal de tienda | encargado 1 (M, T); tienda 1 (M, T) — sólo costo | personas | 🟡 estimación | la estación | baja | DATOS §4 | — |
-| PER-04 | El GNC retiene playero | False | — | 🟠 supuesto | la estación | sin_dato | orquestador | sí = True |
+| PER-04 | El GNC lo carga un playero | True | — | 🟢 dato | la estación | media | EST-07 (Shell: servicio atendido) + observación del grupo (14/10/2026) + nota 10 | no (autoservicio) = False |
 | PER-05 | Capacidad de cola por grupo | 8 | autos | 🟠 supuesto | la estación | sin_dato | orquestador (relevar) | 4 = 4 · 14 = 14 |
 | PER-07 | Lugares de cola por cara | 3 | autos | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): todas las caras tienen la misma capacidad de cola | 8 por zona = 8 |
 | PER-06 | Disciplina de cola | por_grupo | — | 🟠 supuesto | la estación | sin_dato | CASO §7 | por_cara = por_cara |

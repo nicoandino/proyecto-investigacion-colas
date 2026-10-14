@@ -23,7 +23,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 ## Qué modela hoy
 
 - **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (1·2·2); cola finita;
-  abandono; caja del minimarket.
+  abandono; caja del minimarket. **El GNC también lo carga un playero** (PER-04) y además usa un compresor.
 - **Demanda:** litros/mes (270.000) ⇒ clientes/día (≈ 252) con perfil horario, fin de semana ×1,30 normalizado,
   estacionalidad neutra + **calendario de temporadas** (verano, vacaciones de invierno de Mendoza 6–17/7, resto del
   invierno; DEM-14/15, activo en la app y neutro en los parámetros por defecto). Cada cliente: producto → tipo de
@@ -35,7 +35,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **128 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **129 controles**.
 
 ## Reglas de oro (no romper)
 
@@ -55,7 +55,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      128 controles
+verificar.py      129 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · gnc · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -67,7 +67,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 128 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 129 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.

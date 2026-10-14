@@ -267,7 +267,7 @@ que se afectan entre sí.
    no entra.
 4. **Playeros por turno** (noche · mañana · tarde): para cargar nafta o diésel hace falta
    una **cara libre y un playero**, así que los servidores son `mín(caras libres,
-   playeros en turno)`. El GNC sólo conecta la manguera y no retiene playero.
+   playeros en turno)`. El GNC también lo carga un playero, y además usa un compresor.
 5. **Caja del minimarket**: los que cargaron entran con probabilidad p (Bernoulli); es la
    segunda cola de la red. Quien se va sin cargar **no** pasa por la caja.
 6. **Abandono (reneging)**: si la espera hasta empezar a ser atendido supera la paciencia,
@@ -375,7 +375,7 @@ SUPUESTOS = [
 SUPUESTOS_REAL = [
     "Los datos de la propia estación **todavía no existen**: la demanda, la dotación y el "
     "resto son estimaciones o supuestos del Registro (pestaña Datos y fuentes).",
-    "Playa de 24 horas con servicio atendido; el GNC no retiene playero (PER-04).",
+    "Playa de 24 horas con servicio atendido: también el GNC lo carga un playero (PER-04).",
     "Un vehículo por cara y una cola FIFO única por zona (PER-06); capacidad de cola finita "
     "(PER-05, sin dato: hay que relevarla).",
     "Playeros por turno 1 · 2 · 2 (noche · mañana · tarde) y una sola caja (PER-01/PER-02).",

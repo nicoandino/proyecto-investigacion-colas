@@ -409,7 +409,7 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
 
 | Etapa | Qué incluye | Compuerta |
 |---|---|---|
-| **P1 · Serie real** | Buscar y bajar la serie mensual de ventas (Secretaría de Energía, datos abiertos); nota `research_notes/…/10_serie_ventas.md` con URL, alcance, unidad y criterio (§17); la serie entra al Registro (**PRO-01**, nivel y confianza según lo que se consiga) junto con los meses de prueba (**PRO-02** = 12) y el z del IC (**PRO-03**) | La serie tiene fuente y URL. **Si no se consigue ni la provincial, se frena y se le pregunta a Nico** (no se inventa) |
+| **P1 · Serie real** | Buscar y bajar la serie mensual de ventas (Secretaría de Energía, datos abiertos); nota `research_notes/…/11_serie_ventas.md` con URL, alcance, unidad y criterio (§17); la serie entra al Registro (**PRO-01**, nivel y confianza según lo que se consiga) junto con los meses de prueba (**PRO-02** = 12) y el z del IC (**PRO-03**) | La serie tiene fuente y URL. **Si no se consigue ni la provincial, se frena y se le pregunta a Nico** (no se inventa) |
 | **P2 · Métodos de pronóstico** | `sim/pronostico.py` (sin Streamlit, `numpy`): los cuatro métodos, MAE / MAPE / RMSE / sesgo, IC, backtest entrenamiento/prueba y elección por RMSE | Controles con el práctico de Pronóstico: Cable Televisora con los pronósticos dados ⇒ **MAE = 107/12 = 8,92** y **RMSE = 37/√12 = 10,68**; tendencia A = 1.650, B = 30 ⇒ **2.010 · 2.040 · 2.070** para t = 12, 13, 14; los índices estacionales promedian 1 |
 | **P3 · Pronóstico en la app** | Pestaña **📈 Pronóstico** (después de Demanda): la serie real y el ajuste de cada método, tabla de errores, el método elegido y por qué, los próximos 12 meses con su IC, "¿Cómo se comprueba?" con las cuentas; en el menú, la opción de estacionalidad "índices del pronóstico" (§17) | Control: con la opción apagada la corrida es idéntica; con la opción, Σ de litros del año = la del pronóstico; QA, 0 errores de consola |
 | **P4 · Stock de seguridad** | Política "por pronóstico" (§17) en la búsqueda de la mejor política (Caso de informe) y en el menú de abastecimiento; Inventario muestra la cuenta del s de cada tanque | Control: con z = 0 el s es la demanda del plazo; el s de la app = la fórmula a mano; la búsqueda la evalúa como una más |
@@ -437,8 +437,7 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
 
 - **El GNC lo carga un playero** (en las estaciones argentinas el GNC es atendido, no hay autoservicio). Hoy el modelo
   dice lo contrario (PER-04 = "no retiene playero, sólo conecta la manguera"): **es un error de lógica y se corrige
-  primero** (etapa E0). Medido antes de corregir, julio con datos reales: con el GNC usando playero, 16 clientes más se
-  van por la espera (7.386 → 7.384 atendidos); el efecto es chico porque el GNC es el 3 % de las llegadas (DEM-05).
+  primero** (etapa E0; el efecto medido está en §25).
 - **Turnos:** los que ya están (noche 22–06 · mañana 06–14 · tarde 14–22, PER-01). El ejemplo "se va a las 3 y vuelve
   alguien a las 8" era ilustrativo: **el hueco dura hasta el próximo cambio de turno** (a las 06 si es de noche).
 - **Aumento de precio (+10 %):** sube el precio; **el margen en $ por litro queda igual** (si se ganaban $100 por litro,
@@ -516,4 +515,22 @@ Lo de la parte 1 que **no** quedó cubierto por las tandas de la parte 2:
 - **Cierre (etapa 8):** la tabla de §3 y los pendientes de §5 quedaron viejos (no marcan lo hecho en la parte 2).
 
 Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3) y **parte 4** (Eventos, E0–E3), ninguna empezada.
-Pendiente de decidir: el orden entre las partes 3 y 4, y entre ellas y el frontend.
+Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico y flujos → pendientes de arriba → frontend**.
+
+## 25. Avance de la parte 4
+
+- **E0 ✅ (el GNC lo carga un playero).** Nota `research_notes/…/10_gnc_atendido.md`: servicio atendido de la propia
+  estación (EST-07), observación de Nico, ENARGAS Res. 369/2020 (sin personas a bordo); el Decreto 70/2023 habilita el
+  autoservicio como **opción**, que queda como alternativa. Registro: **PER-04 = sí** (dato, confianza media) y la zona C
+  de SUR-00 con playero; `grupos_desde_registro` lee PER-04. Motor: el cliente de GNC toma **cara → playero →
+  compresor** (siempre en ese orden) y el playero queda con el auto mientras espera el compresor y mientras carga; la
+  alternativa sin playero sigue funcionando (eje C9 del tornado: "GNC en autoservicio"). Antes, esa alternativa saltaba
+  el compresor y el chequeo del corte: quedó corregido en el mismo camino. ρ teórico =
+  λ_pico · [(1 − g) · E[S_líquidos] + g · E[S_GNC]] ÷ playeros (`media_servicio_playero`), en el método, en el escenario
+  único y en el tornado. **Economía:** la venta perdida "por corte de GNC" sumaba **todo** el GNC no vendido (también el
+  de los clientes que se cansan de esperar): ahora cuenta sólo los m³ perdidos por el corte. Textos corregidos (modelo,
+  supuestos, tablero: "lo carga un playero"). **Efecto** (datos reales): ρ pico 0,85 → **0,89**; julio 7.677 → **7.664**
+  atendidos; año completo 91.949 → **91.760** atendidos, 73 → **286** clientes que se van por la espera. Control nuevo
+  (35: autos cargando = playeros ocupados en los 89.280 cuadros de julio; ρ a mano). `verificar.py` **129/129**; QA
+  `reports/qa_e0_gnc.py`: escenario único, tablero, modelo y método e indicadores sin textos viejos, 0 excepciones, 0
+  errores de consola.

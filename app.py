@@ -2110,8 +2110,8 @@ def pestania_modelo_real(p: ParametrosSimulacion) -> None:
 
         st.markdown("**Intensidad de tráfico teórica (ρ) en la hora pico**")
         st.caption(
-            "ρ = λ_pico · E[servicio] ÷ playeros, sólo con los clientes de nafta y diésel "
-            "(el GNC no usa playero). Si ρ ≥ 1 la cola crece sin límite mientras dure el pico."
+            "ρ = λ_pico · E[minutos de playero por cliente] ÷ playeros, con todos los clientes (nafta, "
+            "diésel y GNC: a todos los atiende un playero). Si ρ ≥ 1 la cola crece sin límite mientras dure el pico."
         )
         columnas = st.columns(3)
         for columna, n in zip(columnas, (1, 2, 3)):
@@ -3215,7 +3215,7 @@ def pantalla_escenario_unico() -> None:
     espera = suma / cant if cant else 0.0
     perdidos = sum(traza.perdidos_por_hora[h] for h in horas)
     por_hora = llegadas / dias / len(horas)
-    rho = por_hora * (1.0 - p.pct_gnc) * p.media_servicio_liquidos() / 60.0 / eu.playeros
+    rho = por_hora * p.media_servicio_playero() / 60.0 / eu.playeros
     vistas_ent, vistas_dec = vistas.ent, vistas.dec
     filas = st.columns(5)
     for col, (titulo, valor_, nota) in zip(filas, (
@@ -3266,8 +3266,10 @@ def pantalla_escenario_unico() -> None:
     if extras:
         st.caption("Además, " + "; ".join(extras) + ".")
     st.caption(
-        f"ρ = {vistas_dec(por_hora)} clientes por hora × {vistas_dec(100 * (1 - p.pct_gnc), 0)} % que usan playero × "
-        f"{vistas_dec(p.media_servicio_liquidos())} min de servicio ÷ 60 ÷ {eu.playeros} playeros. El GNC no usa playero."
+        f"ρ = {vistas_dec(por_hora)} clientes por hora × {vistas_dec(p.media_servicio_playero())} min de playero por "
+        f"cliente ÷ 60 ÷ {eu.playeros} playeros. Los minutos por cliente promedian nafta y diésel "
+        f"({vistas_dec(p.media_servicio_liquidos())} min) con el GNC ({vistas_dec(p.carga_gnc.media)} min, "
+        f"{vistas_dec(100 * p.pct_gnc, 0)} % de los clientes): a todos los carga un playero."
     )
     st.plotly_chart(graficos.grafico_perfil_horario(traza, dias), key="g_eu_perfil")
     st.divider()

@@ -599,7 +599,7 @@ function panelDerecho(i, esperando) {
   if (F.gnc[i] === 1) { const corte = corteActivo(F.t[i]); gn += `<span class="pastilla" style="background:${P.rojo};color:${P.blanco}">GNC CORTADO</span>` + (corte ? `<b>vuelve en ${faltaTexto(corte.fin - F.t[i])}</b>` : ""); }
   else if (F.gnc[i] === 2) gn += `<span class="pastilla" style="background:${P.naranja};color:${P.negro}">COMPRESORES AL 50 %</span>`;
   else gn += `<span class="pastilla" style="background:${P.libre};color:${P.negro}">DISPONIBLE</span>`;
-  gn += `</div><div class="chico" style="margin-top:6px">${F.comp[i]} de ${F.compTot[i]} compresores en uso · sin playero</div>`;
+  gn += `</div><div class="chico" style="margin-top:6px">${F.comp[i]} de ${F.compTot[i]} compresores en uso · ${GRUPOS.some(g => g.playero && g.productos.includes(PROD.findIndex(x => x.id === "gnc"))) ? "lo carga un playero" : "sin playero"}</div>`;
   document.getElementById("pGnc").innerHTML = gn;
 
   let cm = `<div class="titulo">Camión cisterna</div><div class="chico">${esc(CONFIG.ruta.escenario)}</div>`;

@@ -9,7 +9,7 @@ que existe sólo si la simulación fue editada.
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 import pandas as pd
@@ -634,3 +634,105 @@ def _dias_del_mes_de(p: ParametrosSimulacion) -> int:
     from sim.config import dias_del_mes
 
     return dias_del_mes(p.fecha_inicio[0])
+
+
+# =============================================================================
+# Eventos aleatorios (parte 4): qué pasó, cuándo y qué le hizo a la estación
+# =============================================================================
+def _cuando(p: ParametrosSimulacion, minuto: float) -> str:
+    """'mié 7/1 15:02' a partir del minuto de la corrida."""
+    instante = datetime(ANO_REFERENCIA, *p.fecha_inicio) + timedelta(minutes=minuto)
+    return f"{DIAS_SEMANA[instante.weekday()][:3]} {instante.day}/{instante.month} {instante:%H:%M}"
+
+
+def _duracion(e) -> str:
+    if e.id == "EVT-09":
+        return "desde ese día"
+    horas = (e.fin - e.inicio) / 60.0
+    if e.id in ("EVT-02", "EVT-04", "EVT-10", "EVT-13"):
+        dias = int(e.valor) if e.id in ("EVT-02", "EVT-04") else round(horas / 24)
+        return f"{dias} día{'s' if dias != 1 else ''}"
+    return f"{dec(horas)} h" if horas < 48 else f"{dec(horas / 24)} días"
+
+
+def pestania_eventos(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """La pestaña ⚡ Eventos: cómo se sortearon, la tabla de los que ocurrieron y lo que costaron."""
+    from sim.eventos import CATALOGO, POR_ID, costo_de_eventos, horas_extra, texto_frecuencia
+
+    ev = p.eventos
+    inicio = date(ANO_REFERENCIA, *p.fecha_inicio)
+    st.subheader("Eventos aleatorios del período")
+    st.info(
+        f"Prendidos en el menú: **{len(ev.activos)}** de {len(CATALOGO)}. Se sortearon con la semilla **{ev.semilla}**"
+        + (f" y la frecuencia × {dec(ev.frecuencia, 1)}" if ev.frecuencia != 1 else "")
+        + ": cada día, y para cada evento, se sortea si ocurre con su probabilidad por día del Registro (EVT-01…14, "
+        "supuestos del grupo). **Con la misma semilla salen siempre los mismos eventos.** "
+        + ("El resto de la simulación sigue con los datos reales, sin azar." if p.determinista else
+           "El resto es la simulación editada, con su propia semilla."),
+        icon="⚡",
+    )
+    ocurridos = r.eventos
+    costo = costo_de_eventos(ocurridos, p, eco.sueldo_playero_mensual)
+    _tarjetas([
+        ("Eventos que ocurrieron", ent(len(ocurridos)), f"{len({e.id for e in ocurridos})} tipos distintos"),
+        ("Clientes perdidos mientras duraban", ent(sum(e.perdidos for e in ocurridos)),
+         "si dos eventos se superponen, el cliente cuenta en los dos"),
+        ("Costo de los eventos", _pesos(costo), "horas extra y técnico, en el período (la venta perdida va aparte)"),
+    ])
+    if not ocurridos:
+        st.caption("No ocurrió ninguno de los prendidos. Probá con un período más largo, otra semilla o la frecuencia × 5.")
+    else:
+        valor_hora = eco.sueldo_playero_mensual / float(_valor_registro("EVT-15"))
+        factor_precio = 1.0
+        precio_super = dict(eco.precios).get("super", 0.0)
+        filas = []
+        for e in ocurridos:
+            que = "—"
+            if e.id in ("EVT-09", "EVT-13"):
+                que = f"+{ent(e.extra)} clientes" + (" el día anterior" if e.id == "EVT-09" else "")
+                if e.id == "EVT-09":
+                    antes = precio_super * factor_precio
+                    factor_precio *= 1 + e.valor
+                    que += f" · Súper $ {ent(antes)} → $ {ent(precio_super * factor_precio)} (margen igual)"
+            elif e.id == "EVT-12":
+                que = f"{ent(e.extra)} clientes no pudieron entrar"
+            elif e.id == "EVT-10":
+                que = f"{ent(e.extra)} L recortados por el cupo"
+            elif e.id == "EVT-11":
+                que = f"{dec(e.extra, 0)} h de demora"
+            elif e.id == "EVT-02":
+                al_50, al_100 = horas_extra(e, inicio, p.dias)
+                que = (f"{ent(al_50 + al_100)} h extra = "
+                       f"{_pesos(valor_hora * (al_50 * 1.5 + al_100 * 2.0))}")
+            filas.append({
+                "Cuándo": _cuando(p, e.inicio),
+                "Evento": POR_ID[e.id].nombre,
+                "Duración": _duracion(e),
+                "Clientes perdidos mientras duraba": "—" if e.id in ("EVT-02", "EVT-11") else ent(e.perdidos),
+                "Qué hizo": que,
+                "Detalle": e.detalle[:1].upper() + e.detalle[1:],
+            })
+        st.markdown("##### Lo que pasó, en orden")
+        st.dataframe(pd.DataFrame(filas), hide_index=True, height=min(36 * len(filas) + 3, 460))
+    no_salieron = [POR_ID[i] for i in ev.activos if i not in {e.id for e in ocurridos}]
+    if no_salieron:
+        st.caption("Prendidos que no ocurrieron en este período: " + " · ".join(
+            f"{t.nombre} ({texto_frecuencia(t.id)})" for t in no_salieron) + ".")
+    _comprobacion([
+        "Cada evento cuenta los clientes que se fueron **sin cargar mientras duraba** (por espera, cola llena, falta de "
+        "stock o corte de GNC). Son parte de los perdidos de Indicadores: no se suman aparte.",
+        "Un playero menos = una reserva en el recurso de playeros hasta el cambio de turno (06, 14 o 22 h), igual que los "
+        "turnos; la estación parada (corte de luz, asalto) reserva todos los playeros y compresores.",
+        f"Horas extra (licencia cubierta): 8 h por día de licencia dentro del período × valor de la hora "
+        f"({_pesos(eco.sueldo_playero_mensual)} ÷ {ent(_valor_registro('EVT-15'))} h = {_pesos(eco.sueldo_playero_mensual / float(_valor_registro('EVT-15')))}) "
+        "× 1,5 (× 2 el domingo; LCT art. 201). Entra en los costos de Economía.",
+        "Aumento de precio: el margen por litro queda igual (pedido del grupo), así que no cambia la ganancia; lo que se ve "
+        "es la gente que se adelanta a cargar el día anterior.",
+        "Frecuencias y duraciones: supuestos del grupo (no hay registros de la estación); detalle en Datos y fuentes (EVT-00…15).",
+    ])
+
+
+def _valor_registro(id_: str):
+    from sim.datos import valor
+
+    return valor(id_)

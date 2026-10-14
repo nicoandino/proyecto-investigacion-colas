@@ -24,6 +24,7 @@ from datetime import date, timedelta
 
 from sim.config import ANO_REFERENCIA, ParametrosSimulacion
 from sim.datos import valor
+from sim.eventos import POR_ID as TIPOS_EVENTO
 from sim.red import ETIQUETA_ESCENARIO, NOMBRE_NODO, camino_mas_corto, descripcion_ruta
 from sim.traza import Cuadro, Traza
 from ui.graficos_red import POSICION_NODO
@@ -47,7 +48,10 @@ def dt_para(dias: int) -> float:
 
 
 def _codigo_carril(k: int) -> str:
-    """Un carácter por cara: '.' libre, 'a'.. el código (2·producto + 1 si espera al playero)."""
+    """Un carácter por cara: '.' libre, 'x' fuera de servicio (EVT-05), 'a'.. el código (2·producto + 1 si espera al
+    playero)."""
+    if k == -2:
+        return "x"
     return "." if k < 0 else chr(97 + k)
 
 
@@ -170,6 +174,10 @@ def _eventos(traza: Traza, p: ParametrosSimulacion) -> list[dict]:
         elif ev[0] == "corte_gnc":
             _, t, _, inicio, fin = ev
             salida.append({"tipo": "gnc", "t": round(t, 1), "inicio": round(inicio, 1), "fin": round(fin, 1)})
+        elif ev[0] == "evento":                    # eventos aleatorios (parte 4)
+            _, t, id_, fin, _, detalle = ev
+            salida.append({"tipo": "evento", "t": round(t, 1), "fin": round(fin, 1), "id": id_,
+                           "titulo": TIPOS_EVENTO[id_].nombre, "texto": detalle[:1].upper() + detalle[1:] + "."})
     return salida
 
 
@@ -220,6 +228,7 @@ def _configuracion(
         "frames": _columnas(traza.cuadros, p),
         "paleta": paleta_oscura_json(),
         "eventos": _eventos(traza, p),
+        "semillaEventos": int(p.eventos.semilla) if p.eventos.activos else None,
         "corrida": corrida,
     }
 
@@ -409,6 +418,7 @@ const TANQUES = CONFIG.tanques.map((id) => PROD.findIndex((x) => x.id === id));
 const EV = CONFIG.eventos || [];
 const DESCARGAS = EV.filter((e) => e.tipo === "descarga");
 const CORTES = EV.filter((e) => e.tipo === "gnc");
+const EVENTOS = EV.filter((e) => e.tipo === "evento");
 const DIAS_SEM = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -425,7 +435,7 @@ function fechaTexto(d) {
 }
 const iniDia = new Array(NDIAS + 1).fill(N);
 for (let i = N - 1; i >= 0; i--) iniDia[diaDe(i)] = i;
-function carriles(g, i) { const s = F.g[g.id].c[i]; const a = []; for (let k = 0; k < s.length; k++) { const c = s.charCodeAt(k); a.push(c === 46 ? -1 : c - 97); } return a; }
+function carriles(g, i) { const s = F.g[g.id].c[i]; const a = []; for (let k = 0; k < s.length; k++) { const c = s.charCodeAt(k); a.push(c === 46 ? -1 : (c === 120 ? -2 : c - 97)); } return a; }
 function cola(g, i) { const s = F.g[g.id].q[i]; const a = []; for (let k = 0; k < s.length; k++) a.push(s.charCodeAt(k) - 48); return a; }
 function hoy(arr, i) { return arr[i] - arr[iniDia[diaDe(i)]]; }
 function sinCombustible(i) {
@@ -532,6 +542,11 @@ function dibujarCanvas(i) {
       const codigo = car[c];
       let estado = "libre", colorEstado = P.tenue;
       if (cortado) { estado = "cortada"; colorEstado = P.rojo; }
+      if (codigo === -2) {            // cara fuera de servicio (evento aleatorio): tachada hasta que llega el técnico
+        estado = "fuera"; colorEstado = P.rojo;
+        s += `<line x1="${cx - 18}" y1="${Y_BOMBA + 4}" x2="${cx + 18}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>` +
+             `<line x1="${cx + 18}" y1="${Y_BOMBA + 4}" x2="${cx - 18}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>`;
+      }
       if (codigo >= 0) {
         const k = codigo >> 1, espera = (codigo & 1) === 1;
         s += autoV(cx, Y_BAHIA + 37, PROD[k].color, espera);
@@ -593,6 +608,9 @@ function panelDerecho(i, esperando) {
   for (let k = 0; k < turno; k++) pl += persona(14 + k * 28, 18, k < ocup ? P.amarillo : P.panel2);
   pl += `</svg><div class="chico">${turno} en turno · ${ocup} atendiendo · naranja punteado = cara esperando al playero</div>`;
   if (esperando > 0) pl += `<div style="margin-top:6px"><span class="pastilla" style="background:${P.naranja};color:${P.negro}">${esperando} cara${esperando > 1 ? "s" : ""} espera${esperando > 1 ? "n" : ""} playero</span></div>`;
+  EVENTOS.filter((e) => e.t <= F.t[i] && F.t[i] < e.fin).slice(0, 3).forEach((e) => {
+    pl += `<div class="chico" style="margin-top:6px;color:${P.amarillo};font-weight:700">⚡ ${e.titulo} · hasta ${fechaHora(e.fin)}</div>`;
+  });
   document.getElementById("pPlay").innerHTML = pl;
 
   let gn = `<div class="titulo">GNC</div><div class="fila">`;
@@ -739,6 +757,12 @@ function abrirAviso() {
       (e.redirigido ? " (el origen habitual no podía cumplirlo: pedido redirigido)" : "") + `. Llega el ${fechaHora(e.llega)}.`;
     document.getElementById("avisoNota").textContent = "El aviso salta cuando lo que hay en el tanque más lo que viene en camino baja al punto de pedido s: es el mismo momento en que se pide el camión.";
     botonSeguir.hidden = false;
+  } else if (e.tipo === "evento") {
+    document.getElementById("avisoIcono").textContent = "⚡";
+    document.getElementById("avisoTitulo").textContent = e.titulo;
+    document.getElementById("avisoTexto").textContent = e.texto;
+    document.getElementById("avisoNota").textContent = `Evento aleatorio sorteado con la semilla ${CONFIG.semillaEventos}: con la misma semilla sale siempre igual. El detalle de todos está en la pestaña ⚡ Eventos.`;
+    botonSeguir.hidden = true;
   } else {
     const total = Math.round((e.fin - e.inicio) / 1440), resta = e.fin - e.t;
     document.getElementById("avisoIcono").textContent = "🔥";

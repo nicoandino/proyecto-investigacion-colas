@@ -26,6 +26,7 @@ from sim.config import (
     ANO_REFERENCIA,
     DemandaDiaria,
     ParametrosEconomicos,
+    ParametrosEventos,
     ParametrosGNC,
     ParametrosSimulacion,
     ParametrosTanque,
@@ -87,6 +88,8 @@ from sim.escenarios import (
 )
 from sim.datos import AVISO_FUENTES, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO, por_id, valor
 from sim.distribuciones import Aleatorio
+from sim.eventos import CATALOGO as CATALOGO_EVENTOS, POR_ID as CATALOGO_EVENTOS_POR_ID
+from sim.eventos import calendario as calendario_eventos, texto_frecuencia
 from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
     ahorro_por_producto,
@@ -1044,6 +1047,8 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
         "- **Si entra al minimarket y cuánto tarda en la caja:** Bernoulli y triangular.\n"
         "- **Cuánto tarda cada camión:** triangular (24 · 36 · 48 h) más la demora de un corte de ruta, si hay.\n"
         "- **Las fechas de los cortes de GNC y cuántos clientes pasan a Súper.**"
+        + ("\n- **Los eventos aleatorios** prendidos en el menú, con su propia semilla "
+           f"({p.eventos.semilla}): detalle en la pestaña ⚡ Eventos." if p.eventos.activos else "")
     )
 
     st.markdown("##### De los litros por mes a los clientes por día")
@@ -1808,6 +1813,8 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     costos = [(n, res[k].promedio) for n, k in (
         ("Flete", "flete"), ("Almacenamiento", "almacenamiento"), ("Personal", "personal_total"),
     )]
+    if res["costo_eventos"].promedio > 0:
+        costos.append(("Eventos aleatorios", res["costo_eventos"].promedio))
     st.plotly_chart(
         graficos_escenarios.grafico_cascada_economica(
             ingresos, costos, "De los ingresos al margen operativo (un mes)"),
@@ -1836,6 +1843,7 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
 | Flete | pedidos del mes × (fijo ${eco.costo_pedido:,.0f} + ${eco.flete_por_km:,.0f}/km × km de ida y vuelta) |
 | Almacenamiento | litros promedio en los tanques × ${eco.costo_almacenamiento_litro_mes:,.0f} por litro y por mes |
 | Personal | personas-turno × {eco.cobertura_francos:g} (francos) × sueldo: playero ${eco.sueldo_playero_mensual:,.0f}, cajero y tienda ${eco.sueldo_cajero_mensual:,.0f}, encargado ${eco.sueldo_encargado_mensual:,.0f} |
+| Eventos aleatorios (si se prendieron) | horas extra de las licencias cubiertas × valor de la hora (sueldo ÷ 200 h, EVT-15) × 1,5 (× 2 el domingo) + visitas del técnico (sin dato: $0) |
 | **Margen operativo** | **ingresos − costos** (la venta perdida NO entra) |
 | Venta perdida (por motivo) | clientes perdidos × (litros medios × margen + prob. de compra × margen del minimarket); corte de GNC en m³ |
 
@@ -2010,6 +2018,13 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
         f"**GNC:** "
         + (f"{vistas.ent(t['dias_con_corte_gnc'])} días con corte; {vistas.ent(t['migrados_gnc'])} clientes pasaron a Súper y "
            f"{vistas.ent(por_gnc)} se perdieron." if t["dias_con_corte_gnc"] else "no hubo cortes en este período."),
+        *([escapar_pesos(
+            f"**Eventos aleatorios** (semilla {p.eventos.semilla}): ocurrieron {len(r.eventos)}; los que más clientes "
+            f"costaron: " + ", ".join(
+                f"{CATALOGO_EVENTOS_POR_ID[e.id].nombre.lower()} del {vistas._cuando(p, e.inicio)} ({vistas.ent(e.perdidos)})"
+                for e in sorted(r.eventos, key=lambda x: -x.perdidos)[:3] if e.perdidos
+            ) + (f"; horas extra y técnico: {pesos(economia['costo_eventos'].promedio)} por mes." if economia['costo_eventos'].promedio else ".")
+        )] if r.eventos else []),
         escapar_pesos(
             f"**Plata (márgenes heredados sin fuente):** margen operativo del mes "
             f"{pesos(economia['margen_operativo'].promedio)}; la venta que no se hizo vale ≈ {pesos(venta_perdida)} en "
@@ -3157,12 +3172,79 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             st.warning("Si ninguno está disponible, el pedido sale igual de Dock Sud con la demora de redirección.",
                        icon="⚠️")
 
+    elegidos, semilla_ev, frecuencia_ev = menu_de_eventos(previo, periodo)
+
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
+        eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,
     )
+
+
+#: Multiplicadores de la frecuencia de los eventos que ofrece el menú.
+FRECUENCIAS_EVENTOS = {
+    1.0: "La del Registro",
+    2.0: "El doble",
+    5.0: "× 5 (para verlos en un período corto)",
+    0.5: "La mitad",
+}
+
+
+def _marcar_eventos(prender: bool) -> None:
+    """Botones 'Prender todos' / 'Apagar todos' (se ejecuta antes de dibujar las casillas)."""
+    for t in CATALOGO_EVENTOS:
+        st.session_state[f"ev_{t.id}"] = prender
+
+
+def menu_de_eventos(previo: Ajustes, periodo: Periodo | None) -> tuple[tuple[str, ...], int, float]:
+    """El desplegable de los eventos aleatorios (parte 4): casillas por grupo, frecuencia y semilla."""
+    with st.expander("⚡ Eventos aleatorios: cosas que le pueden pasar a la estación"):
+        st.caption(
+            "Apagados por defecto. Los que prendas **se sortean con su propia semilla** (siempre los mismos con la "
+            "misma semilla); el resto de la simulación sigue con los datos reales, sin azar. Frecuencias y "
+            "duraciones: **supuestos del grupo** (EVT-01…14), editables en el Registro. Pasá el mouse por cada uno "
+            "para ver qué hace y cada cuánto pasa."
+        )
+        b1, b2, _ = st.columns([1, 1, 4])
+        b1.button("Prender todos", key="ev_todos", on_click=_marcar_eventos, args=(True,))
+        b2.button("Apagar todos", key="ev_ninguno", on_click=_marcar_eventos, args=(False,))
+        grupos = list(dict.fromkeys(t.grupo for t in CATALOGO_EVENTOS))
+        elegidos: list[str] = []
+        for col, grupo in zip(st.columns(len(grupos)), grupos):
+            col.markdown(f"**{grupo}**")
+            for t in CATALOGO_EVENTOS:
+                if t.grupo != grupo:
+                    continue
+                clave = f"ev_{t.id}"
+                if clave not in st.session_state:
+                    st.session_state[clave] = t.id in previo.eventos
+                if col.checkbox(t.nombre, key=clave,
+                                help=f"{t.efecto[:1].upper()}{t.efecto[1:]}. Frecuencia: {texto_frecuencia(t.id)} "
+                                     f"({t.id}, supuesto del grupo)."):
+                    elegidos.append(t.id)
+        c1, c2 = st.columns(2)
+        opciones = list(FRECUENCIAS_EVENTOS)
+        frecuencia = c1.selectbox(
+            "Frecuencia", opciones, index=opciones.index(previo.frecuencia_eventos)
+            if previo.frecuencia_eventos in opciones else 0, format_func=FRECUENCIAS_EVENTOS.get, key="aj_ev_frecuencia",
+            help="Multiplica la probabilidad por día de todos los eventos prendidos.",
+        )
+        semilla = int(c2.number_input(
+            "Semilla del sorteo de los eventos", 1, 9999, previo.semilla_eventos, 1, key="aj_ev_semilla",
+            help="Con la misma semilla salen siempre los mismos eventos; otra semilla, otro calendario.",
+        ))
+        if elegidos and periodo is not None:
+            prueba = con_periodo(ParametrosSimulacion().datos_reales(), periodo)
+            prueba = replace(prueba, eventos=ParametrosEventos(activos=tuple(elegidos), semilla=semilla,
+                                                               frecuencia=float(frecuencia)))
+            cal = calendario_eventos(prueba)
+            st.caption(
+                f"Con esta semilla, en {periodo.titulo.lower()} salen **{len(cal)} eventos** del calendario"
+                + (" (la rotura del camión se sortea aparte, en cada viaje)" if "EVT-11" in elegidos else "") + "."
+            )
+    return tuple(elegidos), semilla, float(frecuencia)
 
 
 def menu_escenario_unico() -> EscenarioUnico:
@@ -3464,6 +3546,14 @@ def encabezado_resultados() -> None:
     cambios = ajustes_actuales().cambios()
     if cambios:
         st.caption("Ajustes del menú distintos del Registro: " + ", ".join(cambios) + ".")
+    p_corrida: ParametrosSimulacion = st.session_state.parametros
+    if p_corrida.eventos.activos:
+        ocurridos = st.session_state.resultados[0].replicas[0].eventos
+        st.info(
+            f"**Con eventos aleatorios:** ocurrieron {len(ocurridos)} (semilla {p_corrida.eventos.semilla}; con la "
+            f"misma semilla, los mismos). Detalle en la pestaña **⚡ Eventos**; en la animación cada uno es un aviso.",
+            icon="⚡",
+        )
 
 
 def pie_de_resultados() -> None:
@@ -3542,8 +3632,11 @@ def main() -> None:
         "🗺️ Red y rutas", "🔥 GNC", "💰 Economía", "📝 Conclusión",
         "📖 Modelo y método", "📚 Datos y fuentes",
     ]
+    con_eventos = bool(p_corrida.eventos.activos)
+    if con_eventos:
+        nombres_tabs.insert(3, "⚡ Eventos")            # sólo si se prendieron eventos aleatorios en el menú
     if editada:
-        nombres_tabs.insert(4, "🎲 Qué se sorteó")      # sólo existe si la simulación fue editada
+        nombres_tabs.insert(nombres_tabs.index("🛢️ Inventario"), "🎲 Qué se sorteó")   # sólo si se editó
     pestanias = dict(zip(nombres_tabs, st.tabs(nombres_tabs)))
     resultado = st.session_state.resultados[0]
     with pestanias["🏪 La estación"]:
@@ -3555,6 +3648,9 @@ def main() -> None:
             p_corrida, resultado, st.session_state.traza, st.session_state.periodo,
             st.session_state.modo,
         )
+    if con_eventos:
+        with pestanias["⚡ Eventos"]:
+            vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)
     with pestanias["🎲 Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
     if editada:

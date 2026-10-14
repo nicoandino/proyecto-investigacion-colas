@@ -514,7 +514,7 @@ Lo de la parte 1 que **no** quedó cubierto por las tandas de la parte 2:
 - **Limpieza:** la barra lateral vieja (`leer_parametros` y el modo clásico de la app) sigue en `app.py` aunque no se usa.
 - **Cierre (etapa 8):** la tabla de §3 y los pendientes de §5 quedaron viejos (no marcan lo hecho en la parte 2).
 
-Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3) y **parte 4** (Eventos, E0–E3), ninguna empezada.
+Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3), sin empezar; **parte 4** (Eventos, E0–E3), cerrada.
 Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico y flujos → pendientes de arriba → frontend**.
 
 ## 25. Avance de la parte 4
@@ -563,3 +563,20 @@ Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico
   base + de más − no llegaron; cupo ⇒ ≤ 30 L por carga y camiones con la mitad y ≥ 72 h; cada rotura es un pedido 12–48 h
   más tarde; costo de las horas extra calculado a mano). `verificar.py` **132/132**. Ejemplo, enero con los 14 eventos y
   frecuencia × 2 (semilla 1): 27 eventos, llegadas 7.791 → 7.988, atendidos 7.682 → 7.053, horas extra $403.200/mes.
+- **E3 ✅ (menú y pantalla).** Menú principal: desplegable **"⚡ Eventos aleatorios"** con una casilla por evento en
+  cuatro grupos (la ayuda "?" dice qué hace y cada cuánto pasa), **Prender todos / Apagar todos**, la **frecuencia**
+  (la del Registro, el doble, × 5 para verlos en un período corto, la mitad), la **semilla** y una vista previa ("con
+  esta semilla, en el período salen N eventos"). `Ajustes` guarda los eventos y `aplicar_ajustes` arma
+  `ParametrosEventos`; sin eventos, la corrida es la del Registro. Resultados: aviso "Con eventos aleatorios: ocurrieron
+  N (semilla S)" y la pestaña **⚡ Eventos** (sólo si hay eventos prendidos): cómo se sortearon, tarjetas (cuántos,
+  clientes perdidos mientras duraban, costo), la tabla **"Lo que pasó, en orden"** (cuándo, evento, duración, clientes
+  perdidos, qué hizo —clientes de más o que no llegaron, litros recortados, horas de demora, horas extra con su costo,
+  el precio del Súper antes y después—, detalle), los prendidos que no salieron y "¿Cómo se comprueba?". **Tablero:**
+  cada evento es un **aviso con pausa** (⚡, título, qué pasó y la semilla), los eventos en curso se listan en el panel
+  de playeros y la cara fuera de servicio se dibuja **tachada** ("fuera"). Economía: "Eventos aleatorios" en la cascada
+  y en "Cómo se calcula"; Conclusión: una línea con los eventos que más clientes costaron; Qué se sorteó (simulación
+  editada) los menciona. **Decisión:** la frecuencia es **un multiplicador para todos** en vez de una por evento (14
+  campos más en el menú era demasiado; cada probabilidad sigue editable en el Registro). Control nuevo (38: menú sin
+  eventos = Registro; cada evento ocurrido es un aviso). `verificar.py` **133/133**; QA `reports/qa_e3_eventos.py`
+  (los 14 prendidos × 5 en enero: 56 eventos, 56 avisos, 281 cuadros con una cara tachada, pestaña, economía y
+  conclusión; después apagados: sin pestaña ni aviso), 0 excepciones, 0 errores de consola. **Parte 4 cerrada.**

@@ -104,6 +104,28 @@ def probabilidad(id_: str, mes: int = 1) -> float:
     return valor(id_)[0]
 
 
+def texto_frecuencia(id_: str) -> str:
+    """La frecuencia del Registro en palabras ("≈ 1 cada 2 meses")."""
+    if id_ == "EVT-04":
+        return f"{valor('EVT-04')[0]:.0%} de las licencias"
+    if id_ == "EVT-11":
+        return f"{valor('EVT-11')[0]:.0%} de los viajes"
+    if id_ == "EVT-07":
+        verano, resto = valor("EVT-07")[:2]
+        return f"≈ {verano * 30:.0f} por mes en verano y ≈ 1 cada {1 / (resto * 30):.0f} meses el resto del año"
+    por_mes = probabilidad(id_) * 30
+    if por_mes >= 1:
+        return f"≈ {por_mes:.0f} por mes"
+    if por_mes * 12 < 1.5:
+        return "≈ 1 por año"
+    return f"≈ 1 cada {1 / por_mes:.0f} meses"
+
+
+def _dec(x: float) -> str:
+    """18,6 (un decimal con coma, como en el resto de la app)."""
+    return f"{x:.1f}".replace(".", ",")
+
+
 def _hora(minutos: float) -> str:
     m = int(round(minutos)) % MINUTOS_POR_DIA
     return f"{m // 60:02d}:{m % 60:02d}"
@@ -200,14 +222,14 @@ def _eventos_del_dia(id_: str, az: Aleatorio, stream: str, p: ParametrosSimulaci
         t = t0 + az.uniforme(stream) * MINUTOS_POR_DIA
         horas = _entre(az, stream, h_min, h_max)
         return [Evento(id_, t, t + horas * 60.0, zona, horas,
-                       f"una cara de la zona {zona} ({nombre.lower()}) queda fuera de servicio a las {_hora(t)} "
-                       f"durante {horas:.1f} h")]
+                       f"una cara de la zona {zona} ({nombre}) queda fuera de servicio a las {_hora(t)} "
+                       f"durante {_dec(horas)} h")]
     if id_ == "EVT-06":
         _, h_min, h_max = valor("EVT-06")
         t = t0 + az.uniforme(stream) * MINUTOS_POR_DIA
         horas = _entre(az, stream, h_min, h_max)
         return [Evento(id_, t, t + horas * 60.0, "C", horas,
-                       f"un compresor de GNC se rompe a las {_hora(t)} durante {horas:.1f} h")]
+                       f"un compresor de GNC se rompe a las {_hora(t)} durante {_dec(horas)} h")]
     if id_ in ("EVT-07", "EVT-14"):
         h_min, h_max = valor(id_)[-2:]
         t = t0 + az.uniforme(stream) * MINUTOS_POR_DIA
@@ -220,7 +242,7 @@ def _eventos_del_dia(id_: str, az: Aleatorio, stream: str, p: ParametrosSimulaci
         t = t0 + az.uniforme(stream) * MINUTOS_POR_DIA
         horas = _entre(az, stream, h_min, h_max)
         return [Evento(id_, t, t + horas * 60.0, "", horas,
-                       f"se cae el cobro con tarjeta a las {_hora(t)} durante {horas:.1f} h: cada carga tarda "
+                       f"se cae el cobro con tarjeta a las {_hora(t)} durante {_dec(horas)} h: cada carga tarda "
                        f"{extra:g} min más y la caja × {factor:g}")]
     if id_ == "EVT-09":
         _, aumento, adelanto = valor("EVT-09")
@@ -239,7 +261,7 @@ def _eventos_del_dia(id_: str, az: Aleatorio, stream: str, p: ParametrosSimulaci
         t = t0 + _entre(az, stream, desde, hasta) * 60.0
         horas = _entre(az, stream, h_min, h_max)
         return [Evento(id_, t, t + horas * 60.0, "", fraccion,
-                       f"corte de la avenida a las {_hora(t)} durante {horas:.1f} h: llega el "
+                       f"corte de la avenida a las {_hora(t)} durante {_dec(horas)} h: llega el "
                        f"{100 * fraccion:.0f} % de los clientes")]
     if id_ == "EVT-13":
         _, d_min, d_max, aumento = valor("EVT-13")

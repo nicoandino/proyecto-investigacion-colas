@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   38. Parte 4, etapa E3: el menú sin eventos deja la corrida del Registro; con eventos, cada uno es
+       un aviso del tablero.
    37. Parte 4, etapa E2: llegadas = base + los de más − los que no llegaron; cupo de 30 L; camiones
        con la mitad y plazo de crisis; roturas de 12–48 h; costo de las horas extra calculado a mano.
    36. Parte 4, etapa E1: eventos de personal y equipos (mismo calendario con la misma semilla,
@@ -2152,6 +2154,27 @@ def main() -> int:
         f"{vendidos / max(atendidos_l, 1):.1f} L por carga, {len(ind_cupo.pedidos)} camiones con la mitad · "
         f"{len(roturas)} roturas · {len(horas)} turnos de horas extra = ${e_lic.costo_eventos:,.0f}/mes "
         f"(la licencia cubierta no cambia el servicio)",
+    )
+
+    # ------------------------------------------------------------------ 38
+    separador("38. Parte 4, etapa E3: del menú a la simulación (eventos aleatorios)")
+    from sim.eventos import CATALOGO as CATALOGO_EV, texto_frecuencia
+    from sim.periodo import Ajustes, aplicar_ajustes
+
+    base38 = con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1))
+    p_sin, _ = aplicar_ajustes(base38, ParametrosEconomicos(), Ajustes())
+    todos38 = tuple(t.id for t in CATALOGO_EV)
+    p_con, _ = aplicar_ajustes(base38, ParametrosEconomicos(),
+                               Ajustes(eventos=todos38, semilla_eventos=7, frecuencia_eventos=5.0))
+    r38, tr38 = correr_replica(dataclasses.replace(p_con, animar_todo=True), semilla=1, con_traza=True)
+    avisos38 = [e for e in tr38.eventos if e[0] == "evento"]
+    controlar(
+        p_sin.eventos.activos == () and Ajustes().cambios() == []
+        and p_con.eventos == ParametrosEventos(activos=todos38, semilla=7, frecuencia=5.0)
+        and len(avisos38) == len(r38.eventos) > 0
+        and all(texto_frecuencia(t.id) for t in CATALOGO_EV) and len(CATALOGO_EV) == 14,
+        "El menú sin eventos deja la corrida del Registro; con eventos, cada evento ocurrido es un aviso del tablero",
+        f"enero, los 14 prendidos ×5 (semilla 7): {len(r38.eventos)} eventos = {len(avisos38)} avisos en la traza",
     )
 
     # ------------------------------------------------------------------

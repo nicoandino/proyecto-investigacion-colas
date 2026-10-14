@@ -26,6 +26,7 @@ from sim.config import (
     turnos_con_refuerzo,
     turnos_de,
 )
+from sim.config import ParametrosEventos
 from sim.datos import valor
 from sim.distribuciones import AleatorioDeterminista
 from sim.escenarios import PICOS
@@ -228,6 +229,9 @@ class Ajustes:
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
     eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
     origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
+    eventos: tuple[str, ...] = ()                     # eventos aleatorios prendidos (EVT-01…14; parte 4)
+    semilla_eventos: int = int(valor("EVT-00")[1])
+    frecuencia_eventos: float = float(valor("EVT-00")[2])
 
     def cambios(self) -> list[str]:
         """Lo que difiere del Registro, en palabras (para el encabezado de los resultados)."""
@@ -249,6 +253,11 @@ class Ajustes:
             salida.append("eventos aleatorios de abastecimiento")
         if self.origenes_no_disponibles:
             salida.append("orígenes marcados como no disponibles")
+        if self.eventos:
+            salida.append(
+                f"{len(self.eventos)} eventos aleatorios (semilla {self.semilla_eventos}"
+                + (f", frecuencia × {self.frecuencia_eventos:g}" if self.frecuencia_eventos != 1 else "") + ")"
+            )
         if not self.calendario:
             salida.append("sin calendario de temporadas")
         elif self.factores != base.factores:
@@ -283,6 +292,9 @@ def aplicar_ajustes(
         ))
     if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
         p = replace(p, pct_gnc=a.pct_gnc)
+    if a.eventos:
+        p = replace(p, eventos=ParametrosEventos(
+            activos=tuple(a.eventos), semilla=a.semilla_eventos, frecuencia=a.frecuencia_eventos))
     return p, eco
 
 

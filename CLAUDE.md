@@ -35,7 +35,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **132 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **133 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 
@@ -57,7 +57,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      132 controles
+verificar.py      133 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · gnc · eventos · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -69,7 +69,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 132 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 133 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.
@@ -92,6 +92,6 @@ tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuen
 **Parte 3 (14/10/2026, en curso):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
 seguridad) y **Flujos en redes** (transbordo / costo mínimo y flujo máximo sobre la red de abastecimiento). Etapas P1–P4,
 F1–F3 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como en la cátedra.
-**Parte 4 (14/10/2026, en curso):** 14 **eventos aleatorios** (personal, equipos, precio, abastecimiento, demanda) que
+**Parte 4 (14/10/2026, cerrada):** 14 **eventos aleatorios** (personal, equipos, precio, abastecimiento, demanda) que
 se prenden desde el menú; antes se corrige que **el GNC lo carga un playero** (PER-04). Etapas E0–E3 en §20–23; lo que
 falta del orquestador, en §24.

@@ -207,7 +207,8 @@ CORTES_GNC = ("habituales", "todo_invierno")
 
 @dataclass(frozen=True)
 class Ajustes:
-    """Lo que se elige en el menú antes de simular. Por defecto, los valores del Registro.
+    """Lo que se elige en el menú antes de simular. Por defecto, los valores del Registro (y el calendario de
+    temporadas prendido, que es la opción por defecto de la app; `calendario=False` deja la demanda del Registro pura).
 
     La economía (márgenes, flete, almacenamiento, sueldo) no cambia la simulación, sólo la plata. Los cortes de
     GNC y el % de clientes GNC sí cambian la simulación, pero sin azar: sigue siendo determinista.
@@ -220,6 +221,8 @@ class Ajustes:
     sueldo_playero: float = float(valor("ECO-04")[0])
     cortes_gnc: str = "habituales"                    # "habituales" | "todo_invierno"
     pct_gnc: float = float(valor("DEM-05"))
+    calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
+    factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
 
     def cambios(self) -> list[str]:
         """Lo que difiere del Registro, en palabras (para el encabezado de los resultados)."""
@@ -237,6 +240,10 @@ class Ajustes:
             salida.append("más cortes de GNC en todo el invierno")
         if abs(self.pct_gnc - base.pct_gnc) > 1e-9:
             salida.append(f"{self.pct_gnc:.0%} de clientes GNC")
+        if not self.calendario:
+            salida.append("sin calendario de temporadas")
+        elif self.factores != base.factores:
+            salida.append("factores del calendario de temporadas")
         return salida
 
 
@@ -258,7 +265,7 @@ def aplicar_ajustes(
         eco, margenes_producto=a.margenes, costo_pedido=a.flete_fijo, flete_por_km=a.flete_km,
         costo_almacenamiento_litro_mes=a.almacenamiento, sueldo_playero_mensual=a.sueldo_playero,
     )
-    p = replace(p, gnc=gnc_con_ajustes(p.gnc, a))
+    p = replace(p, gnc=gnc_con_ajustes(p.gnc, a), calendario_demanda=a.factores if a.calendario else ())
     if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
         p = replace(p, pct_gnc=a.pct_gnc)
     return p, eco

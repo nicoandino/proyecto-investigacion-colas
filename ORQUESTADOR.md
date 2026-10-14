@@ -286,3 +286,15 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   prueba y la aclaración de heredado/no confirmado en cada ayuda) y "🔥 GNC"; los ajustes se guardan al simular y el encabezado
   dice cuáles difieren del Registro; Economía muestra los márgenes usados. Control nuevo (30); GNC-08/09/10 clasificados en el
   listado del tornado. `verificar.py` **122/122**; QA `reports/qa_tanda4_menu.py`: 0 excepciones, 0 errores de consola.
+- **Tanda 5 ✅ (calendario de demanda y filtros).** Nota `research_notes/…/08_calendario_temporadas.md`: vacaciones de
+  invierno de Mendoza 2026 = **6–17 de julio** (calendario de la DGE, vía Los Andes, Ámbito y El Sol; el sitio de la DGE no se
+  pudo abrir, así que queda nivel C, confianza media) y el criterio de los factores: **la mitad del desvío del proxy
+  turístico** (C10: la ocupación hotelera exagera el efecto). Registro: **DEM-14** (verano × 1,06 · vacaciones de invierno
+  × 1,08 · resto del invierno × 0,94; supuesto) y **DEM-15** (las fechas). Motor: `calendario_demanda` (vacío por defecto ⇒
+  `clasico()` y `ParametrosSimulacion()` sin cambios) y `factor_calendario(fecha)` en `litros_del_dia`; no se renormaliza al
+  año (+0,44 %). La traza guarda llegadas y esperas **por día y hora** (sin azar). Menú: "📅 Calendario de demanda" (prendido
+  por defecto, % editables). Demanda: la cuenta litros/mes ⇒ clientes/día a la vista (≈ 252 en un mes de 31 días) con el
+  factor del día, el **rango mínimo–máximo de clientes por temporada** (sale del calendario) y un filtro único para el perfil
+  del día y el día a día: sin filtros hasta 7 días, selector de fechas hasta 31, y además estación / mes / vacaciones de
+  invierno si la corrida es más larga. Controles nuevos (31); DEM-14 clasificado en el tornado. `verificar.py` **124/124**;
+  QA `reports/qa_tanda5_calendario.py`: 0 excepciones, 0 errores de consola.

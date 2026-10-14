@@ -3054,9 +3054,34 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
                  "como alternativas de sensibilidad.",
         ) / 100.0
 
+    with st.expander("📅 Calendario de demanda: verano, vacaciones de invierno y resto del invierno"):
+        calendario = st.toggle(
+            "Usar el calendario de temporadas", value=previo.calendario, key="aj_calendario",
+            help="Prendido por defecto. Apagado, todos los meses pesan igual (estacionalidad neutra del Registro).",
+        )
+        st.caption(
+            "No es azar: cada fecha tiene su factor. Verano (dic–feb) sube por el turismo; las **vacaciones de "
+            "invierno de Mendoza** (6–17 de julio de 2026, calendario de la DGE) suben; el resto del invierno baja un "
+            "poco porque la gente sale menos; otoño y primavera quedan igual. Son **supuestos** moderados (DEM-14: la "
+            "mitad del desvío del proxy turístico, nota 08)."
+        )
+        previos = dict(previo.factores)
+        etiquetas = {"verano": "Verano (dic–feb)", "vacaciones_invierno": "Vacaciones de invierno",
+                     "invierno": "Resto del invierno"}
+        columnas = st.columns(3)
+        factores = []
+        for col, (clave, defecto) in zip(columnas, valor("DEM-14")):
+            cambio = col.number_input(
+                f"{etiquetas[clave]} (% de cambio)", -50, 100, int(round(100 * (previos.get(clave, defecto) - 1))), 1,
+                key=f"aj_cal_{clave}", disabled=not calendario,
+                help=f"Registro (DEM-14, supuesto): {100 * (defecto - 1):+.0f} %.",
+            )
+            factores.append((clave, round(1 + cambio / 100.0, 4)))
+
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
-        sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct,
+        sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
+        factores=tuple(factores),
     )
 
 

@@ -119,6 +119,26 @@ class Traza:
         self.llegadas_por_hora: list[int] = [0] * 24
         self.espera_por_hora: list[float] = [0.0] * 24
         self.perdidos_por_hora: list[int] = [0] * 24
+        # Lo mismo pero día por día (parte 2, tanda 5): para filtrar el perfil del día por fechas.
+        self.llegadas_dia_hora: list[list[int]] = []          # [día][hora]
+        self.espera_dia_hora: list[list[list[float]]] = []    # [día][hora] = [suma de esperas, cantidad]
+
+    def _dia(self, dia: int) -> None:
+        while len(self.llegadas_dia_hora) <= dia:
+            self.llegadas_dia_hora.append([0] * 24)
+            self.espera_dia_hora.append([[0.0, 0] for _ in range(24)])
+
+    def contar_llegada(self, minuto: float) -> None:
+        dia, hora = int(minuto // MINUTOS_POR_DIA), int((minuto % MINUTOS_POR_DIA) // 60)
+        self._dia(dia)
+        self.llegadas_dia_hora[dia][hora] += 1
+
+    def contar_espera(self, minuto_llegada: float, espera: float) -> None:
+        dia, hora = int(minuto_llegada // MINUTOS_POR_DIA), int((minuto_llegada % MINUTOS_POR_DIA) // 60)
+        self._dia(dia)
+        celda = self.espera_dia_hora[dia][hora]
+        celda[0] += espera
+        celda[1] += 1
 
     def capturar(self, **datos) -> None:
         self.cuadros.append(Cuadro(**datos))

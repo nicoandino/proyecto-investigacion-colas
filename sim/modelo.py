@@ -857,6 +857,8 @@ class EstacionDeServicio:
         ahora = self.env.now
         self.ind.contar("llegadas")
         self.ind.por_hora.contar_llegada(auto.hora)
+        if self.traza is not None:
+            self.traza.contar_llegada(auto.t_llegada)
         self.ind.contar_producto(auto.producto, "llegadas")
         if self.es_real:
             self.ind.contar_grupo(auto.grupo, "llegadas")
@@ -890,6 +892,12 @@ class EstacionDeServicio:
         self.ind.contar("entraron_minimarket")
         yield from self._pasar_por_caja(auto)
 
+    def _contar_espera(self, auto: Auto, espera: float) -> None:
+        """La espera por hora del día (indicadores) y, si hay traza, por día y hora."""
+        self.ind.por_hora.contar_espera(auto.hora, espera)
+        if self.traza is not None:
+            self.traza.contar_espera(auto.t_llegada, espera)
+
     def _atender_clasico(self, auto: Auto) -> bool:
         """El flujo original del proyecto hipotético, sin cambios (dorados)."""
         ahora = self.env.now
@@ -915,7 +923,7 @@ class EstacionDeServicio:
             espera_real = self.env.now - auto.t_llegada
             self.ind.espera_surtidor.agregar(espera_real)
             self.ind.espera_cara.agregar(espera_real)
-            self.ind.por_hora.contar_espera(auto.hora, espera_real)
+            self._contar_espera(auto, espera_real)
 
             self.consumir(auto)
 
@@ -1024,7 +1032,7 @@ class EstacionDeServicio:
                 espera_real = self.env.now - auto.t_llegada
                 self.ind.espera_surtidor.agregar(espera_real)
                 self.ind.esperas_grupo[grupo].agregar(espera_real)
-                self.ind.por_hora.contar_espera(auto.hora, espera_real)
+                self._contar_espera(auto, espera_real)
 
                 self.consumir(auto)
                 yield from self._servir(auto, grupo)
@@ -1069,7 +1077,7 @@ class EstacionDeServicio:
         espera_real = self.env.now - auto.t_llegada
         self.ind.espera_surtidor.agregar(espera_real)
         self.ind.esperas_grupo[grupo].agregar(espera_real)
-        self.ind.por_hora.contar_espera(auto.hora, espera_real)
+        self._contar_espera(auto, espera_real)
         self.consumir(auto)
         yield from self._servir(auto, grupo)
         return True

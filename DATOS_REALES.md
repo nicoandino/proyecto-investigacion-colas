@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 117 datos · 🟢 dato 36 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 50
+**Resumen:** 119 datos · 🟢 dato 37 · 🟡 estimación 18 · ⚪ heredado 13 · 🟠 supuesto 51
 
 ## La estación
 
@@ -73,6 +73,8 @@
 | DEM-10 | Cierre de ruta y demanda | la cuantificación es un escenario, no un default | — | 🟠 supuesto | San Rafael | sin_dato | DATOS §6 | — |
 | DEM-11 | Litros medios por cliente líquido | 35.7 | L/cliente | 🟡 estimación | San Rafael | media | cadena de demanda §14.2 (mezcla DEM-04 × cargas medias §5-D) | — |
 | DEM-13 | Duplicar la demanda en la hora pico (Editar simulación) | 2.0 | × | 🟠 supuesto | San Rafael | sin_dato | pedido del grupo (6/10/2026) | — |
+| DEM-14 | Calendario de demanda: factor de cada temporada | (('verano', 1.06), ('vacaciones_invierno', 1.08), ('invierno', 0.94)) | × | 🟠 supuesto | San Rafael | baja | grupo (13/10/2026), nota 08: la mitad del desvío del proxy turístico (DATOS §6) respecto de su promedio, porque la ocupación hotelera exagera el ef… | neutro = (('verano', 1.0), ('vacaciones_invierno', 1.0), ('invierno', 1.0)) |
+| DEM-15 | Vacaciones de invierno de Mendoza (receso escolar 2026) | ((7, 6), (7, 17)) | mes, día | 🟢 dato | Mendoza | media | calendario escolar 2026 de la DGE de Mendoza, citado por Los Andes (6-jul-2026), Ámbito y El Sol (nota 08; el sitio de la DGE no se pudo abrir) | 9–20 jul = ((7, 9), (7, 20)) |
 | DEM-12 | Cambio de quincena (S12): factor y días del mes | (2.0, (16, 17, 18)) | × · día del mes | 🟠 supuesto | San Rafael | sin_dato | DATOS §2 (+100 % 1–3 días/mes; limitación de camiones, fuente débil); los días 16–18 (cambio de quincena) son una elección del grupo | +50 % = (1.5, (16, 17, 18)) · fin de mes = (2.0, (1, 2, 3)) |
 
 ## Vehículos y litros por carga

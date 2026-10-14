@@ -8,7 +8,9 @@ que existe sólo si la simulación fue editada.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import pandas as pd
 import streamlit as st
@@ -401,12 +403,97 @@ def _fecha(p: ParametrosSimulacion, dia: int) -> date:
     return date(ANO_REFERENCIA, *p.fecha_inicio) + timedelta(days=dia - 1)
 
 
+#: Nombre para mostrar de cada temporada del calendario (DEM-14).
+NOMBRE_TEMPORADA = {
+    "verano": "Verano (dic–feb)",
+    "vacaciones_invierno": "Vacaciones de invierno de Mendoza",
+    "invierno": "Resto del invierno (jun–ago)",
+    "": "Otoño y primavera",
+}
+#: Estación del año de cada mes (CAL-08), para el filtro de fechas.
+ESTACION_DEL_MES = {12: "Verano", 1: "Verano", 2: "Verano", 3: "Otoño", 4: "Otoño", 5: "Otoño",
+                    6: "Invierno", 7: "Invierno", 8: "Invierno", 9: "Primavera", 10: "Primavera", 11: "Primavera"}
+MESES_ES = ("enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre",
+            "noviembre", "diciembre")
+#: Hasta cuántos días la corrida es "corta" (sin filtros) y desde cuántos es "larga" (con filtro de período).
+DIAS_CORTA = 7
+DIAS_LARGA = 31
+
+
+def _rango_por_temporada(p: ParametrosSimulacion) -> pd.DataFrame:
+    """Clientes por día mínimo y máximo de cada temporada del calendario, en todo el año (sin simular)."""
+    anio = replace(p, fecha_inicio=(1, 1), dias=365, dia_animado=1)
+    inicio = _fecha(p, 1)
+    fin = _fecha(p, p.dias)
+    grupos: dict[str, list[tuple[float, date]]] = {k: [] for k in NOMBRE_TEMPORADA}
+    for d in range(1, 366):
+        f = _fecha(anio, d)
+        grupos[anio.temporada_del_calendario(f)].append((anio.autos_por_dia_fecha(d), f))
+    filas = []
+    for clave, nombre in NOMBRE_TEMPORADA.items():
+        valores = grupos[clave]
+        minimo, f_min = min(valores)
+        maximo, f_max = max(valores)
+        en_periodo = any(
+            anio.temporada_del_calendario(inicio + timedelta(days=k)) == clave for k in range((fin - inicio).days + 1)
+        )
+        filas.append({
+            "Temporada": nombre,
+            "Factor del calendario": f"× {dec(dict(p.calendario_demanda).get(clave, 1.0), 2)}",
+            "Clientes por día: mínimo": f"{ent(minimo)} ({f_min.day}/{f_min.month})",
+            "máximo": f"{ent(maximo)} ({f_max.day}/{f_max.month})",
+            "¿En el período simulado?": "sí" if en_periodo else "",
+        })
+    return pd.DataFrame(filas)
+
+
+def _filtro_de_fechas(p: ParametrosSimulacion, clave: str) -> list[int]:
+    """Días (1 = el primero de la corrida) elegidos con el filtro. Corrida corta: todos, sin filtros.
+    Hasta un mes: sólo el selector de fechas. Más larga: además, un filtro por estación, mes o vacaciones."""
+    todos = list(range(1, p.dias + 1))
+    if p.dias <= DIAS_CORTA:
+        return todos
+    fechas = {d: _fecha(p, d) for d in todos}
+    candidatos = todos
+    c1, c2 = st.columns(2)
+    if p.dias > DIAS_LARGA:
+        opciones: dict[str, list[int]] = {"Todo el período": todos}
+        for nombre in ("Verano", "Otoño", "Invierno", "Primavera"):
+            dias = [d for d in todos if ESTACION_DEL_MES[fechas[d].month] == nombre]
+            if dias and len(dias) < len(todos):
+                opciones[nombre] = dias
+        vacaciones = [d for d in todos if p.temporada_del_calendario(fechas[d]) == "vacaciones_invierno"]
+        if vacaciones:
+            opciones["Vacaciones de invierno"] = vacaciones
+        meses = sorted({(fechas[d].year, fechas[d].month) for d in todos})
+        if len(meses) > 1:
+            for anio, mes in meses:
+                opciones[MESES_ES[mes - 1].capitalize()] = [
+                    d for d in todos if (fechas[d].year, fechas[d].month) == (anio, mes)
+                ]
+        elegido = c1.selectbox("Ver", list(opciones), key=f"{clave}_periodo",
+                               help="Estación, mes o vacaciones de invierno dentro del período simulado.")
+        candidatos = opciones[elegido]
+    else:
+        elegido = "todo"
+    desde, hasta = fechas[candidatos[0]], fechas[candidatos[-1]]
+    rango = c2.date_input(
+        "Fechas", value=(desde, hasta), min_value=desde, max_value=hasta, format="DD/MM/YYYY",
+        key=f"{clave}_fechas_{elegido}",
+    )
+    if isinstance(rango, (tuple, list)) and len(rango) == 2:
+        a, b = rango
+    else:
+        a = b = rango[0] if isinstance(rango, (tuple, list)) and rango else desde
+    elegidos = [d for d in candidatos if a <= fechas[d] <= b]
+    return elegidos or candidatos
+
+
 def pestania_demanda(
     p: ParametrosSimulacion, resultado: ResultadoEscenario, traza: Traza, periodo: Periodo
 ) -> None:
     r = resultado.replicas[0]
     t = _tot(r)
-    dias = max(r.dias_medidos, 1)
     nombres = _nombres(p)
 
     st.subheader("Demanda: cuántos clientes llegan y cuándo")
@@ -416,16 +503,20 @@ def pestania_demanda(
     )
 
     st.markdown("##### 1. De los litros por mes a los clientes por día")
+    f1 = _fecha(p, 1)
     litros_dia = p.litros_del_dia(1)
     liquidos = litros_dia / p.litros_medios_por_cliente
     total_dia = p.autos_por_dia_fecha(1)
+    factor_cal = p.factor_calendario(f1)
     st.dataframe(
         pd.DataFrame({
-            "Paso": ["Litros por mes", f"Litros del día 1 ({_fecha(p, 1).strftime('%d/%m')})",
+            "Paso": ["Litros por mes", f"Litros del día 1 ({f1.strftime('%d/%m')})",
                      "Clientes de nafta y diésel", "Clientes de GNC", "Clientes del día"],
             "Cuenta": [
                 "dato (DEM-01)",
-                f"{ent(p.litros_mes)} L ÷ {ent(_dias_del_mes_de(p))} días × estacionalidad × tipo de día",
+                f"{ent(p.litros_mes)} L ÷ {ent(_dias_del_mes_de(p))} días × tipo de día"
+                + (f" × calendario {dec(factor_cal, 2)} ({NOMBRE_TEMPORADA[p.temporada_del_calendario(f1)].lower()})"
+                   if p.calendario_demanda else ""),
                 f"{ent(litros_dia)} L ÷ {dec(p.litros_medios_por_cliente)} L por cliente",
                 f"{dec(100 * p.pct_gnc, 0)} % de las llegadas",
                 f"{ent(liquidos)} ÷ (1 − {dec(p.pct_gnc, 2)})",
@@ -436,29 +527,57 @@ def pestania_demanda(
         hide_index=True,
     )
     st.caption(
-        f"Estacionalidad: {'neutra (todos los meses pesan igual)' if len(set(p.estacionalidad.indices)) == 1 else 'con índices por mes'}; "
-        f"fin de semana ×{dec(p.factor_fin_de_semana, 2)}, normalizado para conservar los litros del mes."
+        f"En un mes de 31 días sin calendario: {ent(p.litros_mes)} L ÷ 31 = {ent(p.litros_mes / 31)} L por día ÷ "
+        f"{dec(p.litros_medios_por_cliente)} L ÷ (1 − {dec(p.pct_gnc, 2)}) ≈ "
+        f"**{ent(p.litros_mes / 31 / p.litros_medios_por_cliente / (1 - p.pct_gnc))} clientes por día**. "
+        f"Cada día se corrige por el tipo de día (fin de semana × {dec(p.factor_fin_de_semana, 2)}, normalizado "
+        f"para conservar los litros del mes) y por el calendario de temporadas."
     )
+    if p.calendario_demanda:
+        st.markdown("**Rango de clientes por día en cada temporada** (sale del calendario, no del azar)")
+        st.dataframe(_rango_por_temporada(p), hide_index=True)
+        st.caption(
+            "Verano más alto por el turismo; vacaciones de invierno de Mendoza (6–17 de julio, DGE 2026) más alto; "
+            "el resto del invierno un poco más bajo porque la gente sale menos. Los factores son supuestos "
+            "moderados (la mitad del desvío del proxy turístico, nota 08) y se editan en el menú. El mínimo y el "
+            "máximo de cada temporada son un día hábil y un fin de semana. No se renormaliza al año: el total anual "
+            "queda ≈ 0,4 % arriba de 12 × 270.000 L."
+        )
+    else:
+        st.caption("Calendario de temporadas apagado en el menú: todos los meses pesan igual.")
+
+    st.markdown("##### Elegí qué días mirar (vale para el perfil del día y el día a día)")
+    if p.dias <= DIAS_CORTA:
+        st.caption(f"Son {p.dias} días: se muestran todos.")
+    elegidos = _filtro_de_fechas(p, "dem")
+    n = len(elegidos)
+    llegadas_h = [sum(traza.llegadas_dia_hora[d - 1][h] for d in elegidos if d - 1 < len(traza.llegadas_dia_hora))
+                  for h in range(24)]
+    espera_h = []
+    for h in range(24):
+        suma = sum(traza.espera_dia_hora[d - 1][h][0] for d in elegidos if d - 1 < len(traza.espera_dia_hora))
+        cant = sum(traza.espera_dia_hora[d - 1][h][1] for d in elegidos if d - 1 < len(traza.espera_dia_hora))
+        espera_h.append(suma / cant if cant else 0.0)
 
     st.markdown("##### 2. Cuándo llegan: el perfil del día")
     fr = p.perfil.fracciones
-    esperados_hora = [p.autos_por_dia * f for f in fr]
-    sim_hora = [x / dias for x in traza.llegadas_por_hora]
+    esperado_dia = sum(p.autos_por_dia_fecha(d) for d in elegidos) / max(n, 1)
     st.dataframe(
         pd.DataFrame({
             "Hora": [f"{h:02d}–{(h + 1) % 24:02d}" for h in range(24)],
             "Peso del perfil": [dec(x, 1) for x in p.perfil.factores],
             "% de los clientes del día": [f"{dec(100 * f)} %" for f in fr],
-            "Clientes esperados por día": [dec(x) for x in esperados_hora],
-            "Clientes simulados por día": [dec(x) for x in sim_hora],
-            "Espera promedio (min)": [dec(x) for x in traza.espera_por_hora],
+            "Clientes esperados por día": [dec(esperado_dia * f) for f in fr],
+            "Clientes simulados por día": [dec(x / max(n, 1)) for x in llegadas_h],
+            "Espera promedio (min)": [dec(x) for x in espera_h],
         }),
         hide_index=True, height=36 * 25 + 3,
     )
-    st.plotly_chart(graficos.grafico_perfil_horario(traza, dias), key="g_dem_perfil")
+    perfil = SimpleNamespace(llegadas_por_hora=llegadas_h, espera_por_hora=espera_h)
+    st.plotly_chart(graficos.grafico_perfil_horario(perfil, n), key="g_dem_perfil")
     st.caption(
-        f"Verificación: la suma de las 24 horas es {ent(sum(traza.llegadas_por_hora))} clientes = los "
-        f"{ent(t['llegadas'])} que llegaron en {dias} días."
+        f"Verificación: la suma de las 24 horas es {ent(sum(llegadas_h))} clientes = los que llegaron en los "
+        f"{n} días elegidos ({ent(sum(x.autos_llegados for x in traza.dias if x.dia in set(elegidos)))})."
     )
 
     st.markdown("##### 3. Qué producto carga cada cliente")
@@ -478,16 +597,19 @@ def pestania_demanda(
     st.caption(
         "% de los clientes = (% de los litros ÷ carga media), normalizado; el GNC entra como "
         f"{dec(100 * p.pct_gnc, 0)} % de las llegadas. Sin azar, cada producto aparece en las proporciones exactas "
-        "(las pequeñas diferencias son los clientes de GNC que pasaron a Súper en un corte)."
+        "(las pequeñas diferencias son los clientes de GNC que pasaron a Súper en un corte). Es todo el período."
     )
 
     st.markdown("##### 4. Día a día")
+    elegidos_set = set(elegidos)
+    dias_vista = [x for x in traza.dias if x.dia in elegidos_set]
     filas = []
-    for x in traza.dias:
+    for x in dias_vista:
         f = _fecha(p, x.dia)
         filas.append({
             "Día": x.dia,
             "Fecha": f"{DIAS_SEMANA[f.weekday()]} {f.strftime('%d/%m')}",
+            "Temporada": NOMBRE_TEMPORADA[p.temporada_del_calendario(f)] if p.calendario_demanda else "",
             "Clientes del día": x.autos_sorteados,
             "Llegaron": x.autos_llegados,
             "Atendidos": x.atendidos,
@@ -496,11 +618,15 @@ def pestania_demanda(
             "Quiebre": "sí" if x.hubo_quiebre else "",
             "Corte de GNC": f"{ent(x.gnc_corte_min / 60)} h" if x.gnc_corte_min else "",
         })
-    st.dataframe(pd.DataFrame(filas), hide_index=True, height=min(36 * len(filas) + 3, 420))
-    st.plotly_chart(graficos.grafico_demanda_diaria(traza), key="g_dem_dias")
+    tabla = pd.DataFrame(filas)
+    if not p.calendario_demanda:
+        tabla = tabla.drop(columns=["Temporada"])
+    st.dataframe(tabla, hide_index=True, height=min(36 * len(filas) + 3, 420))
+    st.plotly_chart(graficos.grafico_demanda_diaria(SimpleNamespace(dias=dias_vista)), key="g_dem_dias")
     st.caption(
-        f"Verificación: la suma de 'Llegaron' es {ent(sum(x.autos_llegados for x in traza.dias))} = los {ent(t['llegadas'])} "
-        f"de los indicadores. Periodo: {periodo.texto}."
+        f"Verificación: la suma de 'Llegaron' en los días elegidos es {ent(sum(x.autos_llegados for x in dias_vista))}; "
+        f"en todo el período, {ent(sum(x.autos_llegados for x in traza.dias))} = los {ent(t['llegadas'])} de los "
+        f"indicadores. Período: {periodo.texto}."
     )
 
 

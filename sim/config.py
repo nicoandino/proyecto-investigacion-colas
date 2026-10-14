@@ -720,6 +720,10 @@ class ParametrosSimulacion:
     determinista: bool = False         # True = sin azar: cuotas exactas y valores promedio (MOD-02)
     animar_todo: bool = False          # True = grabar la animación de TODOS los días (CAL-07)
 
+    # --- Calendario de temporadas (parte 2, tanda 5): neutro por defecto; la app lo prende (DEM-14) ---------
+    calendario_demanda: tuple[tuple[str, float], ...] = ()  # (("verano", ×), ("vacaciones_invierno", ×), ("invierno", ×))
+    vacaciones_invierno: tuple[tuple[int, int], tuple[int, int]] = valor("DEM-15")   # ((mes, día), (mes, día))
+
     # --- Escenarios S7 y S12 (Fase 7): apagados por defecto -------------------
     factor_quincena: float = valor("DEM-12")[0]            # S12: cuánto se multiplica el día
     dias_quincena: tuple[int, ...] = ()                    # días del mes con pico de cobro (() = ninguno)
@@ -929,6 +933,21 @@ class ParametrosSimulacion:
         nivel = total / sum(peso(d) for d in range(total))
         return nivel * peso(dia_mes - 1)
 
+    def temporada_del_calendario(self, fecha: date) -> str:
+        """'verano' (dic–feb) · 'vacaciones_invierno' (DEM-15) · 'invierno' (resto de jun–ago) · '' (otoño, primavera)."""
+        if fecha.month in (12, 1, 2):
+            return "verano"
+        if fecha.month in (6, 7, 8):
+            desde, hasta = self.vacaciones_invierno
+            return "vacaciones_invierno" if desde <= (fecha.month, fecha.day) <= hasta else "invierno"
+        return ""
+
+    def factor_calendario(self, fecha: date) -> float:
+        """Factor del calendario de temporadas para esa fecha (1 si el calendario está apagado)."""
+        if not self.calendario_demanda:
+            return 1.0
+        return dict(self.calendario_demanda).get(self.temporada_del_calendario(fecha), 1.0)
+
     def litros_del_dia(self, dia: int) -> float:
         """Litros del día `dia` de la corrida (modo 'esperada').
 
@@ -940,12 +959,15 @@ class ParametrosSimulacion:
             date(ANO_REFERENCIA, *self.fecha_inicio) + timedelta(days=dia - 1)
         ).day
         indice = self.estacionalidad.indice_mes(mes)
-        return (
+        litros = (
             self.litros_mes
             / dias_del_mes(mes)
             * (indice / self.estacionalidad.promedio)
             * self._factor_tipo_de_dia(mes, dia_semana, dia_mes)
         )
+        if self.calendario_demanda:
+            litros *= self.factor_calendario(date(ANO_REFERENCIA, *self.fecha_inicio) + timedelta(days=dia - 1))
+        return litros
 
     @property
     def playeros_maximos(self) -> int:

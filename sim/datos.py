@@ -412,6 +412,24 @@ REGISTRO: tuple[Dato, ...] = tuple(
                             "perfil DEM-02; las otras horas conservan su tasa de llegadas",
                     None, None),
           2.0),
+        ("DEM-14", ("Calendario de demanda: factor de cada temporada", "×", "B", "supuesto", "baja",
+                    "grupo (13/10/2026), nota 08: la mitad del desvío del proxy turístico (DATOS §6) "
+                    "respecto de su promedio, porque la ocupación hotelera exagera el efecto sobre el "
+                    "combustible (C10)", "grupo",
+                    "C10", (("neutro", (("verano", 1.0), ("vacaciones_invierno", 1.0), ("invierno", 1.0)),
+                             "orquestador"),),
+                    "verano (dic–feb) × 1,06 por el turismo · vacaciones de invierno de Mendoza × 1,08 · resto "
+                    "del invierno (jun–ago) × 0,94 porque la gente sale menos · otoño y primavera × 1,00. Activo "
+                    "en la app, neutro en los parámetros por defecto; no se renormaliza al año (+0,4 %)",
+                    None, None),
+          (("verano", 1.06), ("vacaciones_invierno", 1.08), ("invierno", 0.94))),
+        ("DEM-15", ("Vacaciones de invierno de Mendoza (receso escolar 2026)", "mes, día", "C", "dato",
+                    "media",
+                    "calendario escolar 2026 de la DGE de Mendoza, citado por Los Andes (6-jul-2026), Ámbito y "
+                    "El Sol (nota 08; el sitio de la DGE no se pudo abrir)", "investigacion",
+                    "", (("9–20 jul", ((7, 9), (7, 20)), "DEM-09 anterior, sin fuente"),),
+                    "lunes 6 a viernes 17 de julio; distintas de las de Buenos Aires", None, None),
+          ((7, 6), (7, 17))),
         ("DEM-12", ("Cambio de quincena (S12): factor y días del mes", "× · día del mes",
                     "B", "supuesto", "sin_dato",
                     "DATOS §2 (+100 % 1–3 días/mes; limitación de camiones, fuente débil); los días "
@@ -971,6 +989,8 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosSimulacion.determinista": "MOD-02",
     "ParametrosSimulacion.animar_todo": "CAL-07",
     "ParametrosSimulacion.factor_quincena": "DEM-12",
+    "ParametrosSimulacion.calendario_demanda": "DEM-14",
+    "ParametrosSimulacion.vacaciones_invierno": "DEM-15",
     "ParametrosSimulacion.dias_quincena": "DEM-12",
     "ParametrosSimulacion.crisis": "INV-09",
     "ParametrosSimulacion.crisis_dia": "INV-11",

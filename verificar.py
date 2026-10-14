@@ -1847,7 +1847,7 @@ def main() -> int:
         con_periodo(ParametrosSimulacion().datos_reales(), por_meses(7, 7)), animar_todo=False
     )
     eco30 = ParametrosEconomicos()
-    p30b, eco30b = aplicar_ajustes(p30, eco30, Ajustes())
+    p30b, eco30b = aplicar_ajustes(p30, eco30, Ajustes(calendario=False))
     controlar(
         p30b == p30 and correr_replica(p30b, 1)[0] == correr_replica(p30, 1)[0]
         and all(eco30b.margen_de(x) == eco30.margen_de(x) for x in ("super", "diesel_g3", "gnc"))
@@ -1868,6 +1868,37 @@ def main() -> int:
         and eco30m.margen_de("super") == 120.0 and eco30m.margen_de("vpower") == eco30.margen_por_litro,
         "'Más cortes en todo el invierno' suma 2 cortes y alarga una cuota (sin azar, siempre igual); márgenes por producto",
         " · ".join(f"{a:%d/%m}–{b:%d/%m}" for a, b in invierno30),
+    )
+
+    # ------------------------------------------------------------------ 31
+    separador("31. Parte 2, tanda 5: calendario de temporadas y perfil del día por fechas")
+    from sim.datos import valor as _valor
+
+    p31 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), _anio()), animar_todo=False)
+    p31n, _ = aplicar_ajustes(p31, eco30, Ajustes(factores=(("verano", 1.0), ("vacaciones_invierno", 1.0), ("invierno", 1.0))))
+    p31c, _ = aplicar_ajustes(p31, eco30, Ajustes())
+    factores31 = dict(_valor("DEM-14"))
+    dias31 = {"verano": 10, "otoño": 100, "invierno": 160, "vacaciones": 190, "invierno tarde": 200}
+    razones = {k: p31c.litros_del_dia(d) / p31.litros_del_dia(d) for k, d in dias31.items()}
+    controlar(
+        all(abs(p31n.litros_del_dia(d) - p31.litros_del_dia(d)) < 1e-9 for d in range(1, 366))
+        and ParametrosSimulacion.clasico().calendario_demanda == () and ParametrosSimulacion().calendario_demanda == ()
+        and abs(razones["verano"] - factores31["verano"]) < 1e-9 and abs(razones["otoño"] - 1.0) < 1e-9
+        and abs(razones["invierno"] - factores31["invierno"]) < 1e-9
+        and abs(razones["vacaciones"] - factores31["vacaciones_invierno"]) < 1e-9
+        and abs(razones["invierno tarde"] - factores31["invierno"]) < 1e-9,
+        "El calendario multiplica cada fecha por su factor; con factores 1 (o apagado) la demanda no cambia",
+        " · ".join(f"{k} ×{v:.2f}" for k, v in razones.items())
+        + f" · año {sum(p31c.litros_del_dia(d) for d in range(1, 366)) / sum(p31.litros_del_dia(d) for d in range(1, 366)) - 1:+.2%}",
+    )
+    r31, traza31 = correr_replica(dataclasses.replace(p31c, fecha_inicio=(7, 1), dias=31), semilla=1, con_traza=True)
+    controlar(
+        sum(map(sum, traza31.llegadas_dia_hora)) == dict(r31.totales)["llegadas"]
+        and [sum(h) for h in traza31.llegadas_dia_hora] == [x.autos_llegados for x in traza31.dias]
+        and sum(c[1] for dia in traza31.espera_dia_hora for c in dia) == sum(traza31.espera_dia_hora[0][h][1] for h in range(24))
+        + sum(c[1] for dia in traza31.espera_dia_hora[1:] for c in dia),
+        "El perfil del día por fechas suma igual que el total: Σ (día, hora) = Σ por día = llegadas",
+        f"julio con calendario: {dict(r31.totales)['llegadas']} llegadas en {len(traza31.llegadas_dia_hora)} días",
     )
 
     # ------------------------------------------------------------------

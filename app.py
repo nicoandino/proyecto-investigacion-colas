@@ -937,12 +937,13 @@ def pestania_animacion(p: ParametrosSimulacion) -> None:
         f"{periodo.titulo + ' — ' + periodo.texto + '. ' if periodo else ''}"
         f"Se reproducen los {p.dias} días uno detrás de otro (por defecto, 5 segundos cada día); "
         f"la barra de abajo permite saltar a cualquier día. Cada auto tiene el color de su producto; "
-        f"cada cara tiene 3 lugares de cola. Un cuadro cada {dt:g} minutos simulados."
+        f"cada cara tiene 3 lugares de cola. Un cuadro cada {dt:g} minutos simulados. Cuando se pide un camión o "
+        f"se corta el GNC, la reproducción se detiene y aparece un aviso (se puede apagar abajo)."
     )
     componentes.html(
         animacion.reproductor_html(
             traza, p_anim, precios_por_producto(st.session_state.parametros_eco),
-            periodo.titulo if periodo else "",
+            periodo.titulo if periodo else "", str(st.session_state.get("corrida_n", 0)),
         ),
         height=animacion.ALTO_COMPONENTE,
     )
@@ -2289,6 +2290,10 @@ def pestania_red(p: ParametrosSimulacion) -> None:
         "con origen Dock Sud, el corte nevado de la RN 143 Pareditas–San Rafael no está en la "
         "ruta. La demora se suma al plazo base (INV-01)."
     )
+    st.markdown("##### Seguimiento del camión")
+    componentes.html(
+        animacion.seguimiento_html(p, str(st.session_state.get("corrida_n", 0))), height=animacion.ALTO_SEGUIMIENTO,
+    )
     st.markdown(f"**Ruta óptima:** {descripcion_ruta(red).split(' · ')[0]}")
     c2, c3 = st.columns(2)
     c2.metric("Distancia", f"{optimo.km:,.1f} km".replace(",", "X").replace(".", ",").replace("X", "."), border=True)
@@ -2939,6 +2944,8 @@ def correr_todo(
 
     st.session_state.resultados = resultados
     st.session_state.traza = traza
+    # Identifica la corrida: el aviso del tablero y el seguimiento del camión sólo se hablan si son de la misma.
+    st.session_state.corrida_n = st.session_state.get("corrida_n", 0) + 1
     st.session_state.economia = analizar_escenarios(resultados, eco, p)
     st.session_state.parametros = p
     st.session_state.parametros_eco = eco

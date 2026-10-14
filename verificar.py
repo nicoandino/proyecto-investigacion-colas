@@ -1953,6 +1953,31 @@ def main() -> int:
         f"plazo desde Arroyo Seco {sorted(plazos_arroyo)} h (esperado {esperado_arroyo}) · año con eventos: {ev}",
     )
 
+    # ------------------------------------------------------------------ 34
+    separador("34. Parte 2, tanda 7: los avisos de la animación salen de la traza")
+    from datetime import date
+    from sim.distribuciones import AleatorioDeterminista
+    from sim.gnc import calendario_de_episodios, intervalos_de_corte
+    p34 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), por_temporada("Invierno")), animar_todo=False)
+    ind34, traza34 = simular(p34, semilla=1, con_traza=True)
+    ind34b, _ = simular(p34, semilla=1)
+    avisos = [e for e in traza34.eventos if e[0] == "pedido"]
+    descargas = [e for e in traza34.eventos if e[0] == "descarga"]
+    cortes34 = [e for e in traza34.eventos if e[0] == "corte_gnc"]
+    s34 = {i.producto: i.punto_pedido / i.capacidad for i in p34.inventario}
+    controlar(
+        len(avisos) == len(ind34.pedidos) == ind34b.c.pedidos_emitidos
+        and all(abs(a[1] - x.t_pedido) < 1e-9 and a[2] == x.producto for a, x in zip(avisos, ind34.pedidos))
+        and all(a[3] <= s34[a[2]] + 1e-9 for a in avisos)
+        and len(descargas) == sum(1 for x in ind34.pedidos if x.t_llegada <= p34.duracion)
+        and [(round(c[1]), round(c[2])) for c in cortes34]
+        == [(round(a), round(b)) for a, b in intervalos_de_corte(p34.gnc, calendario_de_episodios(
+            p34.gnc, AleatorioDeterminista(1), date(2026, 6, 1), p34.dias), p34.dias)],
+        "Cada aviso de 'bajo nivel' es un camión pedido con el tanque en o bajo s; los cortes coinciden con el calendario",
+        f"invierno: {len(avisos)} avisos de pedido, {len(descargas)} descargas, {len(cortes34)} cortes de GNC "
+        f"(el más bajo: {min(a[3] for a in avisos):.0%} del tanque)",
+    )
+
     # ------------------------------------------------------------------
     print()
     if _fallas == 0:

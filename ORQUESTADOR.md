@@ -325,3 +325,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   el mapa y en la tabla de cortes. Menú: "🚚 Abastecimiento" con el interruptor de eventos y el marcado manual de orígenes.
   Control nuevo (33). `verificar.py` **127/127**; QA `reports/qa_tanda8_red.py` (Dock Sud marcado: 21 camiones desde Arroyo
   Seco a 46,6 h): 0 excepciones, 0 errores de consola.
+- **Tanda 7 ✅ (alertas con pausa).** Motor: `Traza.eventos` anota, **sin sortear nada**, cada pedido de camión (con el nivel
+  del tanque al cruzar s, el origen realmente usado y si se redirigió), cada descarga y cada corte de GNC (con el inicio y el
+  fin del episodio entero, aunque pase el final del período). Tablero: al reproducir, se detiene en el cuadro del evento y
+  muestra los carteles **de a uno y en orden** ("+N avisos más"), sin perder ninguno: "Bajo nivel de combustible: Diésel G2,
+  19 %" (con el origen y la llegada) con los botones **"Seguir trayectoria del camión"** y **"Ok, seguir"**, y "El GNC se cortó
+  por N días" con **cuenta regresiva** en la zona GNC y en el panel. Se puede apagar ("Pausar en los avisos"); saltar con la
+  barra no dispara avisos viejos; Escape cierra. El camión se ve **llegar por la avenida y descargar** (45 min, INV-04) con el
+  color de su producto. **Cambio de pestaña:** el iframe tiene `allow-same-origin`, así que el botón hace clic en la pestaña
+  Red y rutas de la página y le pasa el pedido (evento del navegador + `sessionStorage`, filtrado por un número de corrida
+  para no mostrar pedidos viejos). Red y rutas tiene arriba un **"Seguimiento del camión"** (componente aparte) con el segundo
+  cartel ("Se ha pedido el camión de Diésel G2 a Dock Sud") y el camión moviéndose sobre su ruta. Plan B si el navegador no
+  deja: el cartel dice "Abrí la pestaña 🗺️ Red y rutas". Control nuevo (34). `verificar.py` **128/128**; QA
+  `reports/qa_tanda7_avisos.py`: pausa, botón, cambio de pestaña, cartel y camión descargando; 0 excepciones, 0 errores de consola.

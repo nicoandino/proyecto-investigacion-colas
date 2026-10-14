@@ -23,9 +23,11 @@ import json
 from datetime import date, timedelta
 
 from sim.config import ANO_REFERENCIA, ParametrosSimulacion
-from sim.red import ETIQUETA_ESCENARIO, descripcion_ruta
+from sim.datos import valor
+from sim.red import ETIQUETA_ESCENARIO, NOMBRE_NODO, camino_mas_corto, descripcion_ruta
 from sim.traza import Cuadro, Traza
-from ui.tema import COLOR_PRODUCTO_OSCURO, paleta_oscura_json
+from ui.graficos_red import POSICION_NODO
+from ui.tema import COLOR_PRODUCTO_OSCURO, paleta_json, paleta_oscura_json
 
 #: Alto del componente en píxeles.
 ALTO_COMPONENTE = 1080
@@ -149,8 +151,30 @@ def _por_dia(p: ParametrosSimulacion, precios: dict[str, float]) -> dict:
     return {"clientes": clientes, "litros": litros, "ventas": ventas}
 
 
+def _eventos(traza: Traza, p: ParametrosSimulacion) -> list[dict]:
+    """Los avisos de la animación, leídos de la traza (el motor los anota sin sortear nada)."""
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    salida: list[dict] = []
+    for ev in traza.eventos:
+        if ev[0] == "pedido":
+            _, t, prod, nivel, origen, redirigido, llega, litros = ev
+            salida.append({
+                "tipo": "pedido", "t": round(t, 1), "id": prod, "producto": nombres[prod],
+                "pct": round(100 * nivel), "nodo": origen, "origen": NOMBRE_NODO.get(origen, origen),
+                "redirigido": bool(redirigido), "llega": round(llega, 1), "litros": round(litros),
+            })
+        elif ev[0] == "descarga":
+            _, t, prod, litros = ev
+            salida.append({"tipo": "descarga", "t": round(t, 1), "id": prod, "producto": nombres[prod],
+                           "litros": round(litros)})
+        elif ev[0] == "corte_gnc":
+            _, t, _, inicio, fin = ev
+            salida.append({"tipo": "gnc", "t": round(t, 1), "inicio": round(inicio, 1), "fin": round(fin, 1)})
+    return salida
+
+
 def _configuracion(
-    traza: Traza, p: ParametrosSimulacion, precios: dict[str, float], titulo: str
+    traza: Traza, p: ParametrosSimulacion, precios: dict[str, float], titulo: str, corrida: str = ""
 ) -> dict:
     """Todo lo que el navegador necesita: estructura de la estación, calendario y cuadros."""
     productos = [
@@ -195,6 +219,8 @@ def _configuracion(
         "esperado": _por_dia(p, precios),
         "frames": _columnas(traza.cuadros, p),
         "paleta": paleta_oscura_json(),
+        "eventos": _eventos(traza, p),
+        "corrida": corrida,
     }
 
 
@@ -203,11 +229,12 @@ def reproductor_html(
     p: ParametrosSimulacion,
     precios: dict[str, float],
     titulo: str = "",
+    corrida: str = "",
 ) -> str:
     """Devuelve el HTML completo del tablero, listo para `st.components.v1.html`."""
     if not p.estacion_real:
         raise ValueError("La animación es del caso real (12 caras en 3 zonas).")
-    configuracion = _configuracion(traza, p, precios, titulo)
+    configuracion = _configuracion(traza, p, precios, titulo, corrida)
     return _PLANTILLA.replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":")))
 
 
@@ -273,6 +300,19 @@ _PLANTILLA = r"""<!doctype html>
   #controles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 2px 2px 0; }
   #barra { flex: 1; min-width: 200px; accent-color: var(--amarillo); }
   #saltos { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* Avisos con pausa (tanda 7) */
+  #aviso { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10;
+           background: color-mix(in srgb, var(--fondo) 72%, transparent); }
+  #aviso.abierto { display: flex; }
+  #aviso .caja { max-width: 560px; width: calc(100% - 32px); background: var(--panel); border: 2px solid var(--amarillo);
+                 border-radius: 16px; padding: 20px 22px; box-shadow: 0 12px 40px color-mix(in srgb, var(--fondo) 80%, transparent); }
+  #aviso h2 { margin: 6px 0 8px; font-size: 22px; }
+  #aviso p { margin: 0 0 8px; font-size: 15px; line-height: 1.45; }
+  #aviso .botones { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
+  #aviso .botones button { font-size: 14px; padding: 9px 14px; }
+  #avisoOk { background: var(--amarillo); color: var(--fondo); border-color: var(--amarillo); font-weight: 800; }
+  #avisoIcono { font-size: 30px; }
+  #avisoCola { float: right; }
   @media (max-width: 1000px) {
     #cabecera { grid-template-columns: 1fr 1fr; } #cuerpo { grid-template-columns: 1fr; }
     #inferior { grid-template-columns: 1fr 1fr; } html, body { overflow: auto; }
@@ -337,6 +377,20 @@ _PLANTILLA = r"""<!doctype html>
       <button id="saltoDescarga" type="button">⏭ la próxima descarga</button>
       <button id="saltoCorte" type="button">⏭ el corte de GNC</button>
     </div>
+    <label class="chico"><input type="checkbox" id="pausarAvisos" checked> Pausar en los avisos</label>
+  </div>
+</div>
+<div id="aviso" role="dialog" aria-modal="true" aria-labelledby="avisoTitulo" aria-describedby="avisoTexto">
+  <div class="caja">
+    <span id="avisoCola" class="chico"></span>
+    <div id="avisoIcono" aria-hidden="true"></div>
+    <h2 id="avisoTitulo"></h2>
+    <p id="avisoTexto"></p>
+    <div id="avisoNota" class="chico"></div>
+    <div class="botones">
+      <button id="avisoSeguir" type="button">🚚 Seguir trayectoria del camión</button>
+      <button id="avisoOk" type="button">Ok, seguir</button>
+    </div>
   </div>
 </div>
 
@@ -352,6 +406,9 @@ const REDUCIDO = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const F = CONFIG.frames, N = F.t.length, NDIAS = CONFIG.dias;
 const GRUPOS = CONFIG.grupos, PROD = CONFIG.productos, ESP = CONFIG.esperado;
 const TANQUES = CONFIG.tanques.map((id) => PROD.findIndex((x) => x.id === id));
+const EV = CONFIG.eventos || [];
+const DESCARGAS = EV.filter((e) => e.tipo === "descarga");
+const CORTES = EV.filter((e) => e.tipo === "gnc");
 const DIAS_SEM = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -375,6 +432,12 @@ function sinCombustible(i) {
   const lista = [];
   CONFIG.tanques.forEach((id, k) => { const prod = PROD[TANQUES[k]]; if (F.tk[id].n[i] < prod.minimo) lista.push(prod.nombre); });
   return lista;
+}
+function fechaHora(minuto) { const d = Math.floor(minuto / 1440); return `${fechaTexto(d).split(" · ")[0]}, ${hhmm(minuto % 1440)}`; }
+function corteActivo(t) { return CORTES.find((e) => e.t <= t && t < e.fin); }
+function faltaTexto(minutos) {
+  const d = Math.floor(minutos / 1440), h = Math.floor((minutos % 1440) / 60);
+  return d > 0 ? `${d} d ${h} h` : `${h} h`;
 }
 function colaTotal(i) { return GRUPOS.reduce((a, g) => a + F.g[g.id].n[i], 0); }
 function ocupadasTotal(i) { return GRUPOS.reduce((a, g) => a + carriles(g, i).filter((k) => k >= 0).length, 0); }
@@ -412,8 +475,8 @@ function persona(cx, cy, relleno) {
 function arbol(cx, cy, r) {
   return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${P.arbol}"/><circle cx="${cx - r * 0.25}" cy="${cy - r * 0.25}" r="${r * 0.6}" fill="${P.arbol2}"/>`;
 }
-function camionIcono(cx, cy, color) {
-  return `<g transform="translate(${cx},${cy}) scale(0.6)"><rect x="-24" y="-11" width="32" height="20" rx="5" fill="${color}" stroke="${P.tinta}" stroke-width="1.6"/>
+function camionIcono(cx, cy, color, escala) {
+  return `<g transform="translate(${cx},${cy}) scale(${escala || 0.6})"><rect x="-24" y="-11" width="32" height="20" rx="5" fill="${color}" stroke="${P.tinta}" stroke-width="1.6"/>
     <rect x="8" y="-6" width="15" height="15" rx="3" fill="${P.plata}" stroke="${P.tinta}" stroke-width="1.6"/>
     <circle cx="-14" cy="11" r="4.2" fill="${P.neumatico}"/><circle cx="14" cy="11" r="4.2" fill="${P.neumatico}"/></g>`;
 }
@@ -454,6 +517,10 @@ function dibujarCanvas(i) {
     s += texto(g.x + g.w - 10, Y_ALERTA + 14, (g.w < 200 ? `${ocup} / ${g.caras}` : `${ocup} / ${g.caras} ocupadas`), 11.5, { ancla: "end", peso: 700, color: P.tenue });
     const alerta = cortado ? "GNC CORTADO" : (falta.length ? "SIN STOCK" : (llena ? "COLA LLENA" : ""));
     if (alerta) s += pastilla(g.x + 8, Y_ALERTA, Math.min(112, Math.max(64, g.w - 16 - 74)), 18, P.rojo, alerta, P.blanco);
+    if (cortado) {
+      const corte = corteActivo(F.t[i]);
+      if (corte) s += texto(g.x + g.w / 2, Y_AV - 44, `el GNC vuelve en ${faltaTexto(corte.fin - F.t[i])}`, 13, { ancla: "middle", peso: 800, color: P.rojo });
+    }
     // surtidores y bahías, una por cara
     for (let c = 0; c < g.caras; c++) {
       const cx = g.x + PAD + c * LANE + LANE / 2;
@@ -492,6 +559,15 @@ function dibujarCanvas(i) {
   // avenida
   s += `<rect x="0" y="${Y_AV}" width="${W}" height="${H - Y_AV}" fill="${P.negro}"/><line x1="0" y1="${Y_AV + 46}" x2="${W}" y2="${Y_AV + 46}" stroke="${P.linea}" stroke-width="2" stroke-dasharray="26 18" opacity="0.7"/>`;
   s += texto(W - 14, Y_AV + 18, "AV. BALLOFFET — RN 143 (tramo urbano)", 12.5, { ancla: "end", peso: 800, espaciado: 1 });
+  // camión cisterna: se lo ve llegar por la avenida (2 h antes) y descargar (45 min, INV-04)
+  const ahora = F.t[i];
+  DESCARGAS.filter((e) => e.t - 120 <= ahora && ahora <= e.t + 45).slice(0, 2).forEach((e, k) => {
+    const xFin = W - 150 - k * 130, llegando = ahora < e.t;
+    const x = llegando ? W + 60 - ((ahora - (e.t - 120)) / 120) * (W + 60 - xFin) : xFin;
+    const prod = PROD.find((pr) => pr.id === e.id);
+    s += camionIcono(x, Y_AV + 62, prod ? prod.color : P.amarillo, 1.25);
+    s += texto(x, Y_AV + 38, llegando ? `camión de ${e.producto} llegando` : `descargando ${miles(e.litros)} L de ${e.producto}`, 11.5, { ancla: "middle", peso: 800 });
+  });
   s += `</svg>`;
   document.getElementById("lienzo").innerHTML = s;
   return esperando;
@@ -520,7 +596,7 @@ function panelDerecho(i, esperando) {
   document.getElementById("pPlay").innerHTML = pl;
 
   let gn = `<div class="titulo">GNC</div><div class="fila">`;
-  if (F.gnc[i] === 1) gn += `<span class="pastilla" style="background:${P.rojo};color:${P.blanco}">GNC CORTADO</span>`;
+  if (F.gnc[i] === 1) { const corte = corteActivo(F.t[i]); gn += `<span class="pastilla" style="background:${P.rojo};color:${P.blanco}">GNC CORTADO</span>` + (corte ? `<b>vuelve en ${faltaTexto(corte.fin - F.t[i])}</b>` : ""); }
   else if (F.gnc[i] === 2) gn += `<span class="pastilla" style="background:${P.naranja};color:${P.negro}">COMPRESORES AL 50 %</span>`;
   else gn += `<span class="pastilla" style="background:${P.libre};color:${P.negro}">DISPONIBLE</span>`;
   gn += `</div><div class="chico" style="margin-top:6px">${F.comp[i]} de ${F.compTot[i]} compresores en uso · sin playero</div>`;
@@ -645,20 +721,95 @@ function mostrar(pos) {
   grafico(i);
   barra.value = String(i);
 }
+// ---------------- avisos con pausa (los lee de la traza; se muestran de a uno, en orden) ----------------
+function frameDe(t) { let lo = 0, hi = N - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (F.t[m] < t) lo = m + 1; else hi = m; } return lo; }
+const AVISOS = new Map();
+EV.forEach((e) => { if (e.tipo === "descarga") return; const f = frameDe(e.t); if (!AVISOS.has(f)) AVISOS.set(f, []); AVISOS.get(f).push(e); });
+let colaAvisos = [], avisoActual = null, revisadoHasta = -1, reanudar = false;
+const caja = document.getElementById("aviso"), botonOk = document.getElementById("avisoOk"), botonSeguir = document.getElementById("avisoSeguir");
+function abrirAviso() {
+  avisoActual = colaAvisos.shift();
+  const e = avisoActual;
+  document.getElementById("avisoCola").textContent = colaAvisos.length ? `+${colaAvisos.length} aviso${colaAvisos.length > 1 ? "s" : ""} más` : "";
+  document.getElementById("avisoNota").textContent = "";
+  if (e.tipo === "pedido") {
+    document.getElementById("avisoIcono").textContent = "⛽";
+    document.getElementById("avisoTitulo").textContent = `Bajo nivel de combustible: ${e.producto}, ${e.pct} %`;
+    document.getElementById("avisoTexto").textContent = `Se pidió un camión de ${miles(e.litros)} L a ${e.origen}` +
+      (e.redirigido ? " (el origen habitual no podía cumplirlo: pedido redirigido)" : "") + `. Llega el ${fechaHora(e.llega)}.`;
+    document.getElementById("avisoNota").textContent = "El aviso salta cuando lo que hay en el tanque más lo que viene en camino baja al punto de pedido s: es el mismo momento en que se pide el camión.";
+    botonSeguir.hidden = false;
+  } else {
+    const total = Math.round((e.fin - e.inicio) / 1440), resta = e.fin - e.t;
+    document.getElementById("avisoIcono").textContent = "🔥";
+    document.getElementById("avisoTitulo").textContent = e.inicio < e.t ? "El GNC sigue cortado" : `El GNC se cortó por ${total} día${total === 1 ? "" : "s"}`;
+    document.getElementById("avisoTexto").textContent = (e.inicio < e.t ? "El corte empezó antes del período. " : "") +
+      `Vuelve el ${fechaHora(e.fin)} (en ${faltaTexto(resta)}). Mientras tanto los clientes de GNC pasan a Súper o se van; en la zona GNC se ve la cuenta regresiva.`;
+    botonSeguir.hidden = true;
+  }
+  caja.classList.add("abierto");
+  botonOk.focus();
+}
+function cerrarAviso(seguirReproduciendo) {
+  caja.classList.remove("abierto");
+  avisoActual = null;
+  if (colaAvisos.length) { abrirAviso(); return; }
+  if (seguirReproduciendo && reanudar) { reanudar = false; reproducir(); }
+}
+botonOk.addEventListener("click", () => cerrarAviso(true));
+caja.addEventListener("keydown", (ev) => { if (ev.key === "Escape") cerrarAviso(true); });
+botonSeguir.addEventListener("click", () => {
+  const e = avisoActual;
+  const detalle = Object.assign({}, e, { corrida: CONFIG.corrida, fechaPedido: fechaHora(e.t), fechaLlega: fechaHora(e.llega) });
+  try {
+    const padre = window.parent, doc = padre.document;
+    padre.sessionStorage.setItem("camionSeguido", JSON.stringify(detalle));
+    padre.dispatchEvent(new CustomEvent("camion-seguido", { detail: detalle }));
+    const pestania = Array.from(doc.querySelectorAll('[role="tab"]')).find((b) => b.textContent.includes("Red y rutas"));
+    if (!pestania) throw new Error("sin pestaña");
+    pestania.click();
+    pestania.scrollIntoView({ block: "start" });
+    reanudar = false;
+    caja.classList.remove("abierto");
+    avisoActual = null;
+  } catch (err) {
+    document.getElementById("avisoNota").textContent = "Abrí la pestaña 🗺️ Red y rutas (arriba): ahí se ve el camión sobre su ruta.";
+  }
+});
+function revisarAvisos(hasta) {
+  if (!document.getElementById("pausarAvisos").checked) { revisadoHasta = hasta; return false; }
+  for (let f = revisadoHasta + 1; f <= hasta; f++) {
+    if (AVISOS.has(f)) {
+      revisadoHasta = f;
+      mostrar(f); reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(f);
+      colaAvisos = colaAvisos.concat(AVISOS.get(f)); reanudar = true; abrirAviso();
+      return true;
+    }
+  }
+  revisadoHasta = hasta;
+  return false;
+}
 function paso(instante) {
   if (!reproduciendo) return;
   const transcurrido = (instante - ultimoInstante) / 1000; ultimoInstante = instante;
   const siguiente = posicion + (transcurrido * (1440 / Number(selVel.value))) / CONFIG.dt;
+  if (revisarAvisos(Math.min(ultimo, Math.round(siguiente)))) return;
   if (siguiente >= ultimo) { mostrar(ultimo); pausar(); return; }
   mostrar(siguiente);
   requestAnimationFrame(paso);
 }
-function reproducir() { if (posicion >= ultimo) { ultimoDibujado = -1; mostrar(0); } reproduciendo = true; botonPlay.textContent = "⏸ Pausar"; ultimoInstante = performance.now(); requestAnimationFrame(paso); }
+function reproducir() {
+  if (posicion >= ultimo) { ultimoDibujado = -1; mostrar(0); revisadoHasta = -1; }
+  if (colaAvisos.length) { reanudar = true; abrirAviso(); return; }
+  reproduciendo = true; botonPlay.textContent = "⏸ Pausar"; ultimoInstante = performance.now();
+  if (revisarAvisos(Math.round(posicion))) return;
+  requestAnimationFrame(paso);
+}
 function pausar() { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(posicion); }
 botonPlay.addEventListener("click", () => (reproduciendo ? pausar() : reproducir()));
-barra.addEventListener("input", () => { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(Number(barra.value)); });
+barra.addEventListener("input", () => { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(Number(barra.value)); revisadoHasta = Math.round(posicion); });
 document.getElementById("tipoGrafico").addEventListener("change", () => grafico(Math.round(posicion)));
-function saltar(i) { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(i); }
+function saltar(i) { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(i); revisadoHasta = Math.round(posicion); }
 document.getElementById("diaMas").addEventListener("click", () => saltar(iniDia[Math.min(NDIAS - 1, diaDe(Math.round(posicion)) + 1)]));
 document.getElementById("diaMenos").addEventListener("click", () => saltar(iniDia[Math.max(0, diaDe(Math.round(posicion)) - 1)]));
 
@@ -680,3 +831,112 @@ mostrar(0);
 </body>
 </html>
 """
+
+
+# =============================================================================
+# Seguimiento del camión (pestaña Red y rutas, tanda 7)
+# =============================================================================
+#: Alto del componente de seguimiento en píxeles.
+ALTO_SEGUIMIENTO = 470
+
+
+def seguimiento_html(p: ParametrosSimulacion, corrida: str = "") -> str:
+    """El mapa de la red con el camión que se eligió seguir desde un aviso de la animación.
+
+    No simula nada: recibe el pedido (producto, origen, fechas) del tablero por un evento del navegador
+    y lo dibuja sobre la ruta óptima desde ese origen.
+    """
+    red = p.red
+    origenes = ("DOCK", *valor("RED-19"))
+    configuracion = {
+        "corrida": corrida,
+        "nodos": {n: POSICION_NODO[n] for n in POSICION_NODO},
+        "nombres": NOMBRE_NODO,
+        "arcos": [[a.a, a.b, a.km, a.ruta] for a in red.arcos] if red else [],
+        "rutas": {o: list(camino_mas_corto(red, origen=o).ruta) for o in origenes} if red else {},
+        "km": {o: round(camino_mas_corto(red, origen=o).km, 1) for o in origenes} if red else {},
+        "habitual": red.origen if red else "DOCK",
+        "paleta": paleta_json(),
+    }
+    return _PLANTILLA_SEGUIMIENTO.replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":")))
+
+
+_PLANTILLA_SEGUIMIENTO = r"""<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  #cartel { border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 15px; line-height: 1.4; }
+  #cartel b { font-size: 16px; }
+  svg { width: 100%; height: 360px; display: block; border-radius: 12px; }
+</style></head><body>
+<div id="cartel" role="status" aria-live="polite"></div>
+<div id="mapa"></div>
+<script>
+const C = __CONFIG__, P = C.paleta;
+document.body.style.background = P.fondo; document.body.style.color = P.tinta;
+const W = 900, H = 360, LON = [-70.4, -65.4], LAT = [-35.8, -32.6];
+const X = (lon) => 20 + (lon - LON[0]) / (LON[1] - LON[0]) * (W - 40);
+const Y = (lat) => H - 20 - (lat - LAT[0]) / (LAT[1] - LAT[0]) * (H - 40);
+const pos = (n) => [X(C.nodos[n][0]), Y(C.nodos[n][1])];
+const REDUCIDO = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function esc(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+function miles(n) { return Math.round(n).toLocaleString("es-AR"); }
+let animando = null;
+function dibujar(origen, progreso) {
+  const ruta = C.rutas[origen] || [];
+  const enRuta = new Set(ruta.slice(1).map((n, k) => [ruta[k], n].sort().join("|")));
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Ruta del camión desde ${esc(C.nombres[origen] || "")}">`;
+  s += `<rect width="${W}" height="${H}" fill="${P.panel}"/>`;
+  C.arcos.forEach(([a, b, km, nombre]) => {
+    const [x1, y1] = pos(a), [x2, y2] = pos(b), activa = enRuta.has([a, b].sort().join("|"));
+    if (activa) s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${P.tinta}" stroke-width="12" stroke-linecap="round"/>`;
+    s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${activa ? P.amarillo : P.borde}" stroke-width="${activa ? 8 : 3}" stroke-linecap="round"/>`;
+  });
+  Object.keys(C.nodos).forEach((n) => {
+    const [x, y] = pos(n), esDestino = n === "SANRAFAEL", esOrigen = n === origen;
+    s += `<circle cx="${x}" cy="${y}" r="${esDestino || esOrigen ? 9 : 6}" fill="${esDestino ? P.rojo : (esOrigen ? P.tinta : P.tenue)}" stroke="${P.fondo}" stroke-width="2"/>`;
+    const abajo = ["MONTECOMAN", "ALVEAR", "SOSNEADO", "DOCK"].includes(n), izquierda = n === "SANRAFAEL";
+    s += `<text x="${x + (izquierda ? -12 : 0)}" y="${abajo ? y + 24 : y - 13}" font-size="13" font-weight="${esDestino || esOrigen ? 800 : 500}" fill="${P.tinta}" text-anchor="${izquierda ? "end" : "middle"}">${esc(C.nombres[n])}</text>`;
+  });
+  if (ruta.length > 1 && progreso !== null) {
+    const largos = ruta.slice(1).map((n, k) => { const [a, b] = [pos(ruta[k]), pos(n)]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });
+    let objetivo = progreso * largos.reduce((x, y) => x + y, 0), k = 0;
+    while (k < largos.length - 1 && objetivo > largos[k]) { objetivo -= largos[k]; k++; }
+    const [a, b] = [pos(ruta[k]), pos(ruta[k + 1])], f = largos[k] ? Math.min(1, objetivo / largos[k]) : 1;
+    const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
+    s += `<g transform="translate(${x},${y})"><rect x="-16" y="-10" width="22" height="16" rx="4" fill="${P.amarillo}" stroke="${P.tinta}" stroke-width="2"/>
+      <rect x="6" y="-6" width="11" height="12" rx="2" fill="${P.plata}" stroke="${P.tinta}" stroke-width="2"/>
+      <circle cx="-9" cy="8" r="3.5" fill="${P.tinta}"/><circle cx="10" cy="8" r="3.5" fill="${P.tinta}"/></g>`;
+  }
+  s += `</svg>`;
+  document.getElementById("mapa").innerHTML = s;
+}
+function mostrar(d) {
+  const cartel = document.getElementById("cartel");
+  cartel.style.background = P.amarilloSuave; cartel.style.border = `2px solid ${P.amarillo}`;
+  cartel.innerHTML = `<b>🚚 Se ha pedido el camión de ${esc(d.producto)} a ${esc(d.origen)}</b><br>` +
+    `${miles(d.litros)} L · pedido el ${esc(d.fechaPedido)} con el tanque al ${d.pct} % · llega el ${esc(d.fechaLlega)}` +
+    ` · ${miles(C.km[d.nodo] || 0)} km por ${esc((C.rutas[d.nodo] || []).map((n) => C.nombres[n]).join(" → "))}` +
+    (d.redirigido ? "<br>El origen habitual no podía cumplirlo: el pedido se redirigió." : "");
+  if (animando) cancelAnimationFrame(animando);
+  if (REDUCIDO) { dibujar(d.nodo, 1); return; }
+  const inicio = performance.now();
+  const cuadro = (ahora) => { const f = Math.min(1, (ahora - inicio) / 8000); dibujar(d.nodo, f); if (f < 1) animando = requestAnimationFrame(cuadro); };
+  animando = requestAnimationFrame(cuadro);
+}
+function vacio() {
+  const cartel = document.getElementById("cartel");
+  cartel.style.background = P.panel; cartel.style.border = `1px solid ${P.borde}`;
+  cartel.innerHTML = "Cuando la animación avise que un tanque está bajo, el botón <b>«Seguir trayectoria del camión»</b> muestra acá el camión sobre su ruta.";
+  dibujar(C.habitual, null);
+}
+vacio();
+try {
+  const guardado = JSON.parse(window.parent.sessionStorage.getItem("camionSeguido") || "null");
+  if (guardado && guardado.corrida === C.corrida) mostrar(guardado);
+  window.parent.addEventListener("camion-seguido", (ev) => { if (ev.detail && ev.detail.corrida === C.corrida) mostrar(ev.detail); });
+} catch (err) { /* sin acceso a la página: queda el mapa con la ruta habitual */ }
+</script></body></html>
+"""
+

@@ -22,7 +22,7 @@ from ui.tema import (
 
 #: Posiciones (longitud, latitud) APROXIMADAS de los nodos: sólo sirven para dibujar.
 #: Dock Sud está a ≈ 900 km al este (fuera de escala), así que se lo dibuja al borde.
-_POSICION_NODO = {
+POSICION_NODO = {
     "LUJAN": (-68.88, -33.03),
     "PAREDITAS": (-69.10, -33.85),
     "SOSNEADO": (-69.60, -35.10),
@@ -76,8 +76,8 @@ def grafico_red(
     fig = go.Figure()
     for arco in red.arcos:
         clave = frozenset((arco.a, arco.b))
-        x = [_POSICION_NODO[arco.a][0], _POSICION_NODO[arco.b][0]]
-        y = [_POSICION_NODO[arco.a][1], _POSICION_NODO[arco.b][1]]
+        x = [POSICION_NODO[arco.a][0], POSICION_NODO[arco.b][0]]
+        y = [POSICION_NODO[arco.a][1], POSICION_NODO[arco.b][1]]
         cortado = clave in cierres
         if cortado:
             color, ancho, trazo = ROJO, 4, "dash"
@@ -107,7 +107,7 @@ def grafico_red(
             showarrow=False, font=dict(size=11, color=ROJO if cortado else TINTA_AZULADA),
             bgcolor=rgba(FONDO, 0.85),
         )
-    for nodo, (x, y) in _POSICION_NODO.items():
+    for nodo, (x, y) in POSICION_NODO.items():
         es_origen, es_destino = nodo == red.origen, nodo == red.destino
         fig.add_trace(
             go.Scatter(

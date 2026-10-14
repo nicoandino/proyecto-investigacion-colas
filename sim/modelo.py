@@ -253,6 +253,17 @@ class EstacionDeServicio:
         for desde, hasta in self.intervalos_gnc:
             if desde > self.env.now:
                 yield self.env.timeout(desde - self.env.now)
+            if self.traza is not None:
+                # El fin del EPISODIO entero (puede pasar el final del período): para el cartel y la cuenta regresiva.
+                fin_episodio = max(
+                    ((i + d) * MINUTOS_POR_DIA for i, d in self.episodios_gnc if i * MINUTOS_POR_DIA <= desde < (i + d) * MINUTOS_POR_DIA),
+                    default=hasta,
+                )
+                inicio_episodio = min(
+                    (i * MINUTOS_POR_DIA for i, d in self.episodios_gnc if i * MINUTOS_POR_DIA <= desde < (i + d) * MINUTOS_POR_DIA),
+                    default=desde,
+                )
+                self.traza.eventos.append(("corte_gnc", self.env.now, hasta, inicio_episodio, fin_episodio))
             if parcial:
                 self.gnc_cortado = 2
                 self._ajustar_compresores(max(1, self.p.gnc.compresores // 2))
@@ -799,6 +810,12 @@ class EstacionDeServicio:
             PedidoCamion(producto, self.env.now, self.env.now + plazo, cantidad, demora, causa, origen, redirigido)
         )
         self.ind.plazo_entrega.agregar(plazo / 60.0)   # se registra en horas
+        if self.traza is not None:
+            # El aviso "bajo nivel de combustible" de la animación es este mismo momento: cruzar s.
+            self.traza.eventos.append((
+                "pedido", self.env.now, producto, self.niveles[producto] / info.capacidad, origen, redirigido,
+                self.env.now + plazo, cantidad,
+            ))
         pedido = (self.env.now, plazo, demora)
         self.pedidos_abiertos.setdefault(producto, []).append(pedido)
         yield self.env.timeout(plazo)
@@ -808,6 +825,8 @@ class EstacionDeServicio:
         self.pedidos_en_camino[producto] -= 1
         # No se puede meter más de lo que entra en el tanque.
         recibido = min(cantidad, info.capacidad - self.niveles[producto])
+        if self.traza is not None:
+            self.traza.eventos.append(("descarga", self.env.now, producto, recibido))
         self._actualizar_niveles(producto, self.niveles[producto] + recibido)
         self.ind.contar("litros_recibidos", recibido)
         self.ind.contar_producto(producto, "litros_recibidos", recibido)

@@ -119,6 +119,11 @@ class Traza:
         self.llegadas_por_hora: list[int] = [0] * 24
         self.espera_por_hora: list[float] = [0.0] * 24
         self.perdidos_por_hora: list[int] = [0] * 24
+        # Momentos importantes para los avisos de la animación (parte 2, tanda 7), en orden de tiempo:
+        #   ("pedido", minuto, producto, nivel 0–1 al pedir, origen, redirigido, minuto de llegada, litros)
+        #   ("descarga", minuto, producto, litros recibidos)
+        #   ("corte_gnc", minuto en que empieza, en que termina dentro de la corrida, inicio y fin del episodio entero)
+        self.eventos: list[tuple] = []
         # Lo mismo pero día por día (parte 2, tanda 5): para filtrar el perfil del día por fechas.
         self.llegadas_dia_hora: list[list[int]] = []          # [día][hora]
         self.espera_dia_hora: list[list[list[float]]] = []    # [día][hora] = [suma de esperas, cantidad]

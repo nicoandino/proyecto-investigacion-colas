@@ -1216,59 +1216,55 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
     st.subheader("Inventario: un tanque por producto líquido")
     plazo = p.inventario[0].plazo_entrega
     st.caption(
-        f"Cada producto tiene su tanque, su política (s, Q) y su propio camión: un pedido "
-        f"lleva un solo producto (INV-08, etapa 1). El camión tarda entre "
-        f"{plazo.minimo:.0f} y {plazo.maximo:.0f} horas (más probable {plazo.moda:.0f} h, "
-        f"INV-01). El GNC no tiene tanque: se mide en m³ y no aparece acá."
+        f"Cada combustible líquido tiene su tanque y su propio camión (un pedido lleva un solo producto). "
+        f"El camión tarda entre {plazo.minimo:.0f} y {plazo.maximo:.0f} horas (lo más probable, "
+        f"{plazo.moda:.0f} h). El GNC no tiene tanque: sale de la red de gas y está en la pestaña GNC."
     )
 
-    fila = st.columns(4)
-    for columna, metrica in zip(
-        fila,
-        (
-            INDICADORES_INVENTARIO[0],   # nivel de servicio
-            INDICADORES_INVENTARIO[1],   # días con quiebre
-            INDICADORES_INVENTARIO[5],   # nivel promedio (suma de los 4 tanques)
-            INDICADORES_INVENTARIO[6],   # pedidos por día
-        ),
-    ):
-        tarjeta(columna, metrica, base)
+    st.markdown("##### 1. Cómo se movió cada tanque")
+    st.plotly_chart(graficos.grafico_tanques_real(traza, p), key="g_tanques_real")
+    st.caption(
+        "Un diente de sierra por tanque: baja mientras se vende y sube de golpe cuando descarga el "
+        "camión. La línea naranja es el punto de pedido s; donde la curva toca el cero, ese producto "
+        "dejó de venderse aunque los otros sigan."
+    )
 
+    st.markdown("##### 2. Quiebres de stock y lo que no se vendió")
+    vistas.bloque_quiebres(p, base.replicas[0], eco)
+
+    st.markdown("##### 3. Cuándo se pide el camión: la política (s, Q) de cada tanque")
+    st.caption(
+        "Cuando lo que hay en el tanque **más lo que ya viene en camino** baja hasta el **punto de pedido s**, "
+        "se pide un camión con **Q litros**. Si s es menor que lo que se vende mientras viaja el camión, el "
+        "tanque se vacía antes de que llegue."
+    )
     nombres = {pr.id: pr.nombre for pr in p.productos}
     litros_dia = promedio_por_producto(base.replicas, "litros_vendidos_por_producto")
-    quiebres = promedio_por_producto(base.replicas, "dias_quiebre_por_producto")
     filas = []
+    riesgosos = []
     for inv in p.inventario:
         consumo_dia = litros_dia[inv.producto]
         consumo_en_plazo = consumo_dia / 24.0 * inv.plazo_entrega.media
         filas.append(
             {
                 "Tanque": nombres[inv.producto],
-                "Capacidad": f"{inv.capacidad:,.0f} L",
-                "Nivel inicial": f"{inv.nivel_inicial:,.0f} L",
-                "Punto de pedido (s)": f"{inv.punto_pedido:,.0f} L",
-                "Cantidad (Q)": f"{inv.cantidad_pedido:,.0f} L",
-                "Venta diaria": f"{consumo_dia:,.0f} L",
-                "s cubre": f"{inv.punto_pedido / consumo_dia:.1f} días" if consumo_dia else "—",
-                "Vendido durante el plazo": f"{consumo_en_plazo:,.0f} L",
-                "Días con quiebre": f"{quiebres[inv.producto]:.1f} %",
+                "Capacidad": f"{vistas.ent(inv.capacidad)} L",
+                "Punto de pedido (s)": f"{vistas.ent(inv.punto_pedido)} L",
+                "Cantidad por camión (Q)": f"{vistas.ent(inv.cantidad_pedido)} L",
+                "Se vende por día": f"{vistas.ent(consumo_dia)} L",
+                "s alcanza para": f"{vistas.dec(inv.punto_pedido / consumo_dia)} días" if consumo_dia else "—",
+                "Se vende mientras viaja el camión": f"{vistas.ent(consumo_en_plazo)} L",
             }
         )
         if inv.punto_pedido < consumo_en_plazo:
-            st.warning(
-                f"{nombres[inv.producto]}: el punto de pedido ({inv.punto_pedido:,.0f} L) "
-                f"es menor que lo que se vende mientras viaja el camión "
-                f"({consumo_en_plazo:,.0f} L): el quiebre de ese tanque es probable.",
-                icon="⚠️",
-            )
+            riesgosos.append(nombres[inv.producto])
     st.dataframe(pd.DataFrame(filas), hide_index=True)
-
-    st.plotly_chart(graficos.grafico_tanques_real(traza, p), key="g_tanques_real")
-    st.caption(
-        "Un diente de sierra por tanque: baja mientras se vende y sube de golpe cuando "
-        "descarga el camión. La línea naranja es el punto de pedido s; donde la curva toca "
-        "el cero, ese producto dejó de venderse aunque los otros sigan."
-    )
+    if riesgosos:
+        st.warning(
+            f"En {', '.join(riesgosos)} el punto de pedido es menor que lo que se vende mientras viaja el "
+            f"camión: ahí el quiebre es esperable con esta política.",
+            icon="⚠️",
+        )
 
     st.divider()
     seccion_mejor_politica(p, eco)

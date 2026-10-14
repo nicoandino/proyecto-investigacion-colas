@@ -96,6 +96,10 @@ Los controles cubren las dos partes del modelo:
   FASE 5 DEL ORQUESTADOR (red de rutas)
    23. N6 (km y minutos de §5-G), Dijkstra = fuerza bruta, demora por corte, la red sin
        cortes no cambia nada y N11 (cortes, playeros y demanda).
+
+  PARTE 2 DEL ORQUESTADOR (pulido en tandas)
+   29. Tanda 3: las causas de los litros no vendidos suman lo que no se vendió; las horas de
+       cada quiebre suman el tiempo sin combustible del tanque.
 """
 
 from __future__ import annotations
@@ -1805,6 +1809,34 @@ def main() -> int:
         "tiempo sin combustible por tanque: "
         + " · ".join(f"{pr} {100 * f:.1f} %" for pr, f in vacios.items())
         + f" | días con quiebre: {quiebres}",
+    )
+
+    # ------------------------------------------------------------------ 29
+    separador("29. Parte 2, tanda 3: por qué no se vendió y cada quiebre de stock")
+    from sim.periodo import Edicion as _Edicion, aplicar_edicion as _aplicar
+
+    p29, _ = _aplicar(
+        con_periodo(ParametrosSimulacion().datos_reales(), por_meses(7, 7)), ParametrosEconomicos(),
+        _Edicion(doble_pico=True),
+    )
+    r29, _ = correr_replica(p29, semilla=3)
+    causas = {f[0]: f[1:] for f in r29.litros_perdidos_causa}
+    liquidos29 = sum(sum(v) for pr, v in causas.items() if pr != "gnc")
+    gnc29 = sum(causas["gnc"])
+    controlar(
+        abs(liquidos29 - r29.litros_no_vendidos_dia * r29.dias_medidos) < 1e-6
+        and abs(gnc29 - r29.m3_gnc_perdidos_dia * r29.dias_medidos) < 1e-6
+        and all(v >= 0 for f in causas.values() for v in f),
+        "Las causas suman exactamente lo que no se vendió (litros y m³ por separado)",
+        f"julio con el doble en el pico: {liquidos29:,.0f} L = Σ causas · GNC {gnc29:,.1f} m³",
+    )
+    vacio29 = dict(r29.tiempo_sin_stock)
+    horas29 = r29.dias_medidos * 24
+    controlar(
+        all(abs(h - vacio29[pr] * horas29) < 0.01 and (n > 0) == (h > 0) and mx <= h + 1e-9
+            for pr, n, h, mx in r29.quiebres),
+        "Las horas de cada quiebre suman el tiempo sin combustible del tanque",
+        " · ".join(f"{pr}: {n} quiebres, {h:.1f} h (el más largo {mx:.1f} h)" for pr, n, h, mx in r29.quiebres),
     )
 
     # ------------------------------------------------------------------

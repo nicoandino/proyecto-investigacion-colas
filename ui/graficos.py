@@ -304,7 +304,10 @@ def grafico_tanques_real(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
     fig.update_xaxes(title_text="Día", row=2)
     fig.update_yaxes(title_text="Litros", col=1)
     fig.update_layout(
-        title="Nivel de cada tanque (la franja gris es el calentamiento)",
+        title=(
+            "Nivel de cada tanque (la franja gris es el calentamiento)" if p.dias_calentamiento
+            else "Nivel de cada tanque, desde el día 0 (arrancan llenos)"
+        ),
         **_layout(hovermode="x", height=560),
     )
     return fig

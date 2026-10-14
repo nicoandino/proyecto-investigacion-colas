@@ -178,6 +178,10 @@ class ContadoresProducto:
     litros_recibidos: float = 0.0
     perdidos_sin_combustible: int = 0
     litros_perdidos_sin_combustible: float = 0.0   # litros que pidieron los que se fueron sin stock
+    # Los otros motivos (tanda 3): litros (m³ el GNC) que pidieron los que se fueron por cada causa.
+    litros_perdidos_espera: float = 0.0            # se cansaron de esperar
+    litros_perdidos_cola_llena: float = 0.0        # la cola de su zona estaba llena
+    litros_perdidos_corte_gnc: float = 0.0         # GNC cortado y no pasaron a Súper
     viajes_demorados: int = 0                      # camiones de este producto que encontraron un corte
     pedidos_emitidos: int = 0
     pedidos_recibidos: int = 0
@@ -299,6 +303,8 @@ class Indicadores:
         self.sin_stock = {pr: SerieTemporal() for pr in ids_liquidos}
         self.plazo_entrega = Muestras()
         self.demora_ruta = Muestras()        # horas de demora por corte de ruta (sólo los demorados)
+        # Cada quiebre de cada tanque: [minuto en que se vació, minuto en que volvió a tener] (tanda 3)
+        self.quiebres = {pr: [] for pr in ids_liquidos}
 
         # Litros por tipo de vehículo (N10)
         self.litros_por_tipo = {t: Muestras() for t in ids_tipos}
@@ -373,9 +379,20 @@ class Indicadores:
         self.por_hora.reiniciar()
         self.calentamiento_terminado = True
 
+    def marcar_sin_stock(self, producto: str, t: float, vacio: bool) -> None:
+        """Abre (vacío) o cierra (volvió a tener) el quiebre en curso de un tanque."""
+        episodios = self.quiebres[producto]
+        if vacio:
+            episodios.append([t, None])
+        elif episodios and episodios[-1][1] is None:
+            episodios[-1][1] = t
+
     def cerrar(self, t: float) -> None:
         for serie in self.series:
             serie.cerrar(t)
+        for episodios in self.quiebres.values():
+            if episodios and episodios[-1][1] is None:
+                episodios[-1][1] = t
 
     # --- Indicadores finales --------------------------------------------------
     @property

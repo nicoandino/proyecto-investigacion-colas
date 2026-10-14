@@ -1116,6 +1116,11 @@ class ParametrosEconomicos:
         referencia = dict(valor("ECO-08")).get(clave)
         return 0.0 if actual is None or referencia is None else float(actual) - float(referencia)
 
+    def margen_de(self, producto: str) -> float:
+        """Margen por litro (por m³ el GNC) de un producto, con el cambio de precio si se editó."""
+        base = self.margen_gnc if producto == "gnc" else self.margen_por_litro
+        return base + self.delta_precio(producto)
+
     def __post_init__(self) -> None:
         if self.margen_por_litro < 0 or self.margen_compra < 0:
             raise ValueError("Los márgenes no pueden ser negativos.")

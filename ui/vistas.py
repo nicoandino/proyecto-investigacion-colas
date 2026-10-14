@@ -13,7 +13,7 @@ from datetime import date, timedelta
 import pandas as pd
 import streamlit as st
 
-from sim.config import ANO_REFERENCIA, ParametrosSimulacion
+from sim.config import ANO_REFERENCIA, ParametrosEconomicos, ParametrosSimulacion
 from sim.periodo import Periodo
 from sim.runner import ResultadoEscenario, ResultadoReplica
 from sim.traza import Traza
@@ -45,6 +45,102 @@ def _tot(r: ResultadoReplica) -> dict[str, int]:
 
 def _nombres(p: ParametrosSimulacion) -> dict[str, str]:
     return {pr.id: pr.nombre for pr in p.productos}
+
+
+def _horas(h: float) -> str:
+    """'—' si no hubo, '3,4 h' si hubo."""
+    return "—" if h <= 0 else f"{dec(h)} h"
+
+
+def _pesos(x: float) -> str:
+    return f"$ {ent(x)}"
+
+
+# =============================================================================
+# Quiebres de stock y litros que no se vendieron (tanda 3)
+# =============================================================================
+CAUSAS = (
+    ("Falta de stock", "el tanque no alcanzaba para su carga"),
+    ("Se cansó de esperar", "superó su paciencia en la cola"),
+    ("Cola llena", "no había lugar en su zona (3 por cara)"),
+    ("GNC cortado", "no pasó a Súper durante el corte"),
+)
+
+
+def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """Qué es un quiebre, cuántos hubo, cuánto duraron y qué costaron; y por qué no se vendió cada litro."""
+    t = _tot(r)
+    dias = max(r.dias_medidos, 1)
+    nombres = _nombres(p)
+    causas = {f[0]: f[1:] for f in r.litros_perdidos_causa}
+    quiebres = {q[0]: q[1:] for q in r.quiebres}
+    dias_falta = dict(r.dias_quiebre_total)
+    pedidos = dict(r.pedidos_total)
+    niveles = dict(r.nivel_por_producto)
+    capacidad = {i.producto: i.capacidad for i in p.inventario}
+
+    st.info(
+        "**¿Qué es un quiebre de stock?** El tanque de un producto **no alcanza para la carga que pide el "
+        "cliente** (en el peor caso, está vacío). Ese cliente se va sin cargar y el producto no se vende hasta "
+        "que llega el camión; los otros productos siguen vendiéndose. El GNC no tiene tanque: no tiene "
+        "quiebres, tiene cortes (pestaña GNC).",
+        icon="🛢️",
+    )
+    venta_falta = sum(causas[pr][0] * eco.margen_de(pr) for pr in capacidad)
+    _tarjetas([
+        ("Veces que un tanque quedó vacío", ent(sum(q[0] for q in quiebres.values())),
+         f"sumando los 4 tanques, en {ent(dias)} días"),
+        ("Horas con un tanque vacío", _horas(sum(q[1] for q in quiebres.values())),
+         "sumando los 4 tanques"),
+        ("Clientes sin cargar por falta de stock", ent(t["perdidos_sin_combustible"]),
+         f"{pct(t['perdidos_sin_combustible'], t['llegadas'])} de los que llegaron"),
+        ("Venta perdida por falta de stock", _pesos(venta_falta),
+         "costo de oportunidad: no se resta del margen"),
+    ])
+
+    st.markdown("##### Cada tanque")
+    filas = []
+    for pr in capacidad:
+        n, horas, mas_largo = quiebres.get(pr, (0, 0.0, 0.0))
+        filas.append({
+            "Tanque": nombres[pr],
+            "Veces que quedó vacío": ent(n),
+            "Tiempo vacío (total)": _horas(horas),
+            "El quiebre más largo": _horas(mas_largo),
+            "Días con clientes sin cargar": f"{ent(dias_falta.get(pr, 0))} de {ent(dias)}",
+            "Litros sin vender por falta de stock": f"{ent(causas[pr][0])} L",
+            "Venta perdida": _pesos(causas[pr][0] * eco.margen_de(pr)),
+            "Camiones pedidos": ent(pedidos.get(pr, 0)),
+            "Nivel promedio": f"{ent(niveles[pr])} L ({pct(niveles[pr], capacidad[pr], 0)})",
+        })
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+    st.markdown("##### Lo que no se vendió, y por qué")
+    filas = []
+    for pr, valores in causas.items():
+        unidad = "m³" if pr == "gnc" else "L"
+        total = sum(valores)
+        fila = {"Producto": nombres[pr]}
+        for (causa, _), v in zip(CAUSAS, valores):
+            fila[causa] = "—" if v <= 0 else f"{ent(v)} {unidad}"
+        fila["Total"] = f"{ent(total)} {unidad}"
+        fila["Venta perdida"] = _pesos(total * eco.margen_de(pr))
+        filas.append(fila)
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    st.caption(
+        " · ".join(f"**{c}**: {d}" for c, d in CAUSAS)
+        + ". La venta perdida = lo que no se vendió × el margen por litro (por m³ el GNC), heredado sin fuente "
+        "(ECO-01/03): es un **costo de oportunidad** y se informa aparte, no se resta del margen. El GNC va en m³ "
+        "y nunca se suma con los litros."
+    )
+    _comprobacion([
+        "Total de cada producto = falta de stock + se cansó de esperar + cola llena + GNC cortado: es todo lo "
+        "que pidieron los clientes que se fueron sin cargar.",
+        "Un tanque está **vacío** cuando no alcanza ni para la carga más chica de su producto; 'veces que quedó "
+        "vacío' cuenta cada vez que entra en ese estado y el tiempo vacío suma lo que dura cada una.",
+        "Puede haber clientes sin cargar por falta de stock aunque el tanque nunca quede vacío: alcanzaba para "
+        "una carga chica pero no para la de ese cliente.",
+    ])
 
 
 # =============================================================================
@@ -143,7 +239,7 @@ def _tabla_detalle(p: ParametrosSimulacion, r: ResultadoReplica, periodo: Period
     for pr, d in r.dias_quiebre_total:
         if pr == "gnc":
             continue
-        filas.append(("Inventario", f"Días con quiebre de {nombres[pr]}", f"{ent(d)} de {ent(dias)}", "días", "días en que el tanque llegó a quedar sin combustible"))
+        filas.append(("Inventario", f"Días con quiebre de {nombres[pr]}", f"{ent(d)} de {ent(dias)}", "días", "días con algún cliente sin cargar por falta de stock en ese tanque"))
     for pr, fr in r.tiempo_sin_stock:
         filas.append(("Inventario", f"Tiempo sin combustible de {nombres[pr]}", f"{dec(100 * fr)} % ({ent(fr * dias * 24)} h)", "del tiempo", "tiempo con ese tanque sin poder cargar ni al cliente más chico ÷ tiempo total"))
     filas.append(("Inventario", "Estación sin ningún combustible", dec(r.porcentaje_tiempo_sin_combustible), "% del tiempo", "los 4 tanques vacíos a la vez"))
@@ -285,35 +381,12 @@ def pestania_indicadores(
         ])
 
     elif seccion == "Inventario":
-        st.markdown("##### Cada tanque")
-        filas = []
-        capacidad = {i.producto: i.capacidad for i in p.inventario}
-        niveles = dict(r.nivel_por_producto)
-        sin_stock = dict(r.litros_sin_stock_por_producto)
-        pedidos = dict(r.pedidos_total)
-        tiempo_vacio = dict(r.tiempo_sin_stock)
-        for pr, d in r.dias_quiebre_total:
-            if pr == "gnc":
-                continue
-            filas.append({
-                "Tanque": nombres[pr],
-                "Días con quiebre": f"{ent(d)} de {ent(dias)}",
-                "Tiempo sin combustible": f"{dec(100 * tiempo_vacio[pr])} % ({ent(tiempo_vacio[pr] * dias * 24)} h)",
-                "Camiones pedidos": ent(pedidos.get(pr, 0)),
-                "Nivel promedio": f"{ent(niveles[pr])} L ({pct(niveles[pr], capacidad[pr], 0)})",
-                "Litros que no se pudieron vender": f"{ent(sin_stock[pr] * dias)} L",
-            })
-        st.dataframe(pd.DataFrame(filas), hide_index=True)
+        bloque_quiebres(p, r, st.session_state.get("parametros_eco") or ParametrosEconomicos())
         _tarjetas([
-            ("Estación sin ningún combustible", f"{dec(r.porcentaje_tiempo_sin_combustible)} %", "los 4 tanques vacíos a la vez"),
-            ("Días con algún quiebre", f"{ent(t['dias_con_quiebre'])} de {ent(dias)}", "al menos un tanque vacío ese día"),
-            ("Camiones pedidos", ent(sum(pedidos.values())), "entre los 4 tanques"),
-        ])
-        st.caption("El GNC no tiene tanque (sale de la red de gas); sus cortes están en la pestaña GNC.")
-        _comprobacion([
-            "Un tanque tiene quiebre un día si en algún momento no alcanza para la carga más chica de su producto; "
-            "'tiempo sin combustible' es la fracción del tiempo en que está así.",
-            "Camiones pedidos = cada vez que el inventario (tanque + lo que viene en camino) cae al punto de pedido.",
+            ("Estación sin ningún combustible", f"{dec(r.porcentaje_tiempo_sin_combustible)} %",
+             "los 4 tanques vacíos a la vez"),
+            ("Días con algún cliente sin cargar", f"{ent(t['dias_con_quiebre'])} de {ent(dias)}",
+             "por falta de stock en algún tanque"),
         ])
 
     else:

@@ -119,6 +119,11 @@ class ResultadoReplica:
     pedidos_total: tuple[tuple[str, int], ...] = ()               # camiones pedidos de cada tanque
     tiempo_sin_stock: tuple[tuple[str, float], ...] = ()          # fracción del tiempo con cada tanque vacío
     dias_medidos: int = 0
+    # Tanda 3: por qué no se vendió (litros; m³ el GNC) y cada quiebre de stock, en el período medido
+    litros_perdidos_causa: tuple[tuple[str, float, float, float, float], ...] = ()
+    # (producto, sin combustible, se cansó de esperar, cola llena, GNC cortado sin pasar a Súper)
+    quiebres: tuple[tuple[str, int, float, float], ...] = ()
+    # (tanque, cuántas veces se vació, horas vacío en total, horas del quiebre más largo)
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -140,6 +145,8 @@ NO_METRICAS = {
     "dias_quiebre_total",
     "pedidos_total",
     "tiempo_sin_stock",
+    "litros_perdidos_causa",
+    "quiebres",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -344,8 +351,34 @@ def correr_replica(
             (pr, serie.promedio) for pr, serie in ind.sin_stock.items()
         ) if p.estacion_real else (),
         dias_medidos=p.dias_medidos,
+        litros_perdidos_causa=tuple(
+            (
+                pr, cp.litros_perdidos_sin_combustible, cp.litros_perdidos_espera,
+                cp.litros_perdidos_cola_llena, cp.litros_perdidos_corte_gnc,
+            )
+            for pr, cp in ind.c_producto.items()
+        ) if p.estacion_real else (),
+        quiebres=tuple(
+            _resumen_quiebres(pr, episodios, p.calentamiento, p.duracion)
+            for pr, episodios in ind.quiebres.items()
+        ) if p.estacion_real else (),
     )
     return resultado, traza
+
+
+def _resumen_quiebres(
+    producto: str, episodios: list, desde: float, hasta: float
+) -> tuple[str, int, float, float]:
+    """(tanque, quiebres, horas vacío en total, horas del más largo), recortado al período medido."""
+    duraciones = [
+        min(fin, hasta) - max(inicio, desde)
+        for inicio, fin in episodios
+        if fin > desde and inicio < hasta
+    ]
+    duraciones = [d for d in duraciones if d > 0]
+    return (
+        producto, len(duraciones), sum(duraciones) / 60.0, max(duraciones, default=0.0) / 60.0
+    )
 
 
 # --- N réplicas ---------------------------------------------------------------

@@ -264,3 +264,14 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   "por qué" (las alternativas siguen en el Registro y en el CSV porque son los extremos del tornado). La "alerta C8" pasa a
   ser una observación del modelo (la capacidad de GNC sobra para esa demanda). `DATOS_REALES.md` regenerado. QA
   `reports/qa_tanda2_fuentes.py`: 0 excepciones, 0 errores de consola; `verificar.py` 118/118.
+- **Tanda 3 ✅ (inventario y quiebre).** Motor, sin azar: contadores de litros perdidos por causa en cada producto
+  (`litros_perdidos_espera / _cola_llena / _corte_gnc`, además del de falta de stock) y el registro de cada quiebre (cuándo
+  se vació y cuándo volvió a tener un tanque) a partir de la serie "tanque vacío" que ya existía. `ResultadoReplica` trae
+  `litros_perdidos_causa` y `quiebres` (sólo la estación real: los dorados no se mueven). Pantalla: un bloque único
+  (`vistas.bloque_quiebres`) en Indicadores → Inventario y en la pestaña Inventario: qué es un quiebre, cuántas veces
+  quedó vacío cada tanque, cuánto duró (total y el más largo), clientes sin cargar y **venta perdida** (costo de oportunidad,
+  margen heredado), y la tabla **"Lo que no se vendió, y por qué"** (falta de stock · se cansó de esperar · cola llena · GNC
+  cortado; el GNC en m³). La pestaña Inventario se reordenó: 1) cómo se movió cada tanque, 2) quiebres, 3) la política (s, Q)
+  con rótulos en palabras. Matiz que el rótulo dice: se pierde por falta de stock también cuando el tanque **no alcanza para la
+  carga de ese cliente** aunque no esté vacío. Control nuevo (29): Σ causas = litros no vendidos; Σ horas de quiebre = tiempo
+  sin combustible. `verificar.py` **120/120**; QA `reports/qa_tanda3_inventario.py`: 0 excepciones, 0 errores de consola.

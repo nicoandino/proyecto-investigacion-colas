@@ -693,6 +693,7 @@ class EstacionDeServicio:
             vacio = 1.0 if self.niveles[pr] < self.min_carga[pr] else 0.0
             if vacio != serie.valor:
                 serie.cambiar(self.env.now, vacio)
+                self.ind.marcar_sin_stock(pr, self.env.now, vacio > 0)
 
     def hay_combustible(self, auto: Auto) -> bool:
         if not self.es_real:
@@ -827,14 +828,17 @@ class EstacionDeServicio:
                 self.ind.contar_grupo(auto.grupo, "perdidos_sin_combustible")
         elif motivo == "cola_llena":
             self.ind.contar("perdidos_cola_llena")
+            self.ind.contar_producto(auto.producto, "litros_perdidos_cola_llena", auto.litros)
             if self.es_real:
                 self.ind.contar_grupo(auto.grupo, "perdidos_cola_llena")
         elif motivo == "corte_gnc":
             self.ind.contar("perdidos_corte_gnc")
+            self.ind.contar_producto(auto.producto, "litros_perdidos_corte_gnc", auto.litros)
             if self.es_real:
                 self.ind.contar_grupo(auto.grupo, "perdidos_corte_gnc")
         else:  # abandono_espera
             self.ind.contar("perdidos_surtidor")
+            self.ind.contar_producto(auto.producto, "litros_perdidos_espera", auto.litros)
             if self.es_real:
                 self.ind.contar_grupo(auto.grupo, "perdidos_espera")
         self.ind.por_hora.contar_perdido(auto.hora)

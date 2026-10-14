@@ -448,7 +448,7 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Mendoza, no la estación), tarjetas (método elegido, MAPE, tendencia), el gráfico de la serie con el ajuste del elegido,
   la zona de prueba y el pronóstico con su banda ± z·RMSE, la tabla de los cinco métodos (MAE, MAPE, RMSE, sesgo), el
   gráfico de los 12 índices, los próximos 12 meses en m³ y **escalados a la estación** (DEM-01 ÷ el promedio de los últimos
-  12 meses de Shell Mendoza = 2,37 %) y "¿Cómo se comprueba?". Menú: en 📅 Calendario de demanda, **cómo cambia la
+  12 meses de Shell Mendoza = 2,31 %) y "¿Cómo se comprueba?". Menú: en 📅 Calendario de demanda, **cómo cambia la
   demanda a lo largo del año**: calendario de temporadas (por defecto) · **índices de la serie real** · neutra; con los
   índices reales, `Estacionalidad` = los 12 índices y sin calendario (el total del año no cambia: 3.240.000 L con o sin
   índices). Demanda muestra el índice del mes en la cuenta del día. **Queda por defecto el calendario** (decide Nico).

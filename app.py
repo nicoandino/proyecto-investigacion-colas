@@ -90,6 +90,7 @@ from sim.datos import AVISO_FUENTES, CONTRADICCIONES, PIE_NO_AFILIADO, REGISTRO,
 from sim.distribuciones import Aleatorio
 from sim.eventos import CATALOGO as CATALOGO_EVENTOS, POR_ID as CATALOGO_EVENTOS_POR_ID
 from sim.eventos import calendario as calendario_eventos, texto_frecuencia
+from sim.pronostico import politica_por_pronostico
 from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
     ahorro_por_producto,
@@ -1281,9 +1282,11 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
             icon="⚠️",
         )
 
+    vistas.bloque_stock_seguridad(p)
+
     st.caption(
         "¿Cuál sería la mejor política (s, Q) de cada tanque? Esa búsqueda está en el **Caso de informe** (botón "
-        "en el menú principal), fuera del flujo normal porque prueba 13 políticas."
+        "en el menú principal), fuera del flujo normal porque prueba 14 políticas (13 de la grilla y la del pronóstico)."
     )
 
 
@@ -1296,9 +1299,14 @@ SEGUNDOS_POR_DIA = 5.2 / 365
 
 def etiquetas_grilla() -> list[str]:
     """Nombre de cada punto de la grilla, en el orden de `grilla_politicas_real`."""
-    return ["La cargada hoy (INV-07)"] + [
+    return ["La cargada en esta corrida (INV-07 o la elegida en el menú)"] + [
         f"s = {s:g} · Q = {q:g} días de venta".replace(".", ",") for s in S_EN_DIAS for q in Q_EN_DIAS
-    ]
+    ] + ["Por pronóstico: s con stock de seguridad (pestaña 📈 Pronóstico)"]
+
+
+def puntos_de_busqueda(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
+    """Las 13 políticas de la grilla y, como candidata 14, la del pronóstico (stock de seguridad, P4)."""
+    return grilla_politicas_real(p) + [politica_por_pronostico(p)]
 
 
 def seccion_mejor_politica(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
@@ -1306,7 +1314,8 @@ def seccion_mejor_politica(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     st.subheader("¿Cuál es la mejor política de reposición de cada tanque?")
     st.markdown(
         "Se prueban 13 combinaciones de **punto de pedido (s)** y **cantidad a pedir (Q)** "
-        "—medidas en días de venta de cada producto— y se elige, **tanque por tanque**, la "
+        "—medidas en días de venta de cada producto— **más la política por pronóstico** (s con el stock de "
+        "seguridad que sale del error de la serie real) y se elige, **tanque por tanque**, la "
         "de menor costo mensual:\n\n"
         "**costo = flete de los pedidos + almacenamiento + venta perdida por falta de stock**\n\n"
         "Como cada camión es independiente y cada producto tiene su propio stream de plazos, "
@@ -1324,7 +1333,7 @@ def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     busqueda = st.session_state.get("busqueda")
     if busqueda is not None and busqueda["p"] != p:
         busqueda = None                      # es de otra corrida: no vale
-    total = len(grilla_politicas_real(p))
+    total = len(puntos_de_busqueda(p))
 
     if busqueda is None or busqueda["estado"] != "corriendo":
         c1, c2 = st.columns([1, 2])
@@ -1342,7 +1351,7 @@ def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         if st.button("🔎 Buscar la mejor política de cada tanque", type="primary", key="btn_buscar_pol"):
             st.session_state.busqueda = {
                 "p": p, "replicas": replicas, "semilla": st.session_state.semilla_usada,
-                "puntos": grilla_politicas_real(p), "hechos": [], "inicio": time.time(),
+                "puntos": puntos_de_busqueda(p), "hechos": [], "inicio": time.time(),
                 "estado": "corriendo", "segundos": 0.0,
             }
             st.session_state.costos_real = None
@@ -3178,6 +3187,12 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
             help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
         )
+        politica_pron = st.toggle(
+            "Punto de pedido por pronóstico (stock de seguridad)", value=previo.politica_pronostico,
+            key="aj_pol_pronostico",
+            help="s = lo que se vende mientras viaja el camión + 1,96 × el error del pronóstico de la serie real "
+                 "(pestaña 📈 Pronóstico). Apagado: la política cargada (INV-07, s = 1,5 días de venta).",
+        )
         if len(no_disponibles) == len(opciones_origen):
             st.warning("Si ninguno está disponible, el pedido sale igual de Dock Sud con la demora de redirección.",
                        icon="⚠️")
@@ -3187,7 +3202,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
-        indices_reales=bool(indices_reales),
+        indices_reales=bool(indices_reales), politica_pronostico=bool(politica_pron),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,

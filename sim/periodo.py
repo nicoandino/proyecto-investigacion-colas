@@ -227,6 +227,7 @@ class Ajustes:
     pct_gnc: float = float(valor("DEM-05"))
     calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
     indices_reales: bool = False                      # forma mensual de la serie real (PRO-01, parte 3) en vez del calendario
+    politica_pronostico: bool = False                 # punto de pedido con el stock de seguridad del pronóstico (P4)
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
     eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
     origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
@@ -259,6 +260,8 @@ class Ajustes:
                 f"{len(self.eventos)} eventos aleatorios (semilla {self.semilla_eventos}"
                 + (f", frecuencia × {self.frecuencia_eventos:g}" if self.frecuencia_eventos != 1 else "") + ")"
             )
+        if self.politica_pronostico:
+            salida.append("política de reposición por pronóstico (stock de seguridad)")
         if self.indices_reales:
             salida.append("índices mensuales de la serie real (pronóstico)")
         elif not self.calendario:
@@ -301,6 +304,15 @@ def aplicar_ajustes(
 
         p = replace(p, calendario_demanda=(),
                     estacionalidad=Estacionalidad(tuple(100.0 * i for i in estacionalidad_del_pronostico())))
+    if a.politica_pronostico:
+        # El punto de pedido de cada tanque con el stock de seguridad del pronóstico (sim/pronostico.py, P4).
+        from sim.pronostico import politica_por_pronostico
+
+        politica = politica_por_pronostico(p)
+        p = replace(p, inventario=tuple(
+            replace(i, punto_pedido=politica[i.producto][0], cantidad_pedido=politica[i.producto][1])
+            for i in p.inventario
+        ))
     if a.eventos:
         p = replace(p, eventos=ParametrosEventos(
             activos=tuple(a.eventos), semilla=a.semilla_eventos, frecuencia=a.frecuencia_eventos))

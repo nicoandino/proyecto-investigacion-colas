@@ -455,6 +455,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   Control nuevo (40). `verificar.py` **136/136**; QA `reports/qa_p3_pronostico.py`: 2 gráficos y 2 tablas, el encabezado
   dice la forma elegida, 0 excepciones, 0 errores de consola (se corrigió el orden del eje: los meses del pronóstico
   aparecían a la izquierda).
+- **P4 ✅ (stock de seguridad).** `pronostico.stock_de_seguridad`: **s = D·L + z·σ_día·√L**, con D = litros por día del
+  producto (DEM-01 × su parte ÷ 30), L = plazo medio del camión (INV-01: 1,5 días), z = 1,96 y σ del **error del
+  pronóstico de la serie real** (RMSE de prueba ÷ nivel = **6,94 %**; σ_mes = error × D × 30 y σ_día = σ_mes ÷ √30,
+  supuesto: errores diarios independientes); Q queda la cargada. Resultado: s Súper 6.100 · V-Power 4.200 · G2 6.400 · G3
+  5.000 L (la cargada, INV-07, es 1,5 días de venta: 3.780 · 2.633 · 3.956 · 3.132). Menú 🚚: interruptor **"Punto de
+  pedido por pronóstico"**; Inventario: sección 4 con la cuenta de cada tanque y si la corrida la usa; Caso de informe:
+  la búsqueda prueba **14 políticas** (la del pronóstico es la candidata 14; la grilla de 13 no se tocó porque la usan los
+  escenarios y el control 18). **Efecto, año completo con datos reales:** clientes sin combustible **1.423 → 0**, días con
+  quiebre **113 → 0**, camiones 314 → 320. Control nuevo (41). `verificar.py` **137/137**; QA `reports/qa_p4_stock.py`: 0
+  excepciones, 0 errores de consola (la búsqueda de 30 días termina en 7 s).
 
 ---
 

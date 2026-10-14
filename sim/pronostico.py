@@ -224,3 +224,50 @@ def analizar(horizonte: int = 12) -> Pronostico:
 def estacionalidad_del_pronostico() -> tuple[float, ...]:
     """Los 12 índices estacionales (enero…diciembre) de la serie real, promedio 1: la opción del calendario."""
     return analizar().indices
+
+
+
+# =============================================================================
+# Stock de seguridad (P4): del error del pronóstico al punto de pedido s
+# =============================================================================
+class StockSeguridad(NamedTuple):
+    """La cuenta del punto de pedido por pronóstico de un tanque."""
+
+    producto: str
+    consumo_dia: float      # D: litros por día del producto (DEM-01 × su parte ÷ 30)
+    plazo_dias: float       # L: plazo medio del camión (INV-01), en días
+    error_relativo: float   # RMSE del método elegido ÷ el promedio de los meses de prueba
+    sigma_dia: float        # σ_día = error_relativo × D × 30 ÷ √30
+    seguridad: float        # z · σ_día · √L
+    s: float                # D · L + seguridad (redondeado a 100 L, con lugar para el camión)
+    q: float                # Q de la política cargada (no cambia)
+
+
+def stock_de_seguridad(p, z: float | None = None) -> tuple[StockSeguridad, ...]:
+    """s = D·L + z·σ_día·√L para cada tanque, con σ del error del pronóstico (supuesto: errores diarios independientes).
+
+    La demanda del plazo (D·L) cubre lo que se vende mientras viaja el camión; el stock de seguridad cubre que la
+    demanda real se aparte del pronóstico. El error sale de la serie real (RMSE de prueba del método elegido, en % del
+    nivel) y se lleva a la estación: σ_mes = error × D × 30 y σ_día = σ_mes ÷ √30.
+    """
+    analisis = analizar()
+    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
+    prueba = analisis.reales[-analisis.n_prueba:]
+    error = elegido.errores.rmse / (sum(prueba) / len(prueba))
+    z = float(valor("PRO-03")) if z is None else z
+    parte = {pr.id: pr.pct_litros for pr in p.productos}
+    salida = []
+    for i in p.inventario:
+        d = p.litros_mes / 30.0 * parte[i.producto]
+        largo = i.plazo_entrega.media / 24.0
+        sigma = error * d * 30.0 / math.sqrt(30.0)
+        seguridad = z * sigma * math.sqrt(largo)
+        s = min(round(d * largo + seguridad, -2), i.capacidad - 500.0)
+        q = max(500.0, min(i.cantidad_pedido, i.capacidad - s))
+        salida.append(StockSeguridad(i.producto, d, largo, error, sigma, seguridad, s, q))
+    return tuple(salida)
+
+
+def politica_por_pronostico(p) -> dict[str, tuple[float, float]]:
+    """{producto: (s, Q)} con el stock de seguridad del pronóstico (la Q de la política cargada)."""
+    return {x.producto: (x.s, x.q) for x in stock_de_seguridad(p)}

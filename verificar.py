@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   41. Parte 3, etapa P4: el punto de pedido por pronóstico (s = D·L + z·σ·√L) a mano, con z = 0
+       la demanda del plazo, y la opción del menú lo usa.
    40. Parte 3, etapa P3: con los índices de la serie real el año tiene los mismos litros, repartidos
        por mes según su índice; sin tocar el menú sigue el calendario de temporadas.
    39. Parte 3, etapa P2: métodos de pronóstico contra el práctico (Cable Televisora, Lincoln) y
@@ -2242,6 +2244,43 @@ def main() -> int:
         f"año: {total_neu:,.0f} L sin forma = {total_real:,.0f} L con los índices reales · marzo ÷ junio = "
         f"{litros_mes40(p_real, 3) / litros_mes40(p_real, 6):.3f} = {indices40[2] / indices40[5]:.3f} · "
         "sin tocar el menú sigue el calendario de temporadas",
+    )
+
+    # ------------------------------------------------------------------ 41
+    separador("41. Parte 3, etapa P4: el punto de pedido con el stock de seguridad del pronóstico")
+    import math as _m41
+
+    base41 = con_periodo(ParametrosSimulacion().datos_reales(), _anio40())
+    calc41 = pron.stock_de_seguridad(base41)
+    cero41 = pron.stock_de_seguridad(base41, z=0.0)
+    analisis41 = pron.analizar()
+    elegido41 = next(a for a in analisis41.ajustes if a.metodo == analisis41.elegido)
+    error41 = elegido41.errores.rmse / (sum(analisis41.reales[-12:]) / 12)
+    parte41 = {pr.id: pr.pct_litros for pr in base41.productos}
+    a_mano = []
+    for i in base41.inventario:
+        d = base41.litros_mes / 30 * parte41[i.producto]
+        largo = i.plazo_entrega.media / 24
+        a_mano.append(min(round(d * largo + 1.96 * error41 * d * 30 / _m41.sqrt(30) * _m41.sqrt(largo), -2),
+                          i.capacidad - 500))
+    p_carg, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes())
+    p_pron, _ = aplicar_ajustes(base41, ParametrosEconomicos(), Ajustes(politica_pronostico=True))
+    r_carg, _ = correr_replica(p_carg, semilla=1)
+    r_pron, _ = correr_replica(p_pron, semilla=1)
+    t_carg, t_pron = dict(r_carg.totales), dict(r_pron.totales)
+    controlar(
+        [x.s for x in calc41] == a_mano
+        and all(x.s == min(round(x.consumo_dia * x.plazo_dias, -2), i.capacidad - 500)
+                for x, i in zip(cero41, base41.inventario))
+        and [i.punto_pedido for i in p_pron.inventario] == [x.s for x in calc41]
+        and [i.cantidad_pedido for i in p_pron.inventario] == [i.cantidad_pedido for i in base41.inventario]
+        and t_pron["perdidos_sin_combustible"] <= t_carg["perdidos_sin_combustible"]
+        and t_pron["llegadas"] == t_carg["llegadas"],
+        "s = D·L + z·σ_día·√L a mano; con z = 0 queda la demanda del plazo; con la opción del menú la corrida la usa",
+        f"error del pronóstico {100 * error41:.2f} % · s (L): " + " · ".join(f"{x.producto} {x.s:,.0f}" for x in calc41)
+        + f" · año completo: sin combustible {t_carg['perdidos_sin_combustible']} → {t_pron['perdidos_sin_combustible']}, "
+        f"días con quiebre {t_carg['dias_con_quiebre']} → {t_pron['dias_con_quiebre']}, camiones "
+        f"{sum(dict(r_carg.pedidos_total).values())} → {sum(dict(r_pron.pedidos_total).values())}",
     )
 
     # ------------------------------------------------------------------

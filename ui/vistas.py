@@ -822,3 +822,35 @@ def pestania_pronostico(p: ParametrosSimulacion) -> None:
         "la estación sigue la misma forma que el conjunto de las Shell de Mendoza.",
         "Fuente: Secretaría de Energía, datos abiertos (nota 12 en research_notes; PRO-01 a PRO-04 en Datos y fuentes).",
     ])
+
+
+
+def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
+    """Inventario: la cuenta del punto de pedido con el stock de seguridad del pronóstico (P4)."""
+    from sim.pronostico import stock_de_seguridad
+
+    filas_calc = stock_de_seguridad(p)
+    nombres = _nombres(p)
+    en_uso = all(abs(i.punto_pedido - x.s) < 1e-6 for i, x in zip(p.inventario, filas_calc))
+    st.markdown("##### 4. El punto de pedido con el pronóstico (stock de seguridad)")
+    st.caption(
+        "**s = D · L + z · σ_día · √L**: lo que se vende mientras viaja el camión (D·L) más un colchón por el error del "
+        "pronóstico. El error sale de la **serie real** (pestaña 📈 Pronóstico): el RMSE del método elegido en los meses "
+        f"de prueba es el **{dec(100 * filas_calc[0].error_relativo)} %** de lo que se vende en un mes; se lleva a cada "
+        "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
+        "z = 1,96 (95 %). La Q no cambia. "
+        + ("**Esta corrida usa esta política** (elegida en el menú 🚚)." if en_uso else
+           "Esta corrida **no** la usa: se prende en el menú 🚚 Abastecimiento, y en el Caso de informe compite con las "
+           "otras 13 políticas.")
+    )
+    filas = [{
+        "Tanque": nombres[x.producto],
+        "D (L por día)": ent(x.consumo_dia),
+        "L (días)": dec(x.plazo_dias, 2),
+        "D · L": f"{ent(x.consumo_dia * x.plazo_dias)} L",
+        "σ por día": f"{ent(x.sigma_dia)} L",
+        "Stock de seguridad z·σ·√L": f"{ent(x.seguridad)} L",
+        "s por pronóstico": f"{ent(x.s)} L",
+        "s cargada": f"{ent(i.punto_pedido)} L",
+    } for x, i in zip(filas_calc, p.inventario)]
+    st.dataframe(pd.DataFrame(filas), hide_index=True)

@@ -268,6 +268,8 @@ class Indicadores:
         self.pedidos: list[PedidoCamion] = []      # cada camión pedido (día, plazo, demora de ruta)
         self.eventos: tuple = ()                   # calendario de eventos aleatorios de la corrida (parte 4)
         self.perdidos_evento: list[int] = []       # clientes perdidos mientras duraba cada evento
+        self.extra_evento: list[float] = []        # lo que cada evento sumó o sacó (ver EventoOcurrido.extra)
+        self.eventos_dinamicos: list = []          # roturas del camión (EVT-11), sorteadas en cada viaje
         self.capacidad_surtidores = p.surtidores
         self.capacidad_cajas = p.cajas
 

@@ -46,7 +46,7 @@ from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion, Tr
 from sim.distribuciones import Aleatorio, AleatorioDeterminista
 from sim.datos import valor
 from sim.estadisticas import Indicadores, PedidoCamion
-from sim.eventos import MECANISMO, calendario
+from sim.eventos import MECANISMO, EventoOcurrido, aumento_de_llegadas, calendario
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
 from sim.red import demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
@@ -115,6 +115,11 @@ class EstacionDeServicio:
         self.caras_fuera: dict[str, int] = {}
         self.compresores_fuera = 0
         self.extra_cobro, self.factor_caja = 0.0, 1.0
+        self.extra_evento: list[float] = []         # ver EventoOcurrido.extra
+        self.cupos: list[int] = []                  # eventos de faltante con cupo en curso
+        self.avenidas: list[int] = []               # cortes de la avenida en curso
+        self.eventos_dinamicos: list[EventoOcurrido] = []   # roturas del camión (se sortean en cada viaje)
+        self.az_eventos = Aleatorio(p.eventos.semilla) if p.eventos.activos else None
 
         if p.estacion_real:
             self._montar_real()
@@ -237,8 +242,11 @@ class EstacionDeServicio:
         # Eventos aleatorios (parte 4): el calendario se sortea antes de correr, con su propia semilla.
         self.eventos = calendario(self.p)
         self.perdidos_evento = [0] * len(self.eventos)
+        self.extra_evento = [0.0] * len(self.eventos)
         self.ind.eventos = self.eventos
         self.ind.perdidos_evento = self.perdidos_evento
+        self.ind.extra_evento = self.extra_evento
+        self.ind.eventos_dinamicos = self.eventos_dinamicos
         self.extra_cobro, self.factor_caja = valor("EVT-08")[3:5]
         for i, ev in enumerate(self.eventos):
             self.env.process(self._correr_evento(i, ev))
@@ -286,12 +294,18 @@ class EstacionDeServicio:
         """Espera el inicio del evento, lo aplica mientras dura y lo deshace."""
         if ev.inicio >= self.p.duracion:
             return
+        if ev.id == "EVT-09" and ev.inicio >= MINUTOS_POR_DIA:
+            # El día anterior al aumento (la gente se adelanta): se le cuentan los clientes perdidos ese día.
+            desde = ev.inicio - MINUTOS_POR_DIA
+            if desde > self.env.now:
+                yield self.env.timeout(desde - self.env.now)
+            yield from self._durante(i, "masivo", ev.inicio, ev)
         if ev.inicio > self.env.now:
             yield self.env.timeout(ev.inicio - self.env.now)
         if self.traza is not None:
             self.traza.eventos.append(("evento", self.env.now, ev.id, ev.fin, ev.objetivo, ev.detalle))
         mecanismo = MECANISMO.get(ev.id)
-        if mecanismo is None:                 # la licencia cubierta: no cambia el servicio, sólo el costo
+        if mecanismo in (None, "precio"):     # la licencia cubierta y el precio: no cambian el servicio
             return
         if mecanismo == "playero_diario":     # licencia sin reemplazo: el mismo turno, todos los días
             largo = (ev.fin - ev.inicio) - (int(ev.valor) - 1) * MINUTOS_POR_DIA
@@ -326,6 +340,10 @@ class EstacionDeServicio:
             self.compresores_fuera += 1
         elif mecanismo == "cobro":
             self.cobro_lento += 1
+        elif mecanismo == "cupo":
+            self.cupos.append(i)
+        elif mecanismo == "avenida":
+            self.avenidas.append(i)
         elif mecanismo == "cara":
             grupo = ev.objetivo
             if self.cola_recurso:
@@ -356,6 +374,10 @@ class EstacionDeServicio:
             self.compresores_fuera -= 1
         elif mecanismo == "cobro":
             self.cobro_lento -= 1
+        elif mecanismo == "cupo":
+            self.cupos.remove(i)
+        elif mecanismo == "avenida":
+            self.avenidas.remove(i)
         elif mecanismo == "cara" and carril is not None:
             self.carriles[ev.objetivo][carril] = None
             self.caras_fuera[ev.objetivo] -= 1
@@ -460,6 +482,8 @@ class EstacionDeServicio:
             else:
                 autos, numero = self.az.empirica(self.p.demanda, "demanda")
 
+            if self.eventos:
+                autos = self._autos_con_eventos(dia - 1, autos)
             self.autos_del_dia = autos
             self.tasas_hora = self.p.perfil.tasas_por_hora(autos)
             self.numero_aleatorio_dia = numero
@@ -521,6 +545,28 @@ class EstacionDeServicio:
             if dia == self.p.dias_calentamiento:
                 self.ind.reiniciar(self.env.now)
 
+    def _autos_con_eventos(self, d: int, autos: int) -> int:
+        """Los clientes del día d con los eventos que traen más gente (EVT-09 el día anterior, EVT-13)."""
+        total = autos
+        for i, ev in enumerate(self.eventos):
+            aumento = aumento_de_llegadas(ev, d)
+            if aumento:
+                extra = round(autos * aumento)
+                self.extra_evento[i] += extra
+                total += extra
+        return total
+
+    def _no_llega(self) -> bool:
+        """Corte de la avenida (EVT-12): ¿este cliente no puede entrar? (llega la fracción del evento)."""
+        fraccion = 1.0
+        for i in self.avenidas:
+            fraccion *= self.eventos[i].valor
+        if self.az_eventos.uniforme("evento_12_llegadas") < fraccion:
+            return False
+        for i in self.avenidas:
+            self.extra_evento[i] += 1
+        return True
+
     def _conteo_gnc(self) -> tuple[int, int, int]:
         """(atendidos GNC, migrados a nafta, perdidos por el corte), acumulados."""
         c = self.ind.c_total
@@ -563,9 +609,11 @@ class EstacionDeServicio:
             yield self.env.timeout(demora)
 
             contador += 1
-            self.autos_llegados_hoy += 1
             ahora = self.env.now
             auto = self._crear_auto(contador, ahora)
+            if self.avenidas and self._no_llega():
+                continue
+            self.autos_llegados_hoy += 1
             self.env.process(self.atender(auto))
 
     def _llegadas_deterministas(self, autos: int):
@@ -588,8 +636,10 @@ class EstacionDeServicio:
                 if instante > self.env.now:
                     yield self.env.timeout(instante - self.env.now)
                 self._contador_det += 1
-                self.autos_llegados_hoy += 1
                 auto = self._crear_auto(self._contador_det, self.env.now)
+                if self.avenidas and self._no_llega():
+                    continue
+                self.autos_llegados_hoy += 1
                 self.env.process(self.atender(auto))
 
     def _crear_auto(self, contador: int, ahora: float) -> Auto:
@@ -890,6 +940,8 @@ class EstacionDeServicio:
         """Emite un pedido por producto y espera el plazo de entrega del camión."""
         info = self.info_inventario[producto]
         cantidad = info.cantidad_pedido
+        if self.cupos:
+            cantidad *= valor("EVT-10")[4]     # EVT-10: con faltante el camión trae menos
         self.en_camino[producto] += cantidad
         self.pedidos_en_camino[producto] += 1
         self.ind.contar("pedidos_emitidos")
@@ -902,6 +954,8 @@ class EstacionDeServicio:
             desde = (self.p.crisis_dia - 1) * MINUTOS_POR_DIA
             if desde <= self.env.now < desde + self.p.crisis_dias * MINUTOS_POR_DIA:
                 plazo_base = Triangular(*(h * 60.0 for h in self.p.crisis))
+        if self.cupos:
+            plazo_base = Triangular(*(h * 60.0 for h in valor("INV-09")))   # EVT-10: plazo de crisis
         plazo = self.az.triangular(plazo_base, f"entrega_{producto}")
         # Cortes de ruta (Fase 5): el plazo base ya incluye el viaje normal; si el camión
         # encuentra un corte, se le SUMA la demora (desvío o espera, la menor).
@@ -926,6 +980,18 @@ class EstacionDeServicio:
                 self.ind.contar("viajes_demorados")
                 self.ind.demora_ruta.agregar(demora / 60.0)
         plazo += demora
+        if self.az_eventos is not None and "EVT-11" in self.p.eventos.activos:
+            prob, h_min, h_max = valor("EVT-11")
+            if self.az_eventos.bernoulli(min(1.0, prob * self.p.eventos.frecuencia), "evento_11_viaje"):
+                horas = h_min + self.az_eventos.uniforme("evento_11_viaje") * (h_max - h_min)
+                plazo += horas * 60.0
+                nombre = next(pr.nombre for pr in self.p.productos if pr.id == producto)
+                texto = (f"el camión de {nombre} se rompe en la ruta: llega {horas:.0f} h tarde "
+                         f"(día {int((self.env.now + plazo) // MINUTOS_POR_DIA) + 1})")
+                self.eventos_dinamicos.append(EventoOcurrido(
+                    "EVT-11", self.env.now, self.env.now + plazo, producto, horas, texto, 0, horas))
+                if self.traza is not None:
+                    self.traza.eventos.append(("evento", self.env.now, "EVT-11", self.env.now + plazo, producto, texto))
         self.ind.pedidos.append(
             PedidoCamion(producto, self.env.now, self.env.now + plazo, cantidad, demora, causa, origen, redirigido)
         )
@@ -1014,6 +1080,14 @@ class EstacionDeServicio:
         if self.es_real and auto.producto == "gnc" and self.gnc_cortado == 1:
             if not self._gnc_al_llegar_con_corte(auto):
                 return
+
+        # ---------- Faltante con cupo (EVT-10): carga como máximo el cupo ----------
+        if self.cupos and auto.producto != "gnc":
+            cupo = min(self.eventos[i].valor for i in self.cupos)
+            if auto.litros > cupo:
+                for i in self.cupos:
+                    self.extra_evento[i] += auto.litros - cupo
+                auto.litros = cupo
 
         # ---------- ¿Hay combustible para atenderlo? ----------
         if not self.hay_combustible(auto):

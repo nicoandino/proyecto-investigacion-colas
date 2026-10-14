@@ -552,3 +552,14 @@ Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico
   conservación de clientes). `verificar.py` **131/131**; la app corre igual (QA de E0: 0 excepciones, 0 errores de consola).
   Ejemplo, enero con datos reales y los eventos de E1 (semilla 1): 10 eventos (3 cortes de luz, 1 cara de GNC 23 h, 1
   licencia sin reemplazo de 9 días en la mañana, 3 faltas…); atendidos 7.682 → 7.284.
+- **E2 ✅ (precio, abastecimiento y demanda; costos).** Eventos 9–13 en el calendario y el motor: **aumento de precio**
+  (+10 % con el mismo margen en $/L; el día anterior +20 % de clientes), **faltante con cupo** (máx. 30 L por cliente; los
+  camiones pedidos esos días traen la mitad y tardan el plazo de crisis INV-09), **rotura del camión** (se sortea en cada
+  viaje, stream `evento_11_viaje`: 12–48 h más), **corte de la avenida** (cada cliente entra con probabilidad 0,5, stream
+  `evento_12_llegadas`; los que no entran no son llegadas) y **evento masivo** (+30 %, el piso de DEM-09).
+  `EventoOcurrido.extra` guarda lo que hizo cada uno (clientes de más o que no llegaron, litros recortados, horas de
+  demora). **Economía:** `costo_eventos` (horas extra de las licencias cubiertas con el recargo de la LCT art. 201 y la
+  visita del técnico, sin dato = 0) entra en `costo_total`; la venta perdida sigue aparte. Control nuevo (37: llegadas =
+  base + de más − no llegaron; cupo ⇒ ≤ 30 L por carga y camiones con la mitad y ≥ 72 h; cada rotura es un pedido 12–48 h
+  más tarde; costo de las horas extra calculado a mano). `verificar.py` **132/132**. Ejemplo, enero con los 14 eventos y
+  frecuencia × 2 (semilla 1): 27 eventos, llegadas 7.791 → 7.988, atendidos 7.682 → 7.053, horas extra $403.200/mes.

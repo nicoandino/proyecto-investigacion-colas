@@ -73,7 +73,9 @@ MECANISMO = {
     "EVT-01": "playero", "EVT-03": "playero", "EVT-04": "playero_diario",
     "EVT-05": "cara", "EVT-06": "compresor", "EVT-07": "parada", "EVT-14": "parada",
     "EVT-08": "cobro",
+    "EVT-09": "precio", "EVT-10": "cupo", "EVT-12": "avenida", "EVT-13": "masivo",
 }
+#: La rotura del camión (EVT-11) no tiene calendario: se sortea en cada viaje, mientras corre la simulación.
 
 #: Turnos de PER-01: (nombre, hora de inicio, hora de fin); la noche termina a las 06 del día siguiente.
 TURNOS = (("noche", 22, 30), ("mañana", 6, 14), ("tarde", 14, 22))
@@ -220,7 +222,79 @@ def _eventos_del_dia(id_: str, az: Aleatorio, stream: str, p: ParametrosSimulaci
         return [Evento(id_, t, t + horas * 60.0, "", horas,
                        f"se cae el cobro con tarjeta a las {_hora(t)} durante {horas:.1f} h: cada carga tarda "
                        f"{extra:g} min más y la caja × {factor:g}")]
+    if id_ == "EVT-09":
+        _, aumento, adelanto = valor("EVT-09")
+        antes = ("el día anterior llegaron " + f"{100 * adelanto:.0f} % más clientes (se adelantaron a cargar)"
+                 if t0 > 0 else "no hay día anterior en el período")
+        return [Evento(id_, t0, float(p.duracion), "", aumento,
+                       f"nafta y diésel suben {100 * aumento:.0f} % desde hoy, con el mismo margen por litro; {antes}")]
+    if id_ == "EVT-10":
+        _, d_min, d_max, cupo, fraccion = valor("EVT-10")
+        dias = _entero(az, stream, int(d_min), int(d_max))
+        return [Evento(id_, t0, t0 + dias * MINUTOS_POR_DIA, "", cupo,
+                       f"faltante de combustible durante {dias} días: cupo de {cupo:g} L por cliente; los camiones "
+                       f"pedidos tardan el plazo de crisis (INV-09) y traen {100 * fraccion:.0f} %")]
+    if id_ == "EVT-12":
+        _, h_min, h_max, fraccion, desde, hasta = valor("EVT-12")
+        t = t0 + _entre(az, stream, desde, hasta) * 60.0
+        horas = _entre(az, stream, h_min, h_max)
+        return [Evento(id_, t, t + horas * 60.0, "", fraccion,
+                       f"corte de la avenida a las {_hora(t)} durante {horas:.1f} h: llega el "
+                       f"{100 * fraccion:.0f} % de los clientes")]
+    if id_ == "EVT-13":
+        _, d_min, d_max, aumento = valor("EVT-13")
+        dias = _entero(az, stream, int(d_min), int(d_max))
+        return [Evento(id_, t0, t0 + dias * MINUTOS_POR_DIA, "", aumento,
+                       f"evento masivo en San Rafael durante {dias} día{'s' if dias > 1 else ''}: "
+                       f"{100 * aumento:.0f} % más clientes")]
     return []
+
+
+def aumento_de_llegadas(ev: Evento, d: int) -> float:
+    """Cuánto sube (fracción) la cantidad de clientes del día d (0 = el primero) por este evento."""
+    dia_inicio = int(ev.inicio // MINUTOS_POR_DIA)
+    if ev.id == "EVT-13" and dia_inicio <= d < int(round(ev.fin / MINUTOS_POR_DIA)):
+        return ev.valor
+    if ev.id == "EVT-09" and dia_inicio == d + 1:
+        return valor("EVT-09")[2]                  # el día anterior al aumento la gente se adelanta
+    return 0.0
+
+
+def horas_extra(ev, inicio: date, dias: int) -> tuple[float, float]:
+    """(horas al 50 %, horas al 100 %) de una licencia cubierta (EVT-02), dentro del período.
+
+    Un turno de 8 h por cada día de licencia; el domingo va al 100 % y los demás días al 50 % (LCT art. 201;
+    el sábado después de las 13 y los feriados se simplifican).
+    """
+    al_50 = al_100 = 0.0
+    primero = int(ev.inicio // MINUTOS_POR_DIA)
+    for k in range(int(ev.valor)):
+        d = primero + k
+        if d >= dias:
+            break
+        if (inicio + timedelta(days=d)).weekday() == 6:
+            al_100 += 8.0
+        else:
+            al_50 += 8.0
+    return al_50, al_100
+
+
+def costo_de_eventos(eventos, p: ParametrosSimulacion, sueldo_playero_mensual: float) -> float:
+    """Pesos que cuestan los eventos en el período: horas extra de las licencias cubiertas y visitas del técnico.
+
+    La venta perdida NO entra acá (es costo de oportunidad y ya está en la venta perdida por motivo).
+    """
+    valor_hora = sueldo_playero_mensual / valor("EVT-15")
+    recargo_50, recargo_100 = valor("EVT-02")[3:5]
+    inicio = date(ANO_REFERENCIA, *p.fecha_inicio)
+    total = 0.0
+    for ev in eventos:
+        if ev.id == "EVT-02":
+            al_50, al_100 = horas_extra(ev, inicio, p.dias)
+            total += valor_hora * (al_50 * (1 + recargo_50) + al_100 * (1 + recargo_100))
+        elif ev.id == "EVT-05":
+            total += valor("EVT-05")[3]
+    return total
 
 
 class EventoOcurrido(NamedTuple):
@@ -233,3 +307,5 @@ class EventoOcurrido(NamedTuple):
     valor: float
     detalle: str
     perdidos: int      # clientes que se fueron sin cargar mientras duraba
+    extra: float = 0.0  # según el evento: clientes de más (9, 13), que no llegaron (12), litros recortados por
+                        # el cupo (10), horas de demora del camión (11)

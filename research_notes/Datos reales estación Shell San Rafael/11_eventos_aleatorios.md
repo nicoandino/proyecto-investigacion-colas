@@ -36,6 +36,20 @@ o su efecto, se usa:
 | Compresor fuera | EVT-06 | Una reserva en el recurso de compresores |
 | Cobro lento | EVT-08 | Cada carga tarda 1 min más y la caja × 1,5 |
 | Sin cambio de servicio | EVT-02 | Sólo el costo de las horas extra |
+| Más clientes en el día | EVT-09 (el día anterior al aumento, +20 %), EVT-13 (+30 % los días del evento) | Se multiplica la cantidad de clientes del día (redondeada) |
+| Precio | EVT-09 | Nafta y diésel +10 % desde ese día con el **mismo margen en $/L** (pedido de Nico): no cambia la ganancia |
+| Cupo | EVT-10 | Cada cliente de nafta o diésel carga como máximo 30 L; los camiones pedidos esos días traen la mitad y tardan el plazo de crisis INV-09 (72–84–96 h) |
+| Rotura del camión | EVT-11 | Se sortea en **cada viaje** (5 %): el pedido llega de 12 a 48 h más tarde |
+| Corte de la avenida | EVT-12 | Cada cliente que llega mientras dura entra con probabilidad 0,5 (stream propio); los que no entran no cuentan como llegadas |
+
+## 4. Costo de los eventos (E2)
+
+- **Horas extra** (EVT-02): un turno de 8 h por cada día de licencia dentro del período; valor de la hora = sueldo del
+  playero (ECO-04) ÷ 200 h (EVT-15); recargo 50 % (lunes a sábado) o 100 % (domingo). Se suma a los **costos** de
+  Economía como "costo de los eventos" (total del período ÷ días medidos × días del mes, como el resto).
+- **Visita del técnico** (EVT-05): sin dato, 0 por defecto (editable en el Registro).
+- La **venta perdida** de los clientes que se van durante un evento ya está en la venta perdida por motivo (costo de
+  oportunidad): no se vuelve a sumar.
 
 A cada evento se le cuentan los **clientes que se fueron sin cargar mientras duraba** (si dos eventos se superponen,
 el cliente se le cuenta a los dos).

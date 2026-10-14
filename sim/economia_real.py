@@ -22,6 +22,7 @@ from dataclasses import dataclass, fields
 
 from sim.config import ParametrosEconomicos, ParametrosSimulacion, dias_del_mes
 from sim.escenarios import es_significativa
+from sim.eventos import costo_de_eventos
 from sim.red import camino_mas_corto
 from sim.runner import ResultadoEscenario, ResultadoReplica, Resumen, resumen_de
 
@@ -68,6 +69,8 @@ class EconomiaMensual:
     venta_perdida_total: float
     # Por producto (no se resume entre réplicas; se promedia con `ingreso_por_producto`)
     ingreso_por_producto: tuple[tuple[str, float], ...] = ()
+    # Parte 4: lo que cuestan los eventos aleatorios (horas extra, técnico); 0 sin eventos. Está DENTRO de costo_total.
+    costo_eventos: float = 0.0
 
 
 #: Campos numéricos de `EconomiaMensual` (todos menos los no numéricos).
@@ -136,7 +139,12 @@ def economia_mensual(
     personal_encargado = eco.puestos_encargado * factor * eco.sueldo_encargado_mensual
     personal_tienda = eco.puestos_tienda * factor * eco.sueldo_cajero_mensual
     personal_total = personal_playeros + personal_cajeros + personal_encargado + personal_tienda
-    costo_total = flete + almacenamiento + personal_total
+    # Eventos aleatorios: el total del período llevado a un mes (como todo lo demás, por día × días del mes).
+    costo_eventos = (
+        costo_de_eventos(r.eventos, p, eco.sueldo_playero_mensual) / max(r.dias_medidos, 1) * dias
+        if r.eventos else 0.0
+    )
+    costo_total = flete + almacenamiento + personal_total + costo_eventos
 
     # --- Venta perdida por motivo (costo de oportunidad): cliente líquido típico =
     # litros medios × margen + probabilidad de compra × margen del minimarket.
@@ -184,6 +192,7 @@ def economia_mensual(
         vp_abandono_caja=perdidas["abandono_caja"],
         venta_perdida_total=sum(perdidas.values()),
         ingreso_por_producto=por_producto,
+        costo_eventos=costo_eventos,
     )
 
 

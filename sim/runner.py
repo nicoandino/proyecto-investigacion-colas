@@ -375,10 +375,13 @@ def correr_replica(
         ) if p.estacion_real and p.red is not None and (
             p.red.origenes_alternativos or p.red.origenes_no_disponibles
         ) else (),   # sin orígenes alternativos todos salen del habitual: vacío (la corrida neutra no cambia)
-        eventos=tuple(
-            EventoOcurrido(*ev, perdidos=n)
-            for ev, n in zip(ind.eventos, ind.perdidos_evento) if ev.inicio < p.duracion
-        ),
+        eventos=tuple(sorted(
+            [
+                EventoOcurrido(*ev, perdidos=n, extra=x)
+                for ev, n, x in zip(ind.eventos, ind.perdidos_evento, ind.extra_evento) if ev.inicio < p.duracion
+            ] + list(ind.eventos_dinamicos),
+            key=lambda e: (e.inicio, e.id),
+        )),
     )
     return resultado, traza
 

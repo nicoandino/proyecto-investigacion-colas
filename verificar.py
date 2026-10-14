@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   37. Parte 4, etapa E2: llegadas = base + los de más − los que no llegaron; cupo de 30 L; camiones
+       con la mitad y plazo de crisis; roturas de 12–48 h; costo de las horas extra calculado a mano.
    36. Parte 4, etapa E1: eventos de personal y equipos (mismo calendario con la misma semilla,
        prender uno no corre a los otros, cada mecanismo hace lo que dice, conservación de clientes).
    35. Parte 4, etapa E0: el GNC lo carga un playero (autos cargando = playeros ocupados en cada
@@ -1329,7 +1331,7 @@ def main() -> int:
     def cierra_cuentas(e) -> bool:
         return (
             abs(e.ingreso_total - (e.ingreso_combustible + e.ingreso_gnc + e.ingreso_minimarket)) < 1e-6
-            and abs(e.costo_total - (e.flete + e.almacenamiento + e.personal_total)) < 1e-6
+            and abs(e.costo_total - (e.flete + e.almacenamiento + e.personal_total + e.costo_eventos)) < 1e-6
             and abs(e.personal_total - (e.personal_playeros + e.personal_cajeros
                                         + e.personal_encargado + e.personal_tienda)) < 1e-6
             and abs(e.margen_operativo - (e.ingreso_total - e.costo_total)) < 1e-6
@@ -2099,6 +2101,57 @@ def main() -> int:
         f"caras, {len(compresor)} compresores · todos ×10: {len(rE.eventos)} eventos, atendidos "
         f"{dict(r_base.totales)['atendidos']} → {tE['atendidos']}, {sum(e.perdidos for e in rE.eventos)} clientes perdidos "
         f"durante los eventos",
+    )
+
+    # ------------------------------------------------------------------ 37
+    separador("37. Parte 4, etapa E2: precio, abastecimiento y demanda; costo de los eventos")
+    from datetime import date as _date, timedelta as _td
+    from sim.economia_real import economia_mensual
+
+    # Llegadas: base + los de más (aumento de precio el día anterior, evento masivo) − los que no llegaron (avenida)
+    r37, _ = correr_replica(con_ev(("EVT-09", "EVT-12", "EVT-13"), frecuencia=3.0), semilla=1)
+    mas = sum(e.extra for e in r37.eventos if e.id in ("EVT-09", "EVT-13"))
+    menos = sum(e.extra for e in r37.eventos if e.id == "EVT-12")
+    ids37 = {e.id for e in r37.eventos}
+    llegadas_ok = dict(r37.totales)["llegadas"] == dict(r_base.totales)["llegadas"] + mas - menos
+    # Faltante con cupo todo el mes: nadie carga más de 30 L; los camiones traen la mitad y tardan el plazo de crisis
+    p_cupo = con_ev(("EVT-10",), frecuencia=365.0)
+    ind_cupo, _ = simular(p_cupo, semilla=1)
+    cupo = _valor("EVT-10")[3]
+    liquidos = [pr.id for pr in p_cupo.productos if not pr.es_gnc]
+    vendidos = sum(ind_cupo.c_producto[x].litros_vendidos for x in liquidos)
+    atendidos_l = sum(ind_cupo.c_producto[x].atendidos for x in liquidos)
+    q_por = {i.producto: i.cantidad_pedido for i in p_cupo.inventario}
+    cupo_ok = (vendidos <= cupo * atendidos_l + 1e-6 and ind_cupo.pedidos
+               and all(abs(x.litros - q_por[x.producto] * _valor("EVT-10")[4]) < 1e-6
+                       and x.t_llegada - x.t_pedido >= _valor("INV-09")[0] * 60.0 - 1e-6 for x in ind_cupo.pedidos))
+    # Rotura del camión: cada rotura es un pedido que llega entre 12 y 48 h más tarde
+    p_rot = con_ev(("EVT-11",), frecuencia=4.0)
+    ind_rot, _ = simular(p_rot, semilla=1)
+    r_rot, _ = correr_replica(p_rot, semilla=1)
+    roturas = [e for e in r_rot.eventos if e.id == "EVT-11"]
+    rotura_ok = roturas and all(
+        12.0 <= e.extra <= 48.0 and any(abs(x.t_pedido - e.inicio) < 1e-9 and abs(x.t_llegada - e.fin) < 1e-6
+                                         for x in ind_rot.pedidos) for e in roturas)
+    # Costo: horas extra de las licencias cubiertas, calculadas a mano (8 h por día; domingo 100 %, el resto 50 %)
+    eco37 = ParametrosEconomicos()
+    p_lic = con_ev(("EVT-02",), frecuencia=20.0)
+    r_lic, _ = correr_replica(p_lic, semilla=1)
+    horas = [(8.0, (_date(2026, 1, 1) + _td(days=int(e.inicio // 1440) + k)).weekday() == 6)
+             for e in r_lic.eventos for k in range(int(e.valor)) if int(e.inicio // 1440) + k < p_lic.dias]
+    valor_hora = eco37.sueldo_playero_mensual / _valor("EVT-15")
+    a_mano = sum(h * valor_hora * (2.0 if domingo else 1.5) for h, domingo in horas) * 31 / r_lic.dias_medidos
+    e_lic = economia_mensual(r_lic, p_lic, eco37)
+    costo_ok = (horas and abs(e_lic.costo_eventos - a_mano) < 1e-6
+                and abs(e_lic.costo_total - (e_lic.flete + e_lic.almacenamiento + e_lic.personal_total + e_lic.costo_eventos)) < 1e-6
+                and tuple(r_lic.totales) == tuple(r_base.totales))
+    controlar(
+        llegadas_ok and {"EVT-09", "EVT-12", "EVT-13"} <= ids37 and cupo_ok and rotura_ok and costo_ok,
+        "Precio, abastecimiento y demanda hacen lo que dicen, y el costo de los eventos es el de las horas extra",
+        f"llegadas {dict(r_base.totales)['llegadas']} + {mas:.0f} − {menos:.0f} = {dict(r37.totales)['llegadas']} · cupo: "
+        f"{vendidos / max(atendidos_l, 1):.1f} L por carga, {len(ind_cupo.pedidos)} camiones con la mitad · "
+        f"{len(roturas)} roturas · {len(horas)} turnos de horas extra = ${e_lic.costo_eventos:,.0f}/mes "
+        f"(la licencia cubierta no cambia el servicio)",
     )
 
     # ------------------------------------------------------------------

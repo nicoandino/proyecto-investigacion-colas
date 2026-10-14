@@ -1,8 +1,8 @@
 """Simulador de Estación de Servicio — Investigación Operativa.
 
-Interfaz del simulador: se configuran los parámetros en la barra lateral, se corre la
-simulación y se ven la animación, los indicadores, la demanda Monte Carlo, el inventario,
-la comparación de escenarios, el análisis económico y la conclusión.
+Interfaz del simulador: un menú inicial (qué período, ajustes, eventos aleatorios) → la simulación con los datos
+reales → los resultados en pestañas (animación, indicadores, demanda, pronóstico, inventario, red y rutas, GNC,
+economía, conclusión), con "Editar simulación", el escenario único y el caso de informe aparte.
 
 Para ejecutar:
     .venv/Scripts/streamlit run app.py
@@ -19,25 +19,14 @@ import streamlit as st
 import streamlit.components.v1 as componentes
 
 from sim.config import (
-    DEMANDA_TIPICA,
-    ESTACIONALIDAD_LEVE,
-    ESTACIONALIDAD_NEUTRA,
-    ESTACIONALIDAD_PROXY,
     ANO_REFERENCIA,
     DemandaDiaria,
     ParametrosEconomicos,
     ParametrosEventos,
-    ParametrosGNC,
     ParametrosSimulacion,
-    ParametrosTanque,
-    Triangular,
     dias_del_mes,
-    dias_y_fecha,
-    inventario_real,
-    turnos_de,
 )
 from sim.economia_real import (
-    MOTIVOS as MOTIVOS_ECO,
     avisos as avisos_economia,
     conclusiones as conclusiones_economia,
     decision_s6,
@@ -77,11 +66,9 @@ from sim.sensibilidad import (
     listado_registro,
 )
 from sim.escenarios import (
-    ESTACIONES,
     MESES,
     catalogo,
     correr_catalogo,
-    correr_estaciones,
     diferencia_pareada,
     es_significativa,
     para_mes,
@@ -95,11 +82,8 @@ from sim.gnc import calendario_de_episodios, episodios_con_fechas
 from sim.economia import (
     ahorro_por_producto,
     analizar_escenarios,
-    analizar_politicas,
     analizar_politicas_real,
-    mejor_politica,
     pesos,
-    recomendacion,
 )
 from sim.runner import (
     Q_EN_DIAS,
@@ -107,20 +91,15 @@ from sim.runner import (
     PuntoBarrido,
     ResultadoBarridoReal,
     ResultadoEscenario,
-    barrer_politicas,
     buscar,
-    con_politica,
     con_politicas,
-    correr_escenarios,
     correr_estacion_real,
     correr_replica,
     correr_replicas,
     grilla_politicas_real,
-    grilla_sugerida,
     promedio_por_producto,
 )
 from sim.red import (
-    ETIQUETA_ESCENARIO,
     NOMBRE_NODO,
     camino_mas_corto,
     demora_por_corte,
@@ -132,24 +111,14 @@ from sim.red import (
 from ui import animacion, graficos, graficos_escenarios, graficos_gnc, graficos_red, vistas
 from ui.datos_ui import (
     csv_registro,
-    insignia_html,
     tabla_registro,
 )
 from ui.tema import css_global
 from ui.textos import (
-    COMPARACION,
     COMPARACION_CATALOGO,
     DESCRIPCION_METODO,
-    DESCRIPCION_MODELO,
-    DESCRIPCION_MONTECARLO,
-    INDICADORES_CLIENTES,
-    INDICADORES_COLAS,
-    INDICADORES_COMPLEMENTARIOS,
     INDICADORES_DIFERENCIA,
     INDICADORES_GNC,
-    INDICADORES_INVENTARIO,
-    POR_CLAVE,
-    SUPUESTOS,
     SUPUESTOS_REAL,
     DESCRIPCION_MODELO_REAL,
     Metrica,
@@ -166,22 +135,10 @@ st.set_page_config(
 # Corridas (con caché: si los parámetros no cambiaron, no se vuelve a simular)
 # =============================================================================
 @st.cache_data(show_spinner=False, max_entries=8)
-def correr_escenarios_cacheado(
-    p: ParametrosSimulacion, replicas: int, semilla: int
-) -> list[ResultadoEscenario]:
-    return correr_escenarios(p, replicas=replicas, semilla_base=semilla)
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
 def correr_estacion_real_cacheado(
     p: ParametrosSimulacion, replicas: int, semilla: int
 ) -> ResultadoEscenario:
     return correr_estacion_real(p, replicas=replicas, semilla_base=semilla)
-
-
-@st.cache_data(show_spinner=False, max_entries=4)
-def correr_estaciones_cacheado(p: ParametrosSimulacion, replicas: int, semilla: int):
-    return correr_estaciones(p, replicas=replicas, semilla_base=semilla)
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
@@ -201,721 +158,6 @@ def correr_sensibilidad_cacheado(
 @st.cache_data(show_spinner=False, max_entries=8)
 def correr_traza_cacheada(p: ParametrosSimulacion, semilla: int):
     return correr_replica(p, semilla=semilla, con_traza=True)[1]
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
-def barrer_politicas_cacheado(
-    p: ParametrosSimulacion,
-    puntos: tuple[float, ...],
-    cantidades: tuple[float, ...],
-    replicas: int,
-    semilla: int,
-):
-    return barrer_politicas(
-        p, list(puntos), list(cantidades), replicas=replicas, semilla_base=semilla
-    )
-
-
-# =============================================================================
-# Barra lateral: parámetros del modelo
-# =============================================================================
-def leer_parametros() -> tuple[ParametrosSimulacion, ParametrosEconomicos, int, int]:
-    """Dibuja los controles de la barra lateral y devuelve la configuración elegida."""
-    st.sidebar.title("⛽ Parámetros")
-    st.sidebar.caption("Al cambiar algo hay que volver a correr la simulación.")
-
-    modelo = st.sidebar.radio(
-        "Modelo",
-        options=["real", "clasico"],
-        format_func=lambda x: (
-            "🏪 Estación real (12 caras · 5 productos · playeros)"
-            if x == "real"
-            else "📐 Caso clásico (3 surtidores · 1 producto)"
-        ),
-        help="La estación real es el caso del TP. El caso clásico es el proyecto "
-             "hipotético original: reproduce sus números de referencia y sirve para "
-             "comparar los escenarios de capacidad (+1 surtidor, +1 cajero).",
-    )
-    es_real = modelo == "real"
-    base = ParametrosSimulacion() if es_real else ParametrosSimulacion.clasico()
-    sfx = "_r" if es_real else "_c"     # las claves cambian con el modelo: cada uno con sus defaults
-
-    # Si en la pestaña Inventario se apretó "Usar esta política", los valores se aplican
-    # ACÁ, antes de crear los controles: Streamlit no permite modificar un widget que ya
-    # fue instanciado en esta misma ejecución. (Sólo existe en el caso clásico.)
-    sugerida = st.session_state.pop("politica_sugerida", None)
-    if sugerida is not None and not es_real:
-        st.session_state["w_punto_pedido"] = int(sugerida[0])
-        st.session_state["w_cantidad_pedido"] = int(sugerida[1])
-    # Lo mismo para la estación real: una política (s, Q) por tanque.
-    sugerida_real = st.session_state.pop("politica_sugerida_real", None)
-    if sugerida_real is not None and es_real:
-        st.session_state["w_editar_politica"] = True
-        for producto, (s_sug, q_sug) in sugerida_real.items():
-            st.session_state[f"w_s_{producto}"] = int(round(s_sug, -2))
-            st.session_state[f"w_q_{producto}"] = int(round(q_sug, -2))
-
-    if es_real:
-        with st.sidebar.expander("🏪 Estación y personal", expanded=True):
-            st.markdown(
-                f"12 caras en 3 zonas: **A nafta (4) · B diésel (2) · C GNC (6)** "
-                f"{insignia_html(por_id('SUR-00'))}. Servidores = mín(caras libres, "
-                f"playeros en turno).",
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f"**Playeros por turno** {insignia_html(por_id('PER-01'))}",
-                unsafe_allow_html=True,
-            )
-            n1, n2, n3 = st.columns(3)
-            playeros = (
-                int(n1.number_input("Noche 22–06", 1, 6, base.playeros_por_turno[0], 1)),
-                int(n2.number_input("Mañana 06–14", 1, 6, base.playeros_por_turno[1], 1)),
-                int(n3.number_input("Tarde 14–22", 1, 6, base.playeros_por_turno[2], 1)),
-            )
-            cajas = st.number_input(
-                "Cajas en el minimarket", 1, 4, base.cajas, 1,
-                help="PER-02: una caja por turno.",
-            )
-            capacidad_cola = st.slider(
-                "Capacidad de cola por zona (autos)", 2, 20, int(base.capacidad_cola), 1,
-                help="PER-05 (sin dato: hay que relevarla). Si la cola de la zona está "
-                     "llena, el auto no entra y se pierde por 'cola llena'.",
-            )
-            disciplina_cola = st.radio(
-                "Disciplina de la cola",
-                ["por_grupo", "por_cara"],
-                index=0 if base.disciplina_cola == "por_grupo" else 1,
-                format_func=lambda x: {
-                    "por_grupo": "Una cola FIFO por zona",
-                    "por_cara": "Una fila por cara (elige la más corta)",
-                }[x],
-                horizontal=True,
-            )
-            pct_gnc = st.slider(
-                "Clientes GNC (% de las llegadas)", 0, 25, int(round(base.pct_gnc * 100)), 1,
-                help="DEM-05 (estimación): el GNC es ≈ 3 % de los clientes, aunque se le "
-                     "dedican 6 de las 12 caras (C8).",
-            ) / 100.0
-        surtidores = base.surtidores
-    else:
-        with st.sidebar.expander("🏪 Capacidad actual", expanded=True):
-            st.markdown(
-                f"Configuración clásica {insignia_html(por_id('REC-01'))}"
-                f"{insignia_html(por_id('REC-02'))}: cola única FIFO, sin playeros.",
-                unsafe_allow_html=True,
-            )
-            surtidores = st.number_input("Surtidores instalados", 1, 8, base.surtidores, 1)
-            cajas = st.number_input("Cajas en el minimarket", 1, 4, base.cajas, 1)
-        playeros = base.playeros_por_turno
-        capacidad_cola = base.capacidad_cola
-        disciplina_cola = base.disciplina_cola
-        pct_gnc = base.pct_gnc
-
-    # --- Demanda: litros por mes → clientes por día (corrige B1/B2/B5) ---
-    with st.sidebar.expander("📊 Demanda", expanded=True):
-        st.markdown(
-            f"Fuentes {insignia_html(por_id('DEM-01'))} {insignia_html(por_id('DEM-11'))} "
-            f"{insignia_html(por_id('DEM-06'))} {insignia_html(por_id('DEM-03'))}",
-            unsafe_allow_html=True,
-        )
-        modo_demanda = st.radio(
-            "Modo de demanda",
-            options=["esperada", "monte_carlo"],
-            index=0 if base.modo_demanda == "esperada" else 1,
-            key="modo_demanda" + sfx,
-            format_func=lambda x: (
-                "Demanda esperada (litros por mes)"
-                if x == "esperada"
-                else (
-                    "Monte Carlo (variación día a día)"
-                    if es_real
-                    else "Monte Carlo (tabla empírica)"
-                )
-            ),
-            horizontal=True,
-            help="Con 'esperada' el total diario sale de los litros por mes y el "
-                 "calendario; con 'Monte Carlo' se sortea cada día un factor de una tabla "
-                 "de frecuencias. En ambos modos las llegadas son Poisson y los tiempos "
-                 "aleatorios, así que se mantienen las réplicas y el calentamiento.",
-        )
-        if modo_demanda == "esperada" or es_real:
-            litros_mes = st.slider(
-                "Demanda mensual (litros/mes)", 50_000, 600_000, int(base.litros_mes), 10_000,
-                help="Es la variable de entrada: los clientes por día se derivan de "
-                     "acá, nunca al revés.",
-            )
-        else:
-            litros_mes = base.litros_mes
-        if es_real:
-            litros_medios_por_cliente = base.litros_medios_por_cliente
-            dias_ref = dias_del_mes(1)
-            clientes_dia = (litros_mes / dias_ref) / litros_medios_por_cliente
-            st.caption(
-                f"Litros medios por cliente de nafta/diésel: **{litros_medios_por_cliente:.1f} L** "
-                f"(derivado de la mezcla de productos y vehículos). "
-                f"≈ {litros_mes / dias_ref:,.0f} L/día ⇒ **{clientes_dia:,.0f} clientes "
-                f"líquidos/día** (+ GNC)."
-            )
-        elif modo_demanda == "esperada":
-            litros_medios_por_cliente = st.number_input(
-                "Litros medios por cliente (L)", 5.0, 200.0, base.litros.media, 0.1,
-                help="Litros que carga en promedio un cliente de combustible líquido.",
-            )
-            clientes_dia = (litros_mes / dias_del_mes(1)) / litros_medios_por_cliente
-            st.caption(
-                f"≈ {litros_mes / dias_del_mes(1):,.0f} L/día ⇒ **{clientes_dia:,.0f} "
-                f"clientes/día**."
-            )
-        else:
-            litros_medios_por_cliente = base.litros_medios_por_cliente
-
-        horizonte = st.radio(
-            "Horizonte de simulación",
-            options=["dia", "semana", "mes", "estacion", "anio"],
-            index=2,
-            format_func=lambda x: {
-                "dia": "📅 Un día",
-                "semana": "📅 Una semana (7 días)",
-                "mes": "📅 Un mes (calendario real)",
-                "estacion": "📅 Una estación (90 días)",
-                "anio": "📅 Un año (365 días)",
-            }[x],
-            horizontal=False,
-        )
-        mes_elegido = 1
-        dia_elegido = 1
-        estacion_elegida = "verano"
-        if horizonte in ("dia", "semana"):
-            c1, c2 = st.columns(2)
-            mes_elegido = c1.selectbox("Mes de inicio", range(1, 13), index=0)
-            dia_elegido = c2.selectbox("Día de inicio", range(1, 32), index=0)
-        elif horizonte == "mes":
-            mes_elegido = st.selectbox("Mes a simular", range(1, 13), index=0)
-        elif horizonte == "estacion":
-            estacion_elegida = st.selectbox(
-                "Estación del año",
-                ["verano", "otonio", "invierno", "primavera"],
-                index=0,
-                format_func=lambda x: {
-                    "verano": "☀️ Verano (ene–mar)",
-                    "otonio": "🍂 Otoño (abr–jun)",
-                    "invierno": "❄️ Invierno (jun–ago)",
-                    "primavera": "🌱 Primavera (sep–nov)",
-                }[x],
-            )
-        try:
-            fecha_inicio, dias_por_horizonte = dias_y_fecha(
-                horizonte, mes_elegido, dia_elegido, estacion_elegida
-            )
-            # El día de inicio tiene que existir en ese mes (p. ej. no hay 31/4).
-            ParametrosSimulacion(fecha_inicio=fecha_inicio)
-        except ValueError:
-            st.warning("Ese día no existe en el mes elegido: se usa el 1.")
-            fecha_inicio, dias_por_horizonte = dias_y_fecha(
-                horizonte, mes_elegido, 1, estacion_elegida
-            )
-        if modo_demanda == "esperada":
-            presets = {
-                "Neutra (default)": ESTACIONALIDAD_NEUTRA,
-                "Leve (±6 %)": ESTACIONALIDAD_LEVE,
-                "Proxy turístico": ESTACIONALIDAD_PROXY,
-            }
-            estacionalidad = presets[
-                st.selectbox("Estacionalidad mensual", list(presets), index=0)
-            ]
-            factor_fin_de_semana = st.slider(
-                "Factor de fin de semana", 1.0, 2.0, float(base.factor_fin_de_semana), 0.01,
-                help="El finde vende más que un día hábil; el nivel diario se "
-                     "normaliza para conservar los litros del mes.",
-            )
-        else:
-            estacionalidad = ESTACIONALIDAD_NEUTRA
-            factor_fin_de_semana = base.factor_fin_de_semana
-
-    demanda = base.demanda
-    if modo_demanda == "monte_carlo":
-        if es_real:
-            with st.sidebar.expander("🎲 Variación día a día (Monte Carlo)"):
-                rel = base.demanda_relativa
-                st.markdown(
-                    f"Fuente {insignia_html(por_id('DEM-07'))}: cada día se sortea un "
-                    f"**factor relativo** (media 1) que multiplica los litros del día.",
-                    unsafe_allow_html=True,
-                )
-                st.dataframe(
-                    pd.DataFrame(
-                        {"Factor": rel.valores, "Frecuencia": rel.frecuencias}
-                    ),
-                    hide_index=True,
-                )
-        else:
-            with st.sidebar.expander("🚗 Demanda diaria (tabla Monte Carlo)"):
-                st.caption(
-                    "Tabla de frecuencias observada: en cuántos días se registró cada nivel "
-                    "de demanda. De acá se sortea la demanda de cada día simulado."
-                )
-                tabla = st.data_editor(
-                    pd.DataFrame(
-                        {"Autos por día": list(base.demanda.valores),
-                         "Días observados": list(base.demanda.frecuencias)}
-                    ),
-                    num_rows="dynamic",
-                    hide_index=True,
-                    key="tabla_demanda",
-                )
-                demanda = construir_demanda(tabla)
-                st.caption(f"Demanda media: **{demanda.media:.0f} autos por día**")
-
-    with st.sidebar.expander("⏱️ Tiempos de servicio"):
-        st.markdown(
-            f"Fuentes {insignia_html(por_id('TIE-02'))} {insignia_html(por_id('TIE-05'))}"
-            + (f" {insignia_html(por_id('TIE-04'))}" if es_real else ""),
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            "**Carga de nafta/diésel** — Triangular (min)" if es_real
-            else "**Carga de combustible** — Triangular (min)"
-        )
-        c1, c2, c3 = st.columns(3)
-        carga = Triangular(
-            c1.number_input("mín", 0.5, 30.0, base.carga.minimo, 0.5, key="carga_min" + sfx),
-            c2.number_input("moda", 0.5, 30.0, base.carga.moda, 0.5, key="carga_moda" + sfx),
-            c3.number_input("máx", 0.5, 30.0, base.carga.maximo, 0.5, key="carga_max" + sfx),
-        )
-        if es_real:
-            st.markdown("**Carga de GNC** — Triangular (min)")
-            g1, g2, g3 = st.columns(3)
-            carga_gnc = Triangular(
-                g1.number_input("mín", 0.5, 60.0, base.carga_gnc.minimo, 0.5, key="gnc_min"),
-                g2.number_input("moda", 0.5, 60.0, base.carga_gnc.moda, 0.5, key="gnc_moda"),
-                g3.number_input("máx", 0.5, 60.0, base.carga_gnc.maximo, 0.5, key="gnc_max"),
-            )
-        else:
-            carga_gnc = base.carga_gnc
-        st.markdown("**Compra en el minimarket** (min)")
-        d1, d2, d3 = st.columns(3)
-        compra = Triangular(
-            d1.number_input("mín", 0.2, 30.0, base.compra.minimo, 0.5, key="compra_min" + sfx),
-            d2.number_input("moda", 0.2, 30.0, base.compra.moda, 0.5, key="compra_moda" + sfx),
-            d3.number_input("máx", 0.2, 30.0, base.compra.maximo, 0.5, key="compra_max" + sfx),
-        )
-        caja_exponencial = st.checkbox(
-            "Usar Exponencial en la caja", value=False,
-            help="La propuesta admite Triangular o Exponencial para el tiempo en caja. "
-                 "Con Exponencial se usa la misma media que la triangular cargada.",
-        )
-
-    if es_real:
-        litros = base.litros
-        with st.sidebar.expander("⛽ Litros por carga"):
-            st.markdown(
-                f"Fuentes {insignia_html(por_id('VEH-01'))} {insignia_html(por_id('VEH-00'))}: "
-                f"cada cliente sortea producto y tipo de vehículo, y carga "
-                f"`Triangular(0,2·T ; 0,3·T ; 1,0·T)` (tanque T del vehículo). Las tablas "
-                f"están en la pestaña **Demanda**.",
-                unsafe_allow_html=True,
-            )
-    else:
-        with st.sidebar.expander("⛽ Litros por carga"):
-            st.markdown(
-                f"Fuente {insignia_html(por_id('VEH-06'))}",
-                unsafe_allow_html=True,
-            )
-            st.caption("Cuánto carga cada auto. Es lo que consume el tanque.")
-            e1, e2, e3 = st.columns(3)
-            litros = Triangular(
-                e1.number_input("mín", 1.0, 200.0, base.litros.minimo, 5.0, key="litros_min"),
-                e2.number_input("moda", 1.0, 200.0, base.litros.moda, 5.0, key="litros_moda"),
-                e3.number_input("máx", 1.0, 200.0, base.litros.maximo, 5.0, key="litros_max"),
-            )
-
-    with st.sidebar.expander("🧍 Comportamiento del cliente"):
-        st.markdown(
-            f"Fuentes {insignia_html(por_id('DEM-08'))} {insignia_html(por_id('TIE-06'))}",
-            unsafe_allow_html=True,
-        )
-        prob_compra = st.slider(
-            "Probabilidad de entrar al minimarket", 0.0, 1.0, float(base.prob_compra), 0.05,
-            key="prob_compra" + sfx,
-            help="Ensayo de Bernoulli después de cargar combustible.",
-        )
-        paciencia_surtidor = st.slider(
-            "Paciencia en la cola del surtidor (min)", 1.0, 30.0,
-            float(base.paciencia_surtidor), 1.0,
-            help="Si la espera supera este umbral, el cliente abandona y se pierde la venta.",
-        )
-        paciencia_caja = st.slider(
-            "Paciencia en la cola de la caja (min)", 1.0, 30.0, float(base.paciencia_caja), 1.0
-        )
-
-    # --- Tanques y reposición ---
-    if es_real:
-        with st.sidebar.expander("🛢️ Tanques y reposición", expanded=True):
-            st.markdown(
-                f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
-                f"{insignia_html(por_id('INV-01'))}: un tanque por producto líquido; la "
-                f"política (s, Q) de cada uno se deriva de su consumo (INV-07).",
-                unsafe_allow_html=True,
-            )
-            capacidad_tanque = st.number_input(
-                "Capacidad de cada tanque (L)", 5_000, 100_000,
-                int(base.inventario[0].capacidad), 5_000,
-            )
-            nivel_inicial_pct = st.slider(
-                "Nivel inicial (% del tanque)", 10, 100,
-                int(round(base.inventario[0].nivel_inicial / base.inventario[0].capacidad * 100)),
-                5,
-            ) / 100.0
-            st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
-            plazo_base = base.inventario[0].plazo_entrega
-            f1, f2, f3 = st.columns(3)
-            plazo = Triangular(
-                f1.number_input("mín", 1.0, 200.0, plazo_base.minimo, 1.0, key="plazo_min"),
-                f2.number_input("moda", 1.0, 200.0, plazo_base.moda, 1.0, key="plazo_moda"),
-                f3.number_input("máx", 1.0, 200.0, plazo_base.maximo, 1.0, key="plazo_max"),
-            )
-            inventario = inventario_real(
-                float(litros_mes), float(capacidad_tanque), plazo, float(nivel_inicial_pct)
-            )
-            nombres = {x.id: x.nombre for x in base.productos}
-            editar = st.checkbox(
-                "Editar la política (s, Q) de cada tanque",
-                key="w_editar_politica",
-                help="Sin tildar, s y Q salen de INV-07 (s = 1,5 días de consumo del "
-                     "producto). En la pestaña Inventario se busca la mejor por producto.",
-            )
-            if editar:
-                editados = []
-                for inv in inventario:
-                    st.markdown(f"**{nombres[inv.producto]}**")
-                    c_s, c_q = st.columns(2)
-                    tope = int(capacidad_tanque)
-                    s_nuevo = c_s.number_input(
-                        "s (L)", 0, tope, min(int(round(inv.punto_pedido, -2)), tope), 100,
-                        key=f"w_s_{inv.producto}",
-                    )
-                    q_nuevo = c_q.number_input(
-                        "Q (L)", 500, tope, min(int(round(inv.cantidad_pedido, -2)), tope), 100,
-                        key=f"w_q_{inv.producto}",
-                    )
-                    editados.append(
-                        replace(inv, punto_pedido=float(s_nuevo), cantidad_pedido=float(q_nuevo))
-                    )
-                inventario = tuple(editados)
-            else:
-                st.dataframe(
-                    pd.DataFrame(
-                        {
-                            "Tanque": [nombres[i.producto] for i in inventario],
-                            "s (L)": [round(i.punto_pedido) for i in inventario],
-                            "Q (L)": [round(i.cantidad_pedido) for i in inventario],
-                        }
-                    ),
-                    hide_index=True,
-                )
-            st.caption(
-                "Política inicial según INV-07 (s = 1,5 días de consumo del producto). "
-                "La mejor por producto se busca en la pestaña Inventario."
-            )
-        tanque = base.tanque
-    else:
-        with st.sidebar.expander("🛢️ Tanque y reposición", expanded=True):
-            st.markdown(
-                f"Fuentes {insignia_html(por_id('INV-03'))} {insignia_html(por_id('INV-07'))} "
-                f"{insignia_html(por_id('INV-01'))}",
-                unsafe_allow_html=True,
-            )
-            capacidad = st.number_input(
-                "Capacidad del tanque (L)", 5_000, 200_000, int(base.tanque.capacidad), 5_000
-            )
-            nivel_inicial = st.number_input(
-                "Nivel inicial (L)", 0, int(capacidad), int(base.tanque.nivel_inicial), 1_000
-            )
-            punto_pedido = st.number_input(
-                "Punto de pedido s (L)", 0, int(capacidad), int(base.tanque.punto_pedido), 1_000,
-                key="w_punto_pedido",
-                help="Cuando el combustible disponible (lo que hay más lo que viene en "
-                     "camino) baja de este valor, se pide un camión.",
-            )
-            cantidad_pedido = st.number_input(
-                "Cantidad a pedir Q (L)", 1_000, int(capacidad),
-                int(base.tanque.cantidad_pedido), 1_000,
-                key="w_cantidad_pedido",
-                help="Cuántos litros trae cada camión cisterna.",
-            )
-            st.markdown("**Plazo de entrega del camión** — Triangular (horas)")
-            f1, f2, f3 = st.columns(3)
-            plazo = Triangular(
-                f1.number_input("mín", 1.0, 200.0, base.tanque.plazo_entrega.minimo, 1.0,
-                                key="plazo_min_c"),
-                f2.number_input("moda", 1.0, 200.0, base.tanque.plazo_entrega.moda, 1.0,
-                                key="plazo_moda_c"),
-                f3.number_input("máx", 1.0, 200.0, base.tanque.plazo_entrega.maximo, 1.0,
-                                key="plazo_max_c"),
-            )
-        tanque = ParametrosTanque(
-            capacidad=float(capacidad),
-            nivel_inicial=float(nivel_inicial),
-            punto_pedido=float(punto_pedido),
-            cantidad_pedido=float(cantidad_pedido),
-            plazo_entrega=plazo,
-        )
-        inventario = base.inventario
-
-    # --- Ruta del camión y cortes (sólo la estación real) ---
-    red = None
-    if es_real:
-        with st.sidebar.expander("🛣️ Ruta del camión y cortes"):
-            st.markdown(
-                f"Fuentes {insignia_html(por_id('INV-05'))} {insignia_html(por_id('RED-12'))} "
-                f"{insignia_html(por_id('RED-13'))}: el camión sale del origen por el camino "
-                f"más corto; un corte en ese camino demora el viaje (desvío o espera, lo menor).",
-                unsafe_allow_html=True,
-            )
-            origen = st.radio(
-                "Origen del camión",
-                ["DOCK", "LUJAN"],
-                index=0 if base.red.origen == "DOCK" else 1,
-                format_func=lambda x: {
-                    "DOCK": "Dock Sud (991 km por Gral. Alvear)",
-                    "LUJAN": "Luján de Cuyo (planta YPF)",
-                }[x],
-            )
-            opciones = ["ninguno", "aleatorio"] + [c.id for c in base.red.cortes]
-            nombres_corte = {c.id: f"{c.id} · {c.nombre}" for c in base.red.cortes}
-            escenario = st.selectbox(
-                "Escenario de cortes",
-                opciones,
-                index=opciones.index(base.red.escenario_corte),
-                format_func=lambda x: ETIQUETA_ESCENARIO.get(x) or nombres_corte[x],
-            )
-            corte_dia = min(base.red.corte_dia, int(dias_por_horizonte))
-            if escenario in ("E1", "E2", "E4") and dias_por_horizonte > 1:
-                corte_dia = st.slider(
-                    "Día en que empieza el corte", 1, int(dias_por_horizonte), int(corte_dia), 1,
-                    help="Arranca a las 00:00 de ese día; los camiones que salen mientras "
-                         "dura se desvían o esperan.",
-                )
-            prob_corte = base.red.prob_corte_viaje
-            if escenario == "aleatorio":
-                prob_corte = st.slider(
-                    "Probabilidad de que un viaje encuentre un corte", 0, 60,
-                    int(round(prob_corte * 100)), 5,
-                    help="Sólo en jun–ago (RED-13, supuesto): fuera de invierno no hay cortes.",
-                ) / 100.0
-                if not set(base.red.meses_corte) & dias_de_mes_en_corrida(
-                    fecha_inicio, int(dias_por_horizonte)
-                ):
-                    st.caption(
-                        "⚠️ Este horizonte no incluye jun–ago: no se sortea ningún corte. "
-                        "Elegí 'Una estación → Invierno' o un mes de invierno."
-                    )
-            velocidad = st.slider(
-                "Velocidad media del camión (km/h)", 40, 90, int(base.red.velocidad_kmh), 5,
-                help="RED-11 (supuesto): entre los 80 km/h legales y los 60 urbanos.",
-            )
-            red = replace(
-                base.red,
-                origen=origen,
-                escenario_corte=escenario,
-                corte_dia=int(corte_dia),
-                prob_corte_viaje=float(prob_corte),
-                velocidad_kmh=float(velocidad),
-            )
-
-    # --- GNC: cortes de invierno, compresores y migración (sólo la estación real) ---
-    gnc = None
-    if es_real:
-        with st.sidebar.expander("🔥 GNC y cortes de invierno"):
-            st.markdown(
-                f"Fuentes {insignia_html(por_id('GNC-01'))} {insignia_html(por_id('GNC-02'))} "
-                f"{insignia_html(por_id('GNC-04'))} {insignia_html(por_id('SUR-06'))}: con "
-                f"contrato interrumpible, en jun–ago el GNC se corta por episodios (corte "
-                f"TOTAL, no −50 %).",
-                unsafe_allow_html=True,
-            )
-            g0 = base.gnc
-            contrato = st.radio(
-                "Contrato de gas",
-                ["interrumpible", "firme"],
-                index=0 if g0.contrato == "interrumpible" else 1,
-                format_func=lambda x: {
-                    "interrumpible": "Interrumpible (sufre los cortes)",
-                    "firme": "Firme (sin cortes)",
-                }[x],
-                horizontal=True,
-            )
-            episodios = st.slider(
-                "Episodios de corte por invierno", 0, 4, int(g0.episodios), 1,
-                disabled=contrato == "firme",
-            )
-            dias_episodio = st.slider(
-                "Duración de cada episodio (días)", 1, 14, int(g0.dias_por_episodio), 1,
-                disabled=contrato == "firme",
-            )
-            forma = st.selectbox(
-                "Forma del corte",
-                ["total_24h", "ventana", "parcial_50"],
-                index=["total_24h", "ventana", "parcial_50"].index(g0.forma),
-                format_func=lambda x: {
-                    "total_24h": "Corte total de 24 h (ENARGAS)",
-                    "ventana": "Ventana de 17 a 01 h (San Rafael 2022)",
-                    "parcial_50": "Compresores al 50 % (sin fuente)",
-                }[x],
-                disabled=contrato == "firme",
-            )
-            compresores = st.slider(
-                "Compresores (cargas GNC simultáneas)", 1, 6, int(g0.compresores), 1,
-                help="SUR-06 (supuesto, sin dato): derivado de 20–25 autos/h × 7 min ÷ 60.",
-            )
-            migracion = st.slider(
-                "Clientes que pasan a Súper durante el corte (%)", 0, 100,
-                int(round(g0.migracion_a_nafta * 100)), 5,
-                help="GNC-04 (supuesto): no hay migración documentada. Los demás se pierden.",
-            ) / 100.0
-            en_horizonte = st.checkbox(
-                "Forzar que los episodios caigan dentro del horizonte",
-                value=bool(g0.episodios_en_horizonte),
-                disabled=contrato == "firme",
-                help="Sin tildar, los episodios se sortean entre el 1/jun y el 31/ago: un "
-                     "horizonte que no incluye invierno no ve ninguno.",
-            )
-            gnc = ParametrosGNC(
-                contrato=contrato,
-                episodios=int(episodios),
-                dias_por_episodio=int(dias_episodio),
-                forma=forma,
-                compresores=int(compresores),
-                migracion_a_nafta=float(migracion),
-                episodios_en_horizonte=bool(en_horizonte),
-            )
-
-    with st.sidebar.expander("🔬 Corrida"):
-        st.info(
-            f"Horizonte **{horizonte}**: desde el {fecha_inicio[1]}/{fecha_inicio[0]}, "
-            f"**{dias_por_horizonte} días**."
-        )
-        dias = dias_por_horizonte
-        max_calentamiento = max(0, dias - 1)
-        if max_calentamiento == 0:
-            # Un horizonte de un solo día no tiene lugar para calentar.
-            dias_calentamiento = 0
-            st.caption("(Sin calentamiento: la corrida dura un solo día)")
-        else:
-            dias_calentamiento = st.slider(
-                "Días de calentamiento", 0, max_calentamiento,
-                min(base.dias_calentamiento, max_calentamiento), 1,
-                key="calentamiento" + sfx,
-                help="Días que se simulan pero no se miden: la estación arranca con las colas "
-                     "vacías y el tanque al 75 %, que no es su estado habitual.",
-            )
-
-        # El día se elige en la pestaña Animación; por defecto, el primero que se mide.
-        dia_animado = min(int(dias_calentamiento) + 1, int(dias))
-        replicas = st.slider(
-            "Réplicas por escenario", 2, 15, 4, 1,
-            help="Cada réplica es una corrida completa con otra semilla. Más réplicas dan "
-                 "intervalos de confianza más angostos, pero tardan más.",
-        )
-        semilla = st.number_input("Semilla", 1, 99_999, 1, 1)
-
-    with st.sidebar.expander("💵 Datos económicos"):
-        st.markdown(
-            f"Fuentes {insignia_html(por_id('ECO-01'))} {insignia_html(por_id('ECO-02'))} "
-            f"{insignia_html(por_id('ECO-06'))} {insignia_html(por_id('ECO-04C'))} "
-            f"(márgenes y flete son heredados sin fuente: placeholders visibles).",
-            unsafe_allow_html=True,
-        )
-        st.caption("Valores estimados: hay que reemplazarlos por los datos reales.")
-        margen_por_litro = st.number_input("Ganancia por litro ($)", 0.0, 1e6, 100.0, 10.0)
-        margen_compra = st.number_input(
-            "Ganancia por compra en minimarket ($)", 0.0, 1e7, 2500.0, 100.0
-        )
-        costo_pedido = st.number_input(
-            "Flete por camión cisterna ($)", 0.0, 1e8, 150_000.0, 10_000.0
-        )
-        costo_almacenamiento = st.number_input(
-            "Costo de almacenamiento ($/litro/mes)", 0.0, 1e4, 25.0, 5.0,
-            help="Capital inmovilizado en combustible: se aplica al nivel promedio del tanque.",
-        )
-        inversion_surtidor = st.number_input(
-            "Inversión: surtidor nuevo ($)", 0.0, 1e9, 18_000_000.0, 500_000.0
-        )
-        operativo_surtidor = st.number_input(
-            "Costo operativo del surtidor ($/mes)", 0.0, 1e8, 250_000.0, 50_000.0
-        )
-        sueldo_cajero = st.number_input("Sueldo de un cajero ($/mes)", 0.0, 1e8, 1_800_000.0, 50_000.0)
-
-    comunes = dict(
-        cajas=int(cajas),
-        demanda=demanda,
-        carga=carga,
-        carga_gnc=carga_gnc,
-        compra=compra,
-        caja_exponencial=bool(caja_exponencial),
-        litros=litros,
-        prob_compra=float(prob_compra),
-        paciencia_surtidor=float(paciencia_surtidor),
-        paciencia_caja=float(paciencia_caja),
-        dias=int(dias),
-        dias_calentamiento=int(dias_calentamiento),
-        dia_animado=int(dia_animado),
-        modo_demanda=str(modo_demanda),
-        litros_mes=float(litros_mes),
-        litros_medios_por_cliente=float(litros_medios_por_cliente),
-        factor_fin_de_semana=float(factor_fin_de_semana),
-        estacionalidad=estacionalidad,
-        fecha_inicio=fecha_inicio,
-        horizonte=str(horizonte),
-    )
-    if es_real:
-        p = replace(
-            base,
-            playeros_por_turno=playeros,
-            turnos=turnos_de(playeros),
-            capacidad_cola=int(capacidad_cola),
-            disciplina_cola=str(disciplina_cola),
-            pct_gnc=float(pct_gnc),
-            inventario=inventario,
-            red=red,
-            gnc=gnc,
-            **comunes,
-        )
-    else:
-        p = replace(base, surtidores=int(surtidores), tanque=tanque, **comunes)
-    eco = ParametrosEconomicos(
-        margen_por_litro=margen_por_litro,
-        margen_compra=margen_compra,
-        inversion_surtidor=inversion_surtidor,
-        operativo_surtidor_mensual=operativo_surtidor,
-        sueldo_cajero_mensual=sueldo_cajero,
-        costo_pedido=costo_pedido,
-        costo_almacenamiento_litro_mes=costo_almacenamiento,
-    )
-    return p, eco, int(replicas), int(semilla)
-
-
-def construir_demanda(tabla: pd.DataFrame) -> DemandaDiaria:
-    """Arma la tabla empírica a partir de lo que cargó el usuario, validando."""
-    try:
-        filas = [
-            (int(v), int(f))
-            for v, f in zip(tabla["Autos por día"], tabla["Días observados"])
-            if pd.notna(v) and pd.notna(f) and int(f) > 0 and int(v) >= 0
-        ]
-        if not filas:
-            raise ValueError("tabla vacía")
-        filas.sort()
-        return DemandaDiaria(
-            valores=tuple(v for v, _ in filas), frecuencias=tuple(f for _, f in filas)
-        )
-    except Exception:
-        st.sidebar.error(
-            "La tabla de demanda no es válida (hacen falta autos por día y días "
-            "observados positivos). Se usa la tabla por defecto."
-        )
-        return DemandaDiaria(valores=(280, 320, 360, 400, 440), frecuencias=(10, 20, 40, 20, 10))
 
 
 # =============================================================================
@@ -970,40 +212,6 @@ def tarjeta(columna, metrica: Metrica, resultado: ResultadoEscenario) -> None:
         help=metrica.ayuda,
         border=True,
     )
-
-
-def tabla_detalle(base: ResultadoEscenario, metricas) -> pd.DataFrame:
-    filas = []
-    for metrica in metricas:
-        resumen = base.resumen[metrica.clave]
-        filas.append(
-            {
-                "Indicador": metrica.etiqueta,
-                "Promedio": round(metrica.valor_mostrado(resumen.promedio), metrica.decimales),
-                "IC 95 % (±)": round(
-                    metrica.valor_mostrado(resumen.semiamplitud), metrica.decimales
-                ),
-                "Mínimo": round(metrica.valor_mostrado(resumen.minimo), metrica.decimales),
-                "Máximo": round(metrica.valor_mostrado(resumen.maximo), metrica.decimales),
-                "Unidad": metrica.unidad_mostrada,
-            }
-        )
-    return pd.DataFrame(filas)
-
-
-def promedio_tupla(resultado: ResultadoEscenario, campo: str) -> list[float]:
-    """Promedio entre réplicas de un campo que es una tupla (por grupo)."""
-    columnas = zip(*[getattr(r, campo) for r in resultado.replicas])
-    return [sum(c) / len(resultado.replicas) for c in columnas]
-
-
-def promedio_pares(resultado: ResultadoEscenario, campo: str) -> dict[str, float]:
-    """Promedio entre réplicas de un campo que es ((producto, valor), ...)."""
-    acumulado: dict[str, float] = {}
-    for r in resultado.replicas:
-        for clave, valor in getattr(r, campo):
-            acumulado[clave] = acumulado.get(clave, 0.0) + valor
-    return {k: v / len(resultado.replicas) for k, v in acumulado.items()}
 
 
 # =============================================================================
@@ -1158,64 +366,6 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
 
     st.divider()
     st.plotly_chart(
-        graficos.grafico_perfil_horario(traza, p.dias_medidos), key="g_perfil"
-    )
-    st.plotly_chart(graficos.grafico_demanda_diaria(traza), key="g_dia_a_dia")
-
-
-def pestania_demanda(p: ParametrosSimulacion) -> None:
-    if p.estacion_real:
-        pestania_sorteos(p)
-        return
-    traza = st.session_state.traza
-
-    st.subheader("La demanda se sortea con el método Monte Carlo")
-    st.markdown(DESCRIPCION_MONTECARLO)
-
-    st.markdown("##### Pasos 1 a 3: de las frecuencias observadas a los intervalos")
-    d = p.demanda
-    tabla = pd.DataFrame(
-        {
-            "Autos por día": d.valores,
-            "Días observados": d.frecuencias,
-            "Probabilidad": [f"{x:.2f}" for x in d.probabilidades],
-            "Probabilidad acumulada": [f"{x:.2f}" for x in d.acumuladas],
-            "Intervalo de números aleatorios": [
-                d.intervalo_texto(i) for i in range(len(d.valores))
-            ],
-        }
-    )
-    st.dataframe(tabla, hide_index=True)
-    st.caption(
-        f"Total: {d.total_observaciones} días observados · demanda media "
-        f"{d.media:.0f} autos/día · consumo esperado {p.litros_por_dia:,.0f} L/día."
-    )
-
-    st.markdown("##### Pasos 4 y 5: el sorteo de cada día simulado")
-    dias = pd.DataFrame(
-        {
-            "Día": [x.dia for x in traza.dias],
-            "Número aleatorio": [x.numero_texto for x in traza.dias],
-            "Autos sorteados": [x.autos_sorteados for x in traza.dias],
-            "Autos que llegaron": [x.autos_llegados for x in traza.dias],
-            "Atendidos": [x.atendidos for x in traza.dias],
-            "Perdidos por cola": [x.perdidos_cola for x in traza.dias],
-            "Perdidos sin nafta": [x.perdidos_sin_combustible for x in traza.dias],
-            "Litros vendidos": [round(x.litros_vendidos) for x in traza.dias],
-            "Quiebre": ["sí" if x.hubo_quiebre else "" for x in traza.dias],
-            "Calentamiento": ["sí" if x.en_calentamiento else "" for x in traza.dias],
-        }
-    )
-    st.dataframe(dias, hide_index=True, height=320)
-    st.caption(
-        "Los autos sorteados y los que llegaron no coinciden exactamente porque el sorteo "
-        "fija la media del día y las llegadas siguen un proceso de Poisson alrededor de ella."
-    )
-
-    st.divider()
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(graficos.grafico_distribucion_demanda(p.demanda, traza), key="g_distrib")
-    c2.plotly_chart(
         graficos.grafico_perfil_horario(traza, p.dias_medidos), key="g_perfil"
     )
     st.plotly_chart(graficos.grafico_demanda_diaria(traza), key="g_dia_a_dia")
@@ -1495,203 +645,14 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
 
 
 def pestania_inventario(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
-    if p.estacion_real:
-        pestania_inventario_real(p, eco)
-        return
-    traza = st.session_state.traza
-    base = buscar(st.session_state.resultados, "Base")
-
-    st.subheader("Inventario de combustible")
-    st.caption(
-        f"Política actual: punto de pedido **{p.tanque.punto_pedido:,.0f} L** "
-        f"(cubre {p.cobertura_punto_pedido:.1f} horas de venta) y pedidos de "
-        f"**{p.tanque.cantidad_pedido:,.0f} L**. El camión tarda entre "
-        f"{p.tanque.plazo_entrega.minimo:.0f} y {p.tanque.plazo_entrega.maximo:.0f} horas "
-        f"(más probable {p.tanque.plazo_entrega.moda:.0f} h)."
-    )
-
-    fila = st.columns(4)
-    for columna, metrica in zip(
-        fila,
-        (
-            INDICADORES_INVENTARIO[0],   # nivel de servicio
-            INDICADORES_INVENTARIO[1],   # días con quiebre
-            INDICADORES_INVENTARIO[5],   # nivel promedio del tanque
-            INDICADORES_INVENTARIO[6],   # pedidos por día
-        ),
-    ):
-        tarjeta(columna, metrica, base)
-
-    consumo_en_plazo = p.litros_por_dia / 24 * p.tanque.plazo_entrega.media
-    if p.tanque.punto_pedido < consumo_en_plazo:
-        st.error(
-            f"El punto de pedido ({p.tanque.punto_pedido:,.0f} L) es menor que lo que se "
-            f"vende mientras viaja el camión ({consumo_en_plazo:,.0f} L en promedio). "
-            f"Con esta política el quiebre de stock es prácticamente seguro.",
-            icon="⚠️",
-        )
-
-    st.plotly_chart(graficos.grafico_tanque(traza, p), key="g_tanque")
-    st.caption(
-        "Los dientes de sierra son el ciclo de inventario: baja mientras se vende y sube "
-        "de golpe cuando descarga el camión. Donde la curva toca el cero, la estación "
-        "estuvo sin poder vender."
-    )
-
-    st.divider()
-    st.subheader("¿Cuál es la mejor política de reposición?")
-    st.markdown(
-        "Se prueban varias combinaciones de **punto de pedido (s)** y **cantidad a pedir "
-        "(Q)**, y se elige la de menor costo total mensual:\n\n"
-        "**costo total = flete de los pedidos + almacenamiento + venta perdida por faltante**\n\n"
-        "Pedir seguido y poco baja el almacenamiento pero dispara el flete; pedir tarde "
-        "ahorra en los dos pero se paga con quiebres de stock."
-    )
-
-    puntos, cantidades = grilla_sugerida(p)
-    combinaciones = sum(
-        1 for s in puntos for q in cantidades if s + q <= p.tanque.capacidad
-    )
-    c1, c2 = st.columns([1, 2])
-    replicas_barrido = c1.slider("Réplicas por política", 1, 5, 2, 1, key="rep_barrido")
-    c2.caption(
-        f"Se van a probar **{combinaciones} políticas** × {replicas_barrido} réplicas de "
-        f"{p.dias} días. Tarda aproximadamente "
-        f"{combinaciones * replicas_barrido * 0.6:.0f} segundos."
-    )
-
-    if st.button("🔎 Buscar la mejor política", type="primary"):
-        with st.spinner("Probando políticas de reposición…"):
-            politicas = barrer_politicas_cacheado(
-                p, tuple(puntos), tuple(cantidades), replicas_barrido,
-                st.session_state.semilla_usada,
-            )
-            st.session_state.costos_politicas = analizar_politicas(politicas, eco, p)
-        # Se vuelve a ejecutar la app para que la conclusión incorpore esta segunda
-        # decisión: se arma antes que las pestañas, así que si no, quedaría desactualizada.
-        st.rerun()
-
-    costos = st.session_state.get("costos_politicas")
-    if not costos:
-        st.info("Todavía no se corrió el barrido.", icon="ℹ️")
-        return
-
-    mejor = mejor_politica(costos)
-    actual = st.session_state.get("politica_actual")
-
-    if mejor is not None:
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Mejor punto de pedido (s)", f"{mejor.punto_pedido:,.0f} L", border=True)
-        c2.metric("Mejor cantidad a pedir (Q)", f"{mejor.cantidad_pedido:,.0f} L", border=True)
-        c3.metric(
-            "Costo total",
-            f"${mejor.costo_total:,.0f} /mes",
-            delta=(
-                f"{pesos(mejor.costo_total - actual.costo_total)} vs la actual"
-                if actual
-                else None
-            ),
-            delta_color="inverse",
-            border=True,
-        )
-        if actual is not None and mejor.costo_total < actual.costo_total:
-            if st.button(
-                "✅ Usar esta política",
-                help="Carga esta política en la barra lateral. Después hay que apretar "
-                     "Correr simulación para ver el efecto sobre todo lo demás.",
-            ):
-                st.session_state.politica_sugerida = (
-                    mejor.punto_pedido,
-                    mejor.cantidad_pedido,
-                )
-                st.rerun()
-
-    filas = []
-    for c in sorted(costos, key=lambda c: c.costo_total):
-        filas.append(
-            {
-                "Punto de pedido (s)": f"{c.punto_pedido:,.0f} L",
-                "Cantidad (Q)": f"{c.cantidad_pedido:,.0f} L",
-                "Cobertura": f"{c.cobertura_dias:.1f} días",
-                "Pedidos/mes": round(c.pedidos_mes, 1),
-                "Costo de pedido": pesos(c.costo_pedidos),
-                "Almacenamiento": pesos(c.costo_almacenamiento),
-                "Faltante": pesos(c.costo_faltante),
-                "COSTO TOTAL": pesos(c.costo_total),
-                "Nivel de servicio": f"{c.nivel_servicio * 100:.1f} %",
-                "Días con quiebre": f"{c.porcentaje_dias_quiebre:.1f} %",
-            }
-        )
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(graficos.grafico_costos_politicas(costos), key="g_costos_pol")
-    c2.plotly_chart(graficos.grafico_frontera_politicas(costos), key="g_frontera")
+    pestania_inventario_real(p, eco)
 
 
-# =============================================================================
-# Pestaña: escenarios
-# =============================================================================
-def tabla_escenarios(resultados: list[ResultadoEscenario]) -> pd.DataFrame:
-    filas = []
-    for r in resultados:
-        fila = {
-            "Escenario": r.escenario.nombre,
-            "Descripción": r.escenario.descripcion,
-            "Surt.": r.escenario.surtidores,
-            "Cajas": r.escenario.cajas,
-        }
-        for metrica in COMPARACION:
-            resumen = r.resumen[metrica.clave]
-            fila[metrica.etiqueta] = (
-                f"{metrica.valor_mostrado(resumen.promedio):,.{metrica.decimales}f} "
-                f"± {metrica.valor_mostrado(resumen.semiamplitud):,.{metrica.decimales}f}"
-            )
-        filas.append(fila)
-    return pd.DataFrame(filas)
-
-
-def pestania_escenarios() -> None:
-    """Comparación de capacidad del caso clásico (el caso real usa `pestania_comparar`)."""
-    resultados = st.session_state.resultados
-
-    st.subheader("Comparación de escenarios de capacidad")
-    st.caption(
-        "Cada celda es el promedio de las réplicas ± la semiamplitud del intervalo de "
-        "confianza del 95 %. Los cuatro escenarios se corrieron con números aleatorios "
-        "comunes: llegan los mismos autos, cargan los mismos litros y el camión tarda lo "
-        "mismo, así que la diferencia es la capacidad."
-    )
-    st.dataframe(tabla_escenarios(resultados), hide_index=True)
-
-    st.divider()
-    opciones = {m.etiqueta: m for m in COMPARACION}
-    elegida = st.selectbox("Indicador a comparar", list(opciones), index=0)
-    metrica = opciones[elegida]
-
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(graficos.grafico_comparativo(resultados, metrica), key="g_comp")
-    c2.plotly_chart(graficos.grafico_dispersion_replicas(resultados, metrica), key="g_caja")
-    st.caption(
-        "El gráfico de la derecha muestra cada réplica por separado: si las cajas de dos "
-        "escenarios se solapan mucho, la diferencia entre ellos puede ser sólo azar."
-    )
-
-    st.plotly_chart(graficos.grafico_atendidos_vs_perdidos(resultados), key="g_atend")
-
-
-# =============================================================================
-# Pestaña: economía
-# =============================================================================
 # =============================================================================
 # Pestaña: sensibilidad (Fase 9, §7.8)
 # =============================================================================
 def pestania_sensibilidad(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
     st.subheader("Sensibilidad: qué dato incierto mueve más la conclusión")
-    if not p.estacion_real:
-        st.info("La sensibilidad es del caso real. Elegí la **estación real** en la barra "
-                "lateral.", icon="🌪️")
-        return
     st.markdown(
         "Casi todos los datos del modelo son **supuestos o estimaciones** (no hay datos de la "
         "propia estación). Esta pestaña mide cuánto cambia el resultado si cada uno vale lo "
@@ -1863,64 +824,6 @@ ingreso de esos clientes) y se informa aparte.
 """))
 
 
-def pestania_economia(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
-    economia = st.session_state.economia
-
-    st.subheader("Análisis económico")
-    st.caption(
-        f"La corrida simula {p.dias} días de operación real, así que los importes "
-        f"mensuales salen directo, sin extrapolar. Los costos de inventario (flete y "
-        f"almacenamiento) también cambian entre escenarios: vender más obliga a pedir más."
-    )
-
-    filas = []
-    for e in economia:
-        filas.append(
-            {
-                "Escenario": e.nombre,
-                "Descripción": e.descripcion,
-                "Litros/día": f"{e.litros_dia:,.0f}",
-                "Ingreso combustible": pesos(e.ingreso_combustible),
-                "Ingreso minimarket": pesos(e.ingreso_minimarket),
-                "Costo de inventario": pesos(e.costo_inventario),
-                "Costo de capacidad": pesos(e.costo_capacidad),
-                "Margen operativo": pesos(e.margen_operativo),
-                "Beneficio vs Base": pesos(e.beneficio_neto),
-                "Venta perdida": pesos(e.venta_perdida),
-                "Inversión": pesos(e.inversion_inicial),
-                "Repago": e.payback_texto,
-            }
-        )
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-
-    c1, c2 = st.columns(2)
-    c1.plotly_chart(graficos.grafico_beneficio(economia), key="g_benef")
-    c2.plotly_chart(graficos.grafico_ingresos_costos(economia), key="g_ing_costos")
-    st.plotly_chart(graficos.grafico_venta_perdida(economia), key="g_perdida")
-
-    with st.expander("Cómo se calcula"):
-        st.markdown(
-            f"""
-| Concepto | Fórmula |
-|---|---|
-| Ingreso por combustible | litros vendidos × \\${eco.margen_por_litro:,.0f} por litro |
-| Ingreso por minimarket | compras × \\${eco.margen_compra:,.0f} |
-| Costo de pedido | pedidos del mes × \\${eco.costo_pedido:,.0f} de flete |
-| Costo de almacenamiento | nivel promedio del tanque × \\${eco.costo_almacenamiento_litro_mes:,.0f} por litro y por mes |
-| Costo de capacidad | surtidores extra × \\${eco.operativo_surtidor_mensual:,.0f} + cajeros extra × \\${eco.sueldo_cajero_mensual:,.0f} |
-| **Margen operativo** | **ingresos − costo de inventario − costo de capacidad** |
-| **Beneficio neto** | **margen operativo del escenario − margen operativo del Base** |
-| Venta perdida | litros no vendidos × margen + clientes perdidos × probabilidad de compra × margen de minimarket |
-| Inversión inicial | surtidores extra × \\${eco.inversion_surtidor:,.0f} |
-| **Repago** | **inversión ÷ beneficio neto mensual** |
-
-La venta perdida es un **costo de oportunidad**: no sale del bolsillo, pero es plata que
-la estación deja sobre la mesa. Por eso no se resta del margen (sería contarla dos veces)
-y se informa aparte.
-"""
-        )
-
-
 def seccion_decision(eco: ParametrosEconomicos) -> None:
     """Caso de informe: qué le hace cada escenario del catálogo al margen mensual (Fase 8)."""
     st.markdown("##### Decisión en $/mes: qué le hace cada escenario al margen")
@@ -2069,56 +972,7 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
 
 
 def pestania_conclusion() -> None:
-    p = st.session_state.parametros
-    if p.estacion_real:
-        pestania_conclusion_real(p)
-        return
-    recom = st.session_state.recomendacion
-
-    st.subheader("Conclusión y recomendación")
-    if recom["conviene_invertir"] or recom["ahorro_inventario"] > 0:
-        st.success(f"### {escapar_pesos(str(recom['veredicto']))}")
-    else:
-        st.warning(f"### {escapar_pesos(str(recom['veredicto']))}")
-
-    st.markdown("#### Diagnóstico")
-    for linea in recom["diagnostico"]:
-        st.markdown(f"- {escapar_pesos(linea)}")
-
-    st.markdown("#### Qué hacer")
-    for linea in recom["acciones"]:
-        st.markdown(f"- {escapar_pesos(linea)}")
-
-    if st.session_state.get("costos_politicas") is None:
-        st.info(
-            "Todavía no se buscó la mejor política de reposición. Andá a la pestaña "
-            "**Inventario** y apretá *Buscar la mejor política* para completar la "
-            "conclusión con la segunda decisión.",
-            icon="🛢️",
-        )
-
-    c1, c2 = st.columns(2)
-    c1.metric(
-        "Beneficio de la mejor inversión en capacidad",
-        f"{pesos(float(recom['beneficio_capacidad']))} /mes",
-        border=True,
-    )
-    c2.metric(
-        "Ahorro por mejorar la reposición",
-        f"{pesos(float(recom['ahorro_inventario']))} /mes",
-        help="Requiere inversión cero: es sólo cambiar cuándo y cuánto se pide.",
-        border=True,
-    )
-
-    if recom["descartados"]:
-        with st.expander("Escenarios de capacidad descartados"):
-            for d in recom["descartados"]:
-                st.markdown(f"- {escapar_pesos(d)}")
-
-    st.divider()
-    st.markdown("**Supuestos del modelo** (lo que hay que aclarar al presentarlo)")
-    for supuesto in SUPUESTOS:
-        st.markdown(f"- {supuesto}")
+    pestania_conclusion_real(st.session_state.parametros)
 
 
 # =============================================================================
@@ -2206,75 +1060,7 @@ def pestania_modelo_real(p: ParametrosSimulacion) -> None:
 
 
 def pestania_modelo(p: ParametrosSimulacion) -> None:
-    if p.estacion_real:
-        pestania_modelo_real(p)
-        return
-    c1, c2 = st.columns(2)
-    with c1:
-        st.subheader("El modelo")
-        st.markdown(DESCRIPCION_MODELO)
-    with c2:
-        st.subheader("El método")
-        st.markdown(DESCRIPCION_METODO)
-
-        st.markdown("**Intensidad de tráfico teórica (ρ)**")
-        st.caption(
-            "ρ = λ · E[servicio] / cantidad de servidores. Es el cálculo analítico previo: "
-            "si ρ ≥ 1 la cola crece sin límite mientras dure esa condición."
-        )
-        m1, m2 = st.columns(2)
-        m1.metric("ρ en la hora pico de un día medio", f"{p.rho_pico:.3f}", border=True)
-        m2.metric(
-            "ρ en la hora pico del día más cargado", f"{p.rho_pico_dia_malo:.3f}", border=True
-        )
-        if p.rho_pico_dia_malo >= 1:
-            st.warning(
-                "En los días de mayor demanda ρ supera 1 durante la hora pico: ahí el "
-                "sistema se satura y la cola sólo la frena el abandono de clientes.",
-                icon="⚠️",
-            )
-
-    st.divider()
-    st.subheader("Configuración de esta corrida")
-    if p.modo_demanda == "esperada":
-        demanda_txt = (
-            f"esperada desde {p.litros_mes:,.0f} L/mes ⇒ {p.autos_por_dia:.0f} clientes/día"
-        )
-    else:
-        demanda_txt = f"tabla empírica, media {p.autos_por_dia:.0f} autos/día"
-    c1, c2 = st.columns(2)
-    with c1:
-        st.markdown(
-            f"""
-| Parámetro | Valor |
-|---|---|
-| Surtidores / cajas | {p.surtidores} / {p.cajas} |
-| Demanda diaria | {demanda_txt} |
-| Modo de demanda | {p.modo_demanda} |
-| Inicio (mes, día) | {p.fecha_inicio} |
-| Perfil horario | pico a las {p.perfil.hora_pico()}:00 |
-| Carga | Triangular({p.carga.minimo:g}, {p.carga.moda:g}, {p.carga.maximo:g}) min — media {p.carga.media:.2f} |
-| Litros por carga | Triangular({p.litros.minimo:g}, {p.litros.moda:g}, {p.litros.maximo:g}) L — media {p.litros.media:.1f} |
-| Compra | {"Exponencial" if p.caja_exponencial else "Triangular"} — media {p.media_caja:.2f} min |
-| Probabilidad de compra | {p.prob_compra:.0%} (Bernoulli) |
-| Paciencia surtidor / caja | {p.paciencia_surtidor:.0f} / {p.paciencia_caja:.0f} min |
-"""
-        )
-    with c2:
-        st.markdown(
-            f"""
-| Parámetro | Valor |
-|---|---|
-| Capacidad del tanque | {p.tanque.capacidad:,.0f} L |
-| Punto de pedido (s) | {p.tanque.punto_pedido:,.0f} L ({p.cobertura_punto_pedido:.1f} h de venta) |
-| Cantidad a pedir (Q) | {p.tanque.cantidad_pedido:,.0f} L |
-| Plazo de entrega | Triangular({p.tanque.plazo_entrega.minimo:g}, {p.tanque.plazo_entrega.moda:g}, {p.tanque.plazo_entrega.maximo:g}) h |
-| Consumo esperado | {p.litros_por_dia:,.0f} L/día |
-| Días simulados | {p.dias} ({p.dias_calentamiento} de calentamiento) |
-| Réplicas por escenario | {st.session_state.replicas} |
-| Semilla | {st.session_state.semilla_usada} |
-"""
-        )
+    pestania_modelo_real(p)
 
 
 # =============================================================================
@@ -2297,14 +1083,6 @@ def _demora_texto(red, id_origen: str, corte) -> str:
 
 
 def pestania_red(p: ParametrosSimulacion) -> None:
-    if p.red is None:
-        st.subheader("Red de abastecimiento")
-        st.info(
-            "El caso clásico no tiene red: su plazo de entrega es una sola triangular "
-            "(8–36 h) sin origen ni cortes. Elegí la **estación real** en la barra lateral.",
-            icon="🗺️",
-        )
-        return
     red = p.red
     optimo = camino_mas_corto(red)
 
@@ -2538,12 +1316,6 @@ def pestania_red(p: ParametrosSimulacion) -> None:
 # =============================================================================
 def pestania_gnc(p: ParametrosSimulacion) -> None:
     st.subheader("GNC: cortes de invierno, compresores y migración a nafta")
-    if p.gnc is None:
-        st.info(
-            "El caso clásico no vende GNC. Elegí la **estación real** en la barra lateral.",
-            icon="🔥",
-        )
-        return
     g = p.gnc
     base = buscar(st.session_state.resultados, "Base")
 
@@ -2644,29 +1416,8 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
         )
 
 
-# =============================================================================
-# Pestaña: estaciones del año (Fase 7, §7.8)
-# =============================================================================
-PRESETS_ESTACIONALIDAD = {
-    "La de la barra lateral": None,
-    "Neutra (default)": ESTACIONALIDAD_NEUTRA,
-    "Leve (±6 %)": ESTACIONALIDAD_LEVE,
-    "Proxy turístico": ESTACIONALIDAD_PROXY,
-}
-
 #: Segundos por réplica de un mes (medido: ≈ 1,3 s); sólo para estimar el tiempo de espera.
 SEGUNDOS_POR_REPLICA = 1.3
-
-
-def _litros_por_dia_de_cada_mes(p: ParametrosSimulacion) -> list[float]:
-    """Litros por día esperados en cada mes (estacionalidad y calendario real, sin simular)."""
-    salida = []
-    for mes in range(1, 13):
-        p_mes = para_mes(p, mes)
-        salida.append(
-            sum(p_mes.litros_del_dia(d) for d in range(1, p_mes.dias + 1)) / p_mes.dias
-        )
-    return salida
 
 
 def _celda(resumen, metrica: Metrica) -> str:
@@ -2675,103 +1426,6 @@ def _celda(resumen, metrica: Metrica) -> str:
         f"{metrica.valor_mostrado(resumen.promedio):,.{metrica.decimales}f} "
         f"± {metrica.valor_mostrado(resumen.semiamplitud):,.{metrica.decimales}f}"
     )
-
-
-def pestania_estaciones(p: ParametrosSimulacion) -> None:
-    st.subheader("Estaciones del año: verano · otoño · invierno · primavera")
-    if not p.estacion_real:
-        st.info("Las estaciones del año son del caso real. Elegí la **estación real** en la "
-                "barra lateral.", icon="🍂")
-        return
-    st.markdown(
-        "Cuatro corridas del **mes real completo** (enero, abril, julio y octubre) con su "
-        "calendario: días del mes, fines de semana y, en invierno, los episodios de corte de "
-        "GNC y los cortes de ruta de jun–ago. Con la estacionalidad **neutra** (la que "
-        "tiene el modelo hasta conseguir la serie mensual de la Secretaría de Energía, C10) "
-        "todos los meses venden los mismos litros: las diferencias vienen sólo del calendario, "
-        "del GNC y de la ruta, y eso es lo correcto."
-    )
-
-    c1, c2, c3 = st.columns([2, 1, 2])
-    nombre_preset = c1.selectbox(
-        "Estacionalidad de la demanda", list(PRESETS_ESTACIONALIDAD), key="est_preset",
-        help="Neutra: todos los meses pesan igual (DEM-06, supuesto). Leve y proxy turístico "
-             "son alternativas del Registro; ninguna tiene serie real todavía.",
-    )
-    replicas = c2.slider("Réplicas por estación", 1, 6, 4, 1, key="est_rep")
-    c3.caption(f"Tiempo estimado: ≈ {4 * replicas * SEGUNDOS_POR_REPLICA:.0f} s "
-               f"(4 estaciones × {replicas} réplicas). Queda en caché.")
-    preset = PRESETS_ESTACIONALIDAD[nombre_preset]
-    p_est = p if preset is None else replace(p, estacionalidad=preset)
-
-    st.plotly_chart(
-        graficos_escenarios.grafico_litros_por_mes(
-            _litros_por_dia_de_cada_mes(p_est), MESES, {m for _, _, m in ESTACIONES},
-            "Litros por día esperados de cada mes (en amarillo, los 4 meses que se simulan)",
-        ),
-        key="g_litros_mes",
-    )
-
-    semilla = st.session_state.semilla_usada
-    if st.button("🍂 Correr las 4 estaciones", type="primary", key="btn_estaciones"):
-        with st.spinner(f"Simulando 4 estaciones × {replicas} réplicas…"):
-            resultados = correr_estaciones_cacheado(p_est, replicas, semilla)
-        st.session_state.estaciones = (p_est, resultados)
-    guardado = st.session_state.get("estaciones")
-    if not guardado:
-        st.info("Apretá **Correr las 4 estaciones** para simular el año por estaciones.", icon="▶")
-        return
-    p_usado, resultados = guardado
-    if p_usado != p_est:
-        st.info("Cambiaste parámetros o la estacionalidad: lo que se ve es la última corrida.",
-                icon="🔄")
-
-    filas = []
-    for r in resultados:
-        fila = {"Estación": r.escenario.nombre, "Días": r.parametros.dias}
-        for m in (POR_CLAVE["llegadas_dia"], POR_CLAVE["litros_vendidos_dia"],
-                  POR_CLAVE["espera_pico"], POR_CLAVE["nivel_servicio"],
-                  POR_CLAVE["tasa_abandono"], POR_CLAVE["porcentaje_dias_quiebre"],
-                  POR_CLAVE["gnc_afectados_dia"], POR_CLAVE["migrados_gnc_dia"],
-                  POR_CLAVE["viajes_demorados_pct"], POR_CLAVE["plazo_entrega"]):
-            unidad = m.unidad_mostrada
-            fila[f"{m.etiqueta} ({unidad})" if unidad else m.etiqueta] = _celda(r.resumen[m.clave], m)
-        filas.append(fila)
-    st.markdown("##### Resultados por estación (promedio ± IC 95 % de las réplicas)")
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-
-    g1, g2 = st.columns(2)
-    g1.plotly_chart(
-        graficos_escenarios.grafico_barras_ic(
-            resultados, "espera_pico", "Espera en la hora pico, por estación", "min", 2),
-        key="g_est_espera",
-    )
-    g2.plotly_chart(
-        graficos_escenarios.grafico_barras_ic(
-            resultados, "nivel_servicio", "Nivel de servicio (litros pedidos que se vendieron)",
-            "%", 1, escala=100.0),
-        key="g_est_servicio",
-    )
-    st.plotly_chart(graficos_escenarios.grafico_perdidos_por_motivo(resultados),
-                    key="g_est_perdidos")
-
-    esperas = {r.escenario.nombre: r.prom("espera_pico") for r in resultados}
-    mayor, menor = max(esperas, key=esperas.get), min(esperas, key=esperas.get)
-    migrados = {r.escenario.nombre: r.prom("migrados_gnc_dia") for r in resultados}
-    st.caption(
-        f"Lectura: la espera en la hora pico va de {esperas[menor]:.2f} min ({menor}) a "
-        f"{esperas[mayor]:.2f} min ({mayor}); los clientes de GNC que pasan a Súper por el "
-        f"corte son {max(migrados.values()):.2f} por día en el peor mes "
-        f"({max(migrados, key=migrados.get)}) y {min(migrados.values()):.2f} en el mejor. "
-        "Si dos barras se parecen, mirá las barras de error: el IC 95 % de las réplicas "
-        "dice cuánto de la diferencia puede ser azar."
-    )
-    if p_usado.gnc is not None and not p_usado.gnc.episodios_en_horizonte:
-        st.caption(
-            "Los episodios de GNC se sortean entre el 1/jun y el 31/ago, así que cada réplica "
-            "de julio puede o no tener uno. Para ver siempre el corte en invierno, tildá "
-            "*Forzar que los episodios caigan dentro del horizonte* (GNC y cortes de invierno)."
-        )
 
 
 # =============================================================================
@@ -2969,30 +1623,12 @@ def pestania_datos_fuentes() -> None:
 # =============================================================================
 # Aplicación
 # =============================================================================
-def politica_configurada(costos, p: ParametrosSimulacion):
-    """Busca en el barrido la política que está configurada ahora, para comparar."""
-    if not costos:
-        return None
-    return next(
-        (
-            c
-            for c in costos
-            if c.punto_pedido == p.tanque.punto_pedido
-            and c.cantidad_pedido == p.tanque.cantidad_pedido
-        ),
-        None,
-    )
-
-
 def correr_todo(
     p: ParametrosSimulacion, eco: ParametrosEconomicos, replicas: int, semilla: int
 ) -> None:
     """Corre los escenarios (o la estación real) y la réplica con traza; guarda todo en la sesión."""
-    if p.estacion_real:
-        # Un único "escenario Base" real; el catálogo S0–S12 está en la pestaña Escenarios.
-        resultados = [correr_estacion_real_cacheado(p, replicas, semilla)]
-    else:
-        resultados = correr_escenarios_cacheado(p, replicas, semilla)
+    # Un único "escenario Base" real; el catálogo S0–S12 está en el Caso de informe.
+    resultados = [correr_estacion_real_cacheado(p, replicas, semilla)]
     traza = correr_traza_cacheada(p, semilla)
 
     st.session_state.resultados = resultados
@@ -3005,8 +1641,6 @@ def correr_todo(
     st.session_state.replicas = replicas
     st.session_state.semilla_usada = semilla
     # El barrido de políticas corresponde a otros parámetros: se descarta.
-    st.session_state.costos_politicas = None
-    st.session_state.politica_actual = None
     st.session_state.costos_real = None
     st.session_state.efecto_cortes = None
     st.session_state.efecto_gnc = None
@@ -3679,15 +2313,6 @@ def main() -> None:
     encabezado_resultados()
 
     p_corrida: ParametrosSimulacion = st.session_state.parametros
-    # La recomendación se arma acá, antes de las pestañas, con lo que haya en la sesión.
-    costos = st.session_state.get("costos_politicas")
-    st.session_state.politica_actual = politica_configurada(costos, p_corrida)
-    st.session_state.recomendacion = recomendacion(
-        st.session_state.economia,
-        st.session_state.resultados,
-        costos,
-        st.session_state.politica_actual,
-    )
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [

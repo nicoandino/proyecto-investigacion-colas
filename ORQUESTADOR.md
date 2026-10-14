@@ -525,6 +525,16 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   escenario de cortes, eventos de abastecimiento o despacho según el plan); con datos reales, una línea explica por qué no
   están y que los cortes se prueban en el plan del período. Se sacaron las menciones a la "barra lateral" de esa pestaña.
   `verificar.py` **143/143**; QA `reports/qa_g_pendientes.py`: 0 excepciones, 0 errores de consola.
+- **G3 ✅ (limpieza de `app.py`).** Se calculó qué funciones de `app.py` se alcanzan desde `main()` y se borró el resto en
+  vueltas (la barra lateral `leer_parametros` y lo que sólo ella usaba, las pestañas viejas de Escenarios, Economía y
+  Estaciones, tablas y promedios del modo clásico); los despachadores `if p.estacion_real: … else <modo clásico>`
+  (Inventario, Conclusión, Modelo, Demanda vieja), los avisos "no hay red / no hay GNC en el caso clásico", la
+  recomendación del modo clásico que se calculaba y no se leía, los imports y constantes sin uso y los encabezados
+  huérfanos. **`app.py`: 3.761 → 2.375 líneas**, sin menciones a la barra lateral. `ParametrosSimulacion.clasico()` y el
+  motor clásico siguen en `sim/` (los usa `verificar.py` para los dorados, N1). `verificar.py` **143/143**; se corrió la
+  batería de QA completa (`qa_g_pendientes`, `qa_e0_gnc`, `qa_e3_eventos`, `qa_p3_pronostico`, `qa_p4_stock`,
+  `qa_f3_plan`, `qa_tanda3`…`qa_tanda8`): 0 excepciones; 0 errores de consola (la tanda 7 dio 14 "Failed to fetch" con el
+  servidor cargado y 0 al repetirla sola).
 
 ---
 
@@ -605,14 +615,14 @@ Después E1 → E2 → E3. Esta parte puede ir antes o después de la parte 3; l
 
 Lo de la parte 1 que **no** quedó cubierto por las tandas de la parte 2:
 
-- **Inventario (etapa 5):** no hay una **tabla de camiones** con día de pedido, día de llegada, origen, ruta, km y costo
+- ~~**Inventario (etapa 5):** tabla de camiones~~ → hecho en G1 (§26). Antes: no había una **tabla de camiones** con día de pedido, día de llegada, origen, ruta, km y costo
   de cada viaje (los datos ya están en el motor, `PedidoCamion` y `Traza.eventos`; falta mostrarlos).
-- **Red y rutas (etapa 5):** pedía "la red de nafta, de diésel **y de GNC**": la del GNC (gasoducto) no está dibujada; la
+- ~~**Red y rutas (etapa 5)**~~ → hecho en G2 (§26). Pedía "la red de nafta, de diésel **y de GNC**": la del GNC (gasoducto) no está dibujada; la
   pestaña GNC sólo dice que el gas viene de la red. "Qué le hace cada corte a cada origen sólo si se editó": hoy la tabla
   de cortes se muestra siempre.
 - **Frontend (etapa 7):** el tema oscuro en toda la app y el menú lateral como la imagen; **Nico inicia la skill de
   diseño ("impeccable")** cuando llegue el momento.
-- **Limpieza:** la barra lateral vieja (`leer_parametros` y el modo clásico de la app) sigue en `app.py` aunque no se usa.
+- ~~**Limpieza:** la barra lateral vieja~~ → hecho en G3 (§26).
 - **Cierre (etapa 8):** la tabla de §3 y los pendientes de §5 quedaron viejos (no marcan lo hecho en la parte 2).
 
 Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3) y **parte 4** (Eventos, E0–E3), cerradas.

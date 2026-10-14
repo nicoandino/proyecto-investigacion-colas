@@ -62,7 +62,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 ## Estructura
 
 ```
-app.py            Streamlit (única entrada)
+app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
 verificar.py      143 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad

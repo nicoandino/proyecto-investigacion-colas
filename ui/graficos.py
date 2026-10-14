@@ -557,3 +557,65 @@ def grafico_venta_perdida(economia: list[ResultadoEconomico]) -> go.Figure:
         **_layout(hovermode="closest"),
     )
     return fig
+
+
+
+# =============================================================================
+# Pronóstico (parte 3): la serie real, el ajuste, la prueba y los próximos meses
+# =============================================================================
+MESES_CORTOS = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
+
+
+def _etiqueta_mes(anio: int, mes: int) -> str:
+    return f"{MESES_CORTOS[mes - 1]}-{str(anio)[2:]}"
+
+
+def grafico_pronostico(analisis, meses_todos, valores_todos) -> go.Figure:
+    """La serie de Shell en Mendoza, el método elegido (ajuste, prueba y pronóstico) y su banda ± z·RMSE."""
+    from sim.pronostico import METODOS
+
+    x_todos = [_etiqueta_mes(a, m) for a, m in meses_todos]
+    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
+    n_ent = len(analisis.reales) - analisis.n_prueba
+    x_vent = [_etiqueta_mes(a, m) for a, m in analisis.meses]
+    x_fut = [_etiqueta_mes(a, m) for a, m in analisis.futuros]
+    fig = go.Figure()
+    fig.add_vrect(x0=x_vent[n_ent], x1=x_vent[-1], fillcolor=rgba(GRIS, 0.18), line_width=0,
+                  annotation_text="meses de prueba", annotation_position="top left")
+    bajo = [lo for lo, _ in analisis.intervalo]
+    alto = [hi for _, hi in analisis.intervalo]
+    fig.add_trace(go.Scatter(x=x_fut + x_fut[::-1], y=alto + bajo[::-1], fill="toself", fillcolor=rgba(AZUL, 0.15),
+                             line=dict(width=0), hoverinfo="skip", name="intervalo 95 %"))
+    fig.add_trace(go.Scatter(x=x_todos, y=list(valores_todos), mode="lines", name="ventas reales",
+                             line=dict(color=TINTA_AZULADA, width=2),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>real</extra>"))
+    ajustados = [v for v in elegido.ajustados]
+    fig.add_trace(go.Scatter(x=x_vent[:n_ent], y=ajustados, mode="lines", name=f"{METODOS[elegido.metodo]} (ajuste)",
+                             line=dict(color=AZUL, width=2, dash="dot"), connectgaps=False,
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>ajuste</extra>"))
+    fig.add_trace(go.Scatter(x=x_vent[n_ent:], y=list(elegido.prueba), mode="lines+markers", name="pronóstico de prueba",
+                             line=dict(color=NARANJA, width=2), marker=dict(size=8),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>prueba</extra>"))
+    fig.add_trace(go.Scatter(x=x_fut, y=list(analisis.pronostico), mode="lines+markers", name="pronóstico",
+                             line=dict(color=AZUL, width=2), marker=dict(size=8),
+                             hovertemplate="%{x}: %{y:,.0f} m³<extra>pronóstico</extra>"))
+    fig.update_layout(title="Ventas al público de Shell en Mendoza (m³ por mes)", yaxis_title="m³ por mes",
+                      legend=dict(orientation="h", y=-0.22), **_layout(height=430, hovermode="closest"))
+    # Eje de categorías: el orden es el del calendario (si no, los meses del pronóstico quedan primero).
+    fig.update_xaxes(tickangle=-45, nticks=24, categoryorder="array", categoryarray=x_todos + x_fut)
+    return fig
+
+
+def grafico_indices(indices) -> go.Figure:
+    """Los 12 índices estacionales de la serie real (1 = un mes promedio)."""
+    fig = go.Figure(go.Bar(
+        x=list(MESES_CORTOS), y=list(indices), marker=dict(color=AZUL),
+        text=[f"{v:.2f}".replace(".", ",") for v in indices], textposition="outside",
+        hovertemplate="%{x}: %{y:.3f}<extra>índice</extra>",
+    ))
+    fig.add_hline(y=1.0, line_color=TINTA_AZULADA, line_width=1, line_dash="dash")
+    fig.update_layout(title="Cuánto pesa cada mes (índice estacional; la línea punteada = 1, un mes promedio)",
+                      yaxis_title="índice",
+                      showlegend=False, **_layout(height=340, hovermode="closest"))
+    fig.update_yaxes(range=[min(indices) - 0.08, max(indices) + 0.06])
+    return fig

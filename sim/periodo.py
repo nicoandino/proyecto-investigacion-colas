@@ -26,7 +26,7 @@ from sim.config import (
     turnos_con_refuerzo,
     turnos_de,
 )
-from sim.config import ParametrosEventos
+from sim.config import Estacionalidad, ParametrosEventos
 from sim.datos import valor
 from sim.distribuciones import AleatorioDeterminista
 from sim.escenarios import PICOS
@@ -226,6 +226,7 @@ class Ajustes:
     cortes_gnc: str = "habituales"                    # "habituales" | "todo_invierno"
     pct_gnc: float = float(valor("DEM-05"))
     calendario: bool = True                           # calendario de temporadas (DEM-14): activo en la app
+    indices_reales: bool = False                      # forma mensual de la serie real (PRO-01, parte 3) en vez del calendario
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
     eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
     origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
@@ -258,7 +259,9 @@ class Ajustes:
                 f"{len(self.eventos)} eventos aleatorios (semilla {self.semilla_eventos}"
                 + (f", frecuencia × {self.frecuencia_eventos:g}" if self.frecuencia_eventos != 1 else "") + ")"
             )
-        if not self.calendario:
+        if self.indices_reales:
+            salida.append("índices mensuales de la serie real (pronóstico)")
+        elif not self.calendario:
             salida.append("sin calendario de temporadas")
         elif self.factores != base.factores:
             salida.append("factores del calendario de temporadas")
@@ -292,6 +295,12 @@ def aplicar_ajustes(
         ))
     if abs(a.pct_gnc - p.pct_gnc) > 1e-12:
         p = replace(p, pct_gnc=a.pct_gnc)
+    if a.indices_reales:
+        # La forma de la serie real (PRO-01): 12 índices por mes, promedio 1; reemplaza al calendario de temporadas.
+        from sim.pronostico import estacionalidad_del_pronostico
+
+        p = replace(p, calendario_demanda=(),
+                    estacionalidad=Estacionalidad(tuple(100.0 * i for i in estacionalidad_del_pronostico())))
     if a.eventos:
         p = replace(p, eventos=ParametrosEventos(
             activos=tuple(a.eventos), semilla=a.semilla_eventos, frecuencia=a.frecuencia_eventos))

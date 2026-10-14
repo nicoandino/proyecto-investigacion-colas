@@ -3126,10 +3126,20 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         ) / 100.0
 
     with st.expander("📅 Calendario de demanda: verano, vacaciones de invierno y resto del invierno"):
-        calendario = st.toggle(
-            "Usar el calendario de temporadas", value=previo.calendario, key="aj_calendario",
-            help="Prendido por defecto. Apagado, todos los meses pesan igual (estacionalidad neutra del Registro).",
+        formas = {
+            "calendario": "Calendario de temporadas (supuesto del grupo, DEM-14)",
+            "real": "Índices de la serie real de Shell Mendoza (pestaña 📈 Pronóstico, PRO-01)",
+            "neutra": "Neutra: todos los meses iguales",
+        }
+        actual = "real" if previo.indices_reales else ("calendario" if previo.calendario else "neutra")
+        forma = st.radio(
+            "Cómo cambia la demanda a lo largo del año", list(formas), index=list(formas).index(actual),
+            format_func=formas.get, key="aj_forma_demanda",
+            help="Por defecto, el calendario de temporadas. La serie real (Secretaría de Energía) dice que en Shell "
+                 "Mendoza el verano casi no cambia; marzo y diciembre son los meses fuertes y junio el más flojo.",
         )
+        calendario = forma == "calendario"
+        indices_reales = forma == "real"
         st.caption(
             "No es azar: cada fecha tiene su factor. Verano (dic–feb) sube por el turismo; las **vacaciones de "
             "invierno de Mendoza** (6–17 de julio de 2026, calendario de la DGE) suben; el resto del invierno baja un "
@@ -3177,6 +3187,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
     return Ajustes(
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
+        indices_reales=bool(indices_reales),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,
@@ -3628,7 +3639,7 @@ def main() -> None:
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
-        "🏪 La estación", "🎬 Animación", "📊 Indicadores", "🎲 Demanda", "🛢️ Inventario",
+        "🏪 La estación", "🎬 Animación", "📊 Indicadores", "🎲 Demanda", "📈 Pronóstico", "🛢️ Inventario",
         "🗺️ Red y rutas", "🔥 GNC", "💰 Economía", "📝 Conclusión",
         "📖 Modelo y método", "📚 Datos y fuentes",
     ]
@@ -3653,6 +3664,8 @@ def main() -> None:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)
     with pestanias["🎲 Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
+    with pestanias["📈 Pronóstico"]:
+        vistas.pestania_pronostico(p_corrida)
     if editada:
         with pestanias["🎲 Qué se sorteó"]:
             pestania_sorteos(p_corrida)

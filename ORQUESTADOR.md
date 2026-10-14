@@ -444,6 +444,17 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   ene 0,99 · feb 1,00 · **mar 1,06** · abr 0,95 · may 1,02 · **jun 0,91** · jul 1,00 · ago 1,03 · sep 0,97 · oct 1,03 ·
   nov 1,00 · **dic 1,05**; tendencia −0,46 % por mes. **Hallazgo:** en Shell Mendoza el verano **no** vende más
   (enero 0,99), al revés del supuesto DEM-14 (verano × 1,06). Control nuevo (39). `verificar.py` **135/135**.
+- **P3 ✅ (pronóstico en la app).** Pestaña **📈 Pronóstico** (después de Demanda): de dónde sale la serie (oficial, Shell
+  Mendoza, no la estación), tarjetas (método elegido, MAPE, tendencia), el gráfico de la serie con el ajuste del elegido,
+  la zona de prueba y el pronóstico con su banda ± z·RMSE, la tabla de los cinco métodos (MAE, MAPE, RMSE, sesgo), el
+  gráfico de los 12 índices, los próximos 12 meses en m³ y **escalados a la estación** (DEM-01 ÷ el promedio de los últimos
+  12 meses de Shell Mendoza = 2,37 %) y "¿Cómo se comprueba?". Menú: en 📅 Calendario de demanda, **cómo cambia la
+  demanda a lo largo del año**: calendario de temporadas (por defecto) · **índices de la serie real** · neutra; con los
+  índices reales, `Estacionalidad` = los 12 índices y sin calendario (el total del año no cambia: 3.240.000 L con o sin
+  índices). Demanda muestra el índice del mes en la cuenta del día. **Queda por defecto el calendario** (decide Nico).
+  Control nuevo (40). `verificar.py` **136/136**; QA `reports/qa_p3_pronostico.py`: 2 gráficos y 2 tablas, el encabezado
+  dice la forma elegida, 0 excepciones, 0 errores de consola (se corrigió el orden del eje: los meses del pronóstico
+  aparecían a la izquierda).
 
 ---
 

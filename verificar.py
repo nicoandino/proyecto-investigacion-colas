@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   40. Parte 3, etapa P3: con los índices de la serie real el año tiene los mismos litros, repartidos
+       por mes según su índice; sin tocar el menú sigue el calendario de temporadas.
    39. Parte 3, etapa P2: métodos de pronóstico contra el práctico (Cable Televisora, Lincoln) y
        elección por RMSE en la serie real de Shell Mendoza.
    38. Parte 4, etapa E3: el menú sin eventos deja la corrida del Registro; con eventos, cada uno es
@@ -2212,6 +2214,34 @@ def main() -> int:
         f"Lincoln: índices {', '.join(f'{x:.2f}' for x in i_lin)} · Shell Mendoza (ene-2022 – ago-2026, 12 de prueba): "
         + " · ".join(f"{a.metodo} {a.errores.rmse:,.0f}" for a in analisis.ajustes)
         + f" ⇒ {analisis.elegido} (MAPE {100 * elegido.errores.mape:.1f} %)",
+    )
+
+    # ------------------------------------------------------------------ 40
+    separador("40. Parte 3, etapa P3: la forma real de la demanda como opción del menú")
+    from datetime import date as _d40, timedelta as _t40
+    from sim.periodo import anio_completo as _anio40
+
+    base40 = con_periodo(ParametrosSimulacion().datos_reales(), _anio40())
+    p_def, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes())
+    p_neu, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes(calendario=False))
+    p_real, _ = aplicar_ajustes(base40, ParametrosEconomicos(), Ajustes(calendario=False, indices_reales=True))
+    indices40 = pron.analizar().indices
+
+    def litros_mes40(p_, mes):
+        return sum(p_.litros_del_dia(d) for d in range(1, 366) if (_d40(2026, 1, 1) + _t40(d - 1)).month == mes)
+
+    total_neu = sum(p_neu.litros_del_dia(d) for d in range(1, 366))
+    total_real = sum(p_real.litros_del_dia(d) for d in range(1, 366))
+    proporcional = all(abs(litros_mes40(p_real, m) / litros_mes40(p_real, 6) - indices40[m - 1] / indices40[5]) < 1e-9
+                       for m in range(1, 13))
+    controlar(
+        p_def.estacionalidad == base40.estacionalidad and p_def.calendario_demanda == tuple(_valor("DEM-14"))
+        and abs(total_real - total_neu) < 1e-6 and proporcional and p_real.calendario_demanda == ()
+        and "índices mensuales de la serie real (pronóstico)" in Ajustes(indices_reales=True).cambios(),
+        "Los índices de la serie real reparten los mismos litros del año, mes a mes según su índice",
+        f"año: {total_neu:,.0f} L sin forma = {total_real:,.0f} L con los índices reales · marzo ÷ junio = "
+        f"{litros_mes40(p_real, 3) / litros_mes40(p_real, 6):.3f} = {indices40[2] / indices40[5]:.3f} · "
+        "sin tocar el menú sigue el calendario de temporadas",
     )
 
     # ------------------------------------------------------------------

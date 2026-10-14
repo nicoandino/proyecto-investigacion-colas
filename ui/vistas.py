@@ -516,7 +516,10 @@ def pestania_demanda(
                 "dato (DEM-01)",
                 f"{ent(p.litros_mes)} L ÷ {ent(_dias_del_mes_de(p))} días × tipo de día"
                 + (f" × calendario {dec(factor_cal, 2)} ({NOMBRE_TEMPORADA[p.temporada_del_calendario(f1)].lower()})"
-                   if p.calendario_demanda else ""),
+                   if p.calendario_demanda else "")
+                + (f" × índice de {MESES_ES[f1.month - 1]} "
+                   f"{dec(p.estacionalidad.indice_mes(f1.month) / p.estacionalidad.promedio, 3)} (serie real)"
+                   if len(set(p.estacionalidad.indices)) > 1 else ""),
                 f"{ent(litros_dia)} L ÷ {dec(p.litros_medios_por_cliente)} L por cliente",
                 f"{dec(100 * p.pct_gnc, 0)} % de las llegadas",
                 f"{ent(liquidos)} ÷ (1 − {dec(p.pct_gnc, 2)})",
@@ -543,6 +546,10 @@ def pestania_demanda(
             "máximo de cada temporada son un día hábil y un fin de semana. No se renormaliza al año: el total anual "
             "queda ≈ 0,4 % arriba de 12 × 270.000 L."
         )
+    elif len(set(p.estacionalidad.indices)) > 1:
+        st.caption("Forma de la demanda: los **índices mensuales de la serie real** de Shell Mendoza (elegido en el "
+                   "menú): cada mes × su índice, que promedian 1, así que el total del año no cambia. Están en la pestaña "
+                   "📈 Pronóstico.")
     else:
         st.caption("Calendario de temporadas apagado en el menú: todos los meses pesan igual.")
 
@@ -736,3 +743,82 @@ def _valor_registro(id_: str):
     from sim.datos import valor
 
     return valor(id_)
+
+
+# =============================================================================
+# Pronóstico (parte 3): la serie real de Shell en Mendoza y los métodos de la cátedra
+# =============================================================================
+def pestania_pronostico(p: ParametrosSimulacion) -> None:
+    """La pestaña 📈 Pronóstico: la serie real, los métodos, el elegido y cómo entra al simulador."""
+    from sim.datos import valor
+    from sim.pronostico import METODOS, analizar, serie_registro
+
+    analisis = analizar()
+    meses_todos, valores_todos = serie_registro()
+    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
+    st.subheader("Pronóstico de la demanda con la serie real")
+    st.info(
+        "La serie es **real y oficial**: las ventas mensuales **al público de Shell en Mendoza** (Súper, V-Power, "
+        "gasoil G2 y G3), declaradas a la Secretaría de Energía (datos abiertos, PRO-01). **No hay datos por "
+        "estación**: es la suma de todas las Shell de la provincia, así que el simulador usa su **forma** (cuánto "
+        "pesa cada mes) y la escala a los litros de esta estación (DEM-01).",
+        icon="📈",
+    )
+    primero, n_prueba = valor("PRO-02")
+    _tarjetas([
+        ("Método elegido", METODOS[analisis.elegido].split(" (")[0], "el de menor RMSE en los meses de prueba"),
+        ("Error en la prueba (MAPE)", f"{dec(100 * elegido.errores.mape)} %", f"RMSE {ent(elegido.errores.rmse)} m³"),
+        ("Tendencia", f"{dec(100 * analisis.tendencia_mensual, 2)} % por mes",
+         "la recta de la serie desestacionalizada ÷ el nivel medio"),
+    ])
+    st.plotly_chart(graficos.grafico_pronostico(analisis, meses_todos, valores_todos), key="g_pronostico")
+    st.caption(
+        f"Se ajusta con {MESES_ES[primero[1] - 1]} de {primero[0]} a {MESES_ES[analisis.meses[-n_prueba - 1][1] - 1]} de "
+        f"{analisis.meses[-n_prueba - 1][0]} y se prueba en los {n_prueba} meses siguientes (zona gris), que el método "
+        "no vio. La pandemia (2020) y el rebote de 2021 quedan afuera del ajuste. La banda es ± z·RMSE (95 %)."
+    )
+
+    st.markdown("##### Los cinco métodos en los meses de prueba")
+    filas = [{
+        "Método": METODOS[a.metodo] + ("  ✅" if a.metodo == analisis.elegido else ""),
+        "Parámetros": a.detalle,
+        "MAE (m³)": ent(a.errores.mae),
+        "MAPE": f"{dec(100 * a.errores.mape)} %",
+        "RMSE (m³)": ent(a.errores.rmse),
+        "Sesgo (m³)": f"{a.errores.sesgo:+,.0f}".replace(",", "."),
+    } for a in analisis.ajustes]
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    st.caption("Sesgo = promedio de (real − pronóstico): negativo quiere decir que el método esperaba más de lo que se "
+               "vendió (la serie bajó más de lo previsto).")
+
+    st.markdown("##### Cuánto pesa cada mes")
+    st.plotly_chart(graficos.grafico_indices(analisis.indices), key="g_indices")
+    verano = sum(analisis.indices[m - 1] for m in (12, 1, 2)) / 3
+    st.caption(
+        f"En la serie real el verano (dic–feb) pesa {dec(verano, 2)} — casi un mes promedio —, mientras que el "
+        f"calendario de temporadas del menú (DEM-14, supuesto) lo sube 6 %. Para simular con la forma real, elegí "
+        f"**'Índices de la serie real'** en el desplegable 📅 del menú principal."
+    )
+
+    st.markdown("##### Los próximos meses (y la estación escalada)")
+    ultimos = analisis.reales[-12:]
+    escala = float(valor("DEM-01")) / (sum(ultimos) / len(ultimos) * 1000.0)
+    filas = [{
+        "Mes": f"{MESES_ES[m - 1]} {a}",
+        "Shell Mendoza (m³)": ent(f),
+        "Intervalo 95 % (m³)": f"{ent(lo)} – {ent(hi)}",
+        "La estación (L)": ent(f * 1000 * escala),
+    } for (a, m), f, (lo, hi) in zip(analisis.futuros, analisis.pronostico, analisis.intervalo)]
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    _comprobacion([
+        "Errores en los meses de prueba, con e = real − pronóstico: MAE = Σ|e| ÷ n · MAPE = Σ|e ÷ real| ÷ n · "
+        "RMSE = √(Σe² ÷ n) · sesgo = Σe ÷ n. Se elige el de menor RMSE.",
+        "Validación con el práctico de la cátedra (control 39 de `verificar.py`): Cable Televisora da MAE = 8,92 y "
+        "RMSE = 10,68, y la recta de mínimos cuadrados de sus datos reproduce los pronósticos del práctico.",
+        "Índices: cociente de cada mes al promedio móvil centrado de 12 meses, promediados por mes y normalizados "
+        "para que promedien 1.",
+        f"Escala a la estación: {ent(float(valor('DEM-01')))} L por mes (DEM-01) ÷ el promedio de los últimos 12 meses "
+        f"de Shell Mendoza ({ent(sum(ultimos) / len(ultimos))} m³) = {dec(100 * escala, 2)} % de la provincia. Supuesto: "
+        "la estación sigue la misma forma que el conjunto de las Shell de Mendoza.",
+        "Fuente: Secretaría de Energía, datos abiertos (nota 12 en research_notes; PRO-01 a PRO-04 en Datos y fuentes).",
+    ])

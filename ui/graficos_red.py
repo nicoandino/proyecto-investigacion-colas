@@ -131,6 +131,84 @@ def grafico_red(
     return fig
 
 
+# =============================================================================
+# Mapa con relieve (parte 2, tanda 9): mapa base abierto, sin Google Maps
+# =============================================================================
+#: Coordenadas reales APROXIMADAS (longitud, latitud) de los nodos, de OpenStreetMap (notas 06 y 09).
+COORDENADAS = {
+    "DOCK": (-58.345, -34.642),
+    "ARROYO": (-60.508, -33.155),
+    "LUJAN": (-68.870, -33.005),
+    "PAREDITAS": (-69.070, -33.950),
+    "SOSNEADO": (-69.583, -35.083),
+    "SANRAFAEL": (-68.358, -34.628),
+    "ALVEAR": (-67.694, -34.977),
+    "MONTECOMAN": (-67.880, -34.590),
+    "LAPAZ": (-67.550, -33.460),
+}
+#: Teselas con relieve de OpenTopoMap (sobre datos de OpenStreetMap y SRTM): piden esta atribución.
+TESELAS_RELIEVE = "https://tile.opentopomap.org/{z}/{x}/{y}.png"
+ATRIBUCION_MAPA = (
+    "Datos del mapa: © colaboradores de OpenStreetMap, SRTM · Estilo del mapa: © OpenTopoMap (CC-BY-SA)"
+)
+
+
+def grafico_red_mapa(red: ParametrosRed, cerrados: tuple[tuple[str, str], ...] = ()) -> go.Figure:
+    """La misma red sobre un mapa con relieve: la ruta óptima gruesa y con contorno, los cortes en rojo, el desvío
+    en azul. Los tramos se dibujan rectos entre ciudades (la distancia es la de la ruta)."""
+    cierres = frozenset(frozenset(par) for par in cerrados)
+    optimo = camino_mas_corto(red)
+    en_ruta = arcos_de_la_ruta(optimo.ruta)
+    afecta = bool(cierres & en_ruta)
+    desvio = camino_mas_corto(red, cerrados=cerrados) if afecta else None
+    en_desvio = arcos_de_la_ruta(desvio.ruta) if desvio and desvio.ruta else frozenset()
+
+    fig = go.Figure()
+    for arco in red.arcos:
+        clave = frozenset((arco.a, arco.b))
+        lon = [COORDENADAS[arco.a][0], COORDENADAS[arco.b][0]]
+        lat = [COORDENADAS[arco.a][1], COORDENADAS[arco.b][1]]
+        cortado = clave in cierres
+        if cortado:
+            color, ancho = ROJO, 5
+        elif clave in en_desvio:
+            color, ancho = AZUL, 7
+        elif clave in en_ruta and not afecta:
+            color, ancho = AMARILLO, 8
+        else:
+            color, ancho = TINTA_AZULADA, 3
+        if color in (AMARILLO, AZUL):
+            fig.add_trace(go.Scattermap(lon=lon, lat=lat, mode="lines", hoverinfo="skip", showlegend=False,
+                                        line=dict(color=TINTA_AZULADA, width=ancho + 4)))
+        fig.add_trace(go.Scattermap(
+            lon=lon, lat=lat, mode="lines", showlegend=False, hoverinfo="text",
+            text=f"{NOMBRE_NODO[arco.a]} – {NOMBRE_NODO[arco.b]} · {arco.ruta} · {_km(arco.km)} km"
+                 + (" · CORTADO" if cortado else ""),
+            line=dict(color=color, width=ancho),
+        ))
+    # Sin capas de texto: en el Plotly de Streamlit cada texto sobre el mapa pide un ícono vacío a internet (y
+    # falla). Los nombres de las ciudades ya están en el mapa base; ciudad, ruta y km aparecen al pasar el mouse.
+    nodos = list(COORDENADAS)
+    fig.add_trace(go.Scattermap(
+        lon=[COORDENADAS[n][0] for n in nodos], lat=[COORDENADAS[n][1] for n in nodos],
+        mode="markers", text=[NOMBRE_NODO[n] for n in nodos], hoverinfo="text", showlegend=False,
+        marker=dict(
+            size=[18 if n in (red.origen, red.destino) else 11 for n in nodos],
+            color=[ROJO if n == red.destino else (TINTA_AZULADA if n == red.origen else GRIS) for n in nodos],
+        ),
+    ))
+    fig.update_layout(
+        title="Red de abastecimiento sobre un mapa con relieve (tramos rectos entre ciudades; la distancia es la de la ruta)",
+        map=dict(
+            style="white-bg", center=dict(lon=-63.4, lat=-34.0), zoom=5.1,
+            layers=[dict(below="traces", sourcetype="raster", source=[TESELAS_RELIEVE],
+                         sourceattribution=ATRIBUCION_MAPA)],
+        ),
+        **{**_LAYOUT, "hovermode": "closest", "height": 620, "margin": dict(l=10, r=10, t=50, b=10)},
+    )
+    return fig
+
+
 def grafico_plazos(sin_corte: list[float], con_corte: list[float], etiqueta: str) -> go.Figure:
     """Histograma del plazo de entrega con y sin el corte (mismos plazos base)."""
     fig = go.Figure()

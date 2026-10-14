@@ -2375,7 +2375,17 @@ def pestania_red(p: ParametrosSimulacion) -> None:
 
     corte_activo = next((c for c in red.cortes if c.id == red.escenario_corte), None)
     cerrados = corte_activo.arcos if corte_activo else ()
-    st.plotly_chart(graficos_red.grafico_red(red, cerrados), key="g_red")
+    vista_mapa = st.radio("Ver la red como", ("Mapa con relieve", "Esquema"), horizontal=True, key="red_vista_mapa",
+                          help="El mapa con relieve necesita internet (teselas de OpenTopoMap); el esquema no.")
+    if vista_mapa == "Mapa con relieve":
+        st.plotly_chart(graficos_red.grafico_red_mapa(red, cerrados), key="g_red_mapa", config={"responsive": True})
+        st.caption(
+            "Amarillo con borde: la ruta óptima; rojo: un tramo cortado; azul: el desvío. Pasá el mouse por un tramo o "
+            "una ciudad para ver la ruta y los km. " + graficos_red.ATRIBUCION_MAPA
+            + ". Posiciones aproximadas; sin conexión a internet, usá el esquema."
+        )
+    else:
+        st.plotly_chart(graficos_red.grafico_red(red, cerrados), key="g_red")
     if corte_activo is not None and corte_activo.arcos:
         demora = demora_por_corte(red, corte_activo.arcos, corte_activo.duracion.moda * 60.0)
         if demora == 0:
@@ -3470,7 +3480,8 @@ def pie_de_resultados() -> None:
 #: La ayuda "?" de Streamlit se abre al pasar el mouse **y** mientras el botón tiene el foco. Un clic con el
 #: mouse le daba el foco, así que la ayuda quedaba abierta hasta hacer otro clic (el "se traba"). Esto hace
 #: que el clic con el mouse no enfoque el botón: la ayuda aparece sólo con el mouse encima y se va al salir.
-#: Con el teclado sigue andando: Tab la abre y Escape (o salir con Tab) la cierra.
+#: Con el teclado sigue andando: Tab la abre y Escape (o salir con Tab) la cierra. El mismo script avisa un cambio de
+#: tamaño al cambiar de pestaña, para que los gráficos dibujados en una pestaña oculta tomen el ancho correcto.
 AYUDAS_JS = """<!doctype html><title>ayudas</title><script>
 (function () {
   try {
@@ -3479,6 +3490,13 @@ AYUDAS_JS = """<!doctype html><title>ayudas</title><script>
     doc.__ayudasInstaladas = true;
     doc.addEventListener("mousedown", function (e) {
       if (e.target.closest && e.target.closest("[data-testid='stTooltipIcon'] button")) e.preventDefault();
+    }, true);
+    // Un gráfico dibujado en una pestaña oculta queda angosto (el mapa no se re-acomoda solo): al cambiar de
+    // pestaña se avisa un cambio de tamaño de la ventana y Plotly vuelve a medir el ancho.
+    doc.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest("[role='tab']")) {
+        setTimeout(function () { window.parent.dispatchEvent(new Event("resize")); }, 150);
+      }
     }, true);
   } catch (err) { /* sin acceso a la página: queda el comportamiento de Streamlit */ }
 })();

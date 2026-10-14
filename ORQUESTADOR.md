@@ -338,3 +338,12 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   cartel ("Se ha pedido el camión de Diésel G2 a Dock Sud") y el camión moviéndose sobre su ruta. Plan B si el navegador no
   deja: el cartel dice "Abrí la pestaña 🗺️ Red y rutas". Control nuevo (34). `verificar.py` **128/128**; QA
   `reports/qa_tanda7_avisos.py`: pausa, botón, cambio de pestaña, cartel y camión descargando; 0 excepciones, 0 errores de consola.
+- **Tanda 9 ✅ (mapa con relieve, opcional).** Sin Google Maps: `graficos_red.grafico_red_mapa` dibuja la red sobre teselas
+  de **OpenTopoMap** (relieve, sobre OpenStreetMap y SRTM) con la atribución que pide el proveedor, coordenadas reales
+  aproximadas de OSM y la ruta óptima gruesa con borde (cortes en rojo, desvío en azul). No usa dependencias nuevas (el
+  `Scattermap` ya viene en Plotly) pero **necesita internet**: por eso Red y rutas deja elegir "Mapa con relieve" o
+  "Esquema" (el de antes, sin conexión). Dos detalles resueltos de raíz: (1) en el Plotly de Streamlit cada texto sobre el
+  mapa pide un ícono vacío a unpkg y falla (error de consola): el mapa no lleva capas de texto (las ciudades ya están rotuladas
+  en el mapa base; ruta y km al pasar el mouse); (2) un mapa dibujado en una pestaña oculta quedaba angosto: el script auxiliar
+  avisa un `resize` al cambiar de pestaña y el gráfico va con `responsive`. QA `reports/qa_tanda9_mapa.py`: teselas 200 OK,
+  atribución visible, 0 excepciones, 0 errores de consola. `verificar.py` 128/128.

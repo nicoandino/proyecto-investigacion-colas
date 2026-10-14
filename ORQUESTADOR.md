@@ -475,6 +475,19 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   P1/P2 → T1/T2 → D1/D2/D3 da **$20.700** con el flujo de costo mínimo **y** con la matriz (B = 2.200; D1 y D2 con demanda
   3.000 y 3.100); el oleoducto Neuquén → Buenos Aires (TP 5) da **205.000 gal/h**, igual a la capacidad del corte mínimo
   (Galleta→Buenos Aires + Pirámide→Río Negro). Control nuevo (42). `verificar.py` **139/139**.
+- **F2 ✅ (la red real como flujo).** Registro: **FLU-01** (capacidad 1 por tramo para contar **rutas independientes**:
+  teorema de Menger, no es tránsito) y **FLU-02** (cuánto puede despachar cada origen para esta estación: hoy Dock Sud
+  100 %, Arroyo Seco 0 %, Luján 0 %; supuesto, editable). **Cambio de plan respecto de §17:** las capacidades por tramo en
+  camiones por día se descartaron (serían inventadas y nunca limitan con tan pocos camiones); lo que limita son los
+  **topes de los orígenes** y los **cortes**. `sim/flujos.py`: `plan_de_abastecimiento` (transbordo con un nodo ficticio
+  que reparte los camiones entre los orígenes hasta su tope, costo = km) y `rutas_independientes` (flujo máximo con
+  capacidad 1 y corte mínimo). `ParametrosRed.cuotas_origen` (vacío por defecto): **despachar según el plan**, con cuotas
+  exactas por producto y el plazo corregido por la diferencia de viaje (sin la demora de redirección). **Resultados:** con
+  la red sana el plan manda todo desde Dock Sud (991,3 km por camión); si Arroyo Seco pudiera despachar la mitad, el
+  camión-km baja 4,9 % (Arroyo Seco está 97,8 km más cerca); con el corte E4 (Alvear–San Rafael) todo va por Luján y
+  Pareditas (1.278 km) y Arroyo Seco deja de convenir; a San Rafael llegan **3 rutas independientes** y el corte mínimo
+  son 3 tramos (Luján–Pareditas, Alvear–San Rafael, Luján–La Paz). Control nuevo (43; con 100 % Dock Sud la corrida es
+  idéntica). `verificar.py` **141/141**.
 
 ---
 

@@ -48,7 +48,7 @@ from sim.datos import valor
 from sim.estadisticas import Indicadores, PedidoCamion
 from sim.eventos import MECANISMO, EventoOcurrido, aumento_de_llegadas, calendario
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
-from sim.red import demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
+from sim.red import camino_mas_corto, demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
 MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
@@ -120,6 +120,7 @@ class EstacionDeServicio:
         self.avenidas: list[int] = []               # cortes de la avenida en curso
         self.eventos_dinamicos: list[EventoOcurrido] = []   # roturas del camión (se sortean en cada viaje)
         self.az_eventos = Aleatorio(p.eventos.semilla) if p.eventos.activos else None
+        self.cuotas_estado: dict[str, list[float]] = {}   # reparto de los camiones por origen (plan, F2)
 
         if p.estacion_real:
             self._montar_real()
@@ -545,6 +546,16 @@ class EstacionDeServicio:
             if dia == self.p.dias_calentamiento:
                 self.ind.reiniciar(self.env.now)
 
+    def _origen_por_cuota(self, producto: str) -> str:
+        """El origen del próximo camión de este producto según las cuotas del plan (reparto proporcional suave)."""
+        cuotas = self.p.red.cuotas_origen
+        estado = self.cuotas_estado.setdefault(producto, [0.0] * len(cuotas))
+        for k, (_, f) in enumerate(cuotas):
+            estado[k] += f
+        elegido = max(range(len(cuotas)), key=lambda k: (estado[k], -k))
+        estado[elegido] -= 1.0
+        return cuotas[elegido][0]
+
     def _autos_con_eventos(self, d: int, autos: int) -> int:
         """Los clientes del día d con los eventos que traen más gente (EVT-09 el día anterior, EVT-13)."""
         total = autos
@@ -963,10 +974,18 @@ class EstacionDeServicio:
         causa = ""
         origen, redirigido = "", False
         if self.p.red is not None:
-            # Tanda 8: ¿de qué origen sale? (sin orígenes alternativos, el habitual sin sortear nada)
-            origen, redirigido = origen_del_pedido(self.p.red, self.az, f"origen_{producto}")
-            red_viaje = replace(self.p.red, origen=origen) if redirigido else self.p.red
-            plazo += extra_por_origen(self.p.red, origen, redirigido)
+            if self.p.red.cuotas_origen:
+                # Parte 3 (F2): el plan de costo mínimo fija qué parte de los camiones sale de cada origen (cuotas
+                # exactas, sin azar); el plazo cambia por la diferencia de viaje con el habitual.
+                origen, redirigido = self._origen_por_cuota(producto), False
+                red_viaje = replace(self.p.red, origen=origen)
+                plazo += (camino_mas_corto(self.p.red, origen=origen).minutos
+                          - camino_mas_corto(self.p.red).minutos)
+            else:
+                # Tanda 8: ¿de qué origen sale? (sin orígenes alternativos, el habitual sin sortear nada)
+                origen, redirigido = origen_del_pedido(self.p.red, self.az, f"origen_{producto}")
+                red_viaje = replace(self.p.red, origen=origen) if redirigido else self.p.red
+                plazo += extra_por_origen(self.p.red, origen, redirigido)
             dia = int(self.env.now // MINUTOS_POR_DIA) + 1
             demora, causa = demora_de_viaje(
                 red_viaje,

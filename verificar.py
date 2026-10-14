@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   43. Parte 3, etapa F2: plan de costo mínimo sobre la red real (km a mano, con y sin corte), 3 rutas
+       independientes = el corte mínimo, y el despacho por cuotas en el motor.
    42. Parte 3, etapa F1: transporte (rincón noroeste, costo mínimo, MODI = enumeración), transbordo
        ($20.700 con dos métodos) y flujo máximo (205.000 = el corte mínimo) de la cátedra.
    41. Parte 3, etapa P4: el punto de pedido por pronóstico (s = D·L + z·σ·√L) a mano, con z = 0
@@ -2337,6 +2339,48 @@ def main() -> int:
         and all(f <= a.capacidad + 1e-9 for d, h, f in fm42.flujos for a in ol42 if (a.desde, a.hasta) == (d, h)),
         "Transbordo P1/P2 → T1/T2 → D1/D2/D3 = $20.700 (flujo y matriz B = 2.200); oleoducto = 205.000 gal/h = el corte",
         f"corte mínimo {fm42.corte} ({capacidad_corte:,.0f}) · conservación en los nodos intermedios",
+    )
+
+    # ------------------------------------------------------------------ 43
+    separador("43. Parte 3, etapa F2: la red real como flujo (plan del período, rutas independientes, cuotas)")
+    from sim.red import camino_mas_corto as _cmc
+
+    def fl_camino(red_, origen, cerrados):
+        return _cmc(red_, origen=origen, cerrados=cerrados).km
+    from sim.config import ParametrosRed
+
+    red43 = ParametrosRed()
+    km_dock = sum(a.km for a in red43.arcos if {a.a, a.b} in ({"DOCK", "ALVEAR"}, {"ALVEAR", "SANRAFAEL"}))
+    km_arroyo = sum(a.km for a in red43.arcos if {a.a, a.b} in ({"ARROYO", "ALVEAR"}, {"ALVEAR", "SANRAFAEL"}))
+    plan_hoy = fl.plan_de_abastecimiento(red43, 100, dict(_valor("FLU-02")))
+    plan_mitad = fl.plan_de_abastecimiento(red43, 100, {"DOCK": 1.0, "ARROYO": 0.5})
+    plan_e4 = fl.plan_de_abastecimiento(red43, 100, {"DOCK": 1.0, "ARROYO": 0.5}, (("ALVEAR", "SANRAFAEL"),))
+    rutas43 = fl.rutas_independientes(red43, ["DOCK", "ARROYO", "LUJAN"])
+    controlar(
+        red43.cuotas_origen == () and plan_hoy.por_origen == (("DOCK", 100.0),)
+        and abs(plan_hoy.km_total - 100 * km_dock) < 1e-6
+        and abs(plan_mitad.km_total - (50 * km_arroyo + 50 * km_dock)) < 1e-6
+        and dict(plan_e4.por_origen) == {"DOCK": 100.0}
+        and abs(plan_e4.km_total - 100 * fl_camino(red43, "DOCK", (("ALVEAR", "SANRAFAEL"),))) < 1e-6
+        and rutas43.valor == 3 == len(rutas43.corte),
+        "Plan de costo mínimo: hoy todo desde Dock Sud; con Arroyo Seco al 50 % los km bajan; con el corte E4 se rehace",
+        f"100 camiones: Dock Sud {plan_hoy.km_total:,.0f} km · Dock + Arroyo {plan_mitad.km_total:,.0f} km · con E4 "
+        f"{plan_e4.km_total:,.0f} km por Luján · {rutas43.valor:.0f} rutas independientes, corte {rutas43.corte}",
+    )
+    base43 = con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1))
+    solo_dock = dataclasses.replace(base43, red=dataclasses.replace(base43.red, cuotas_origen=(("DOCK", 1.0),)))
+    mitad = dataclasses.replace(base43, red=dataclasses.replace(base43.red, cuotas_origen=(("DOCK", 0.5), ("ARROYO", 0.5))))
+    r_dock, _ = correr_replica(solo_dock, semilla=1)
+    ind_mitad, _ = simular(mitad, semilla=1)
+    arroyo = [x for x in ind_mitad.pedidos if x.origen == "ARROYO"]
+    dock = [x for x in ind_mitad.pedidos if x.origen == "DOCK"]
+    plazo_arroyo = 36.0 - (km_dock - km_arroyo) / red43.velocidad_kmh
+    controlar(
+        tuple(r_dock.totales) == tuple(r_base.totales) and abs(len(arroyo) - len(dock)) <= 4 and arroyo
+        and all(abs((x.t_llegada - x.t_pedido) / 60 - plazo_arroyo) < 1e-6 for x in arroyo),
+        "Despachar según el plan: cuotas exactas por origen y el plazo cambia por la diferencia de viaje",
+        f"enero con 50/50: {len(dock)} camiones de Dock Sud y {len(arroyo)} de Arroyo Seco, que tardan "
+        f"{plazo_arroyo:.2f} h (36 h − {km_dock - km_arroyo:.1f} km ÷ {red43.velocidad_kmh:g} km/h) · con 100 % Dock Sud, idéntico",
     )
 
     # ------------------------------------------------------------------

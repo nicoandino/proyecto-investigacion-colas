@@ -373,3 +373,64 @@ def matriz_transbordo(arcos, ofertas: dict[str, float]) -> MatrizTransbordo:
         tuple(0.0 if f == c else costo_arco.get((f, c), M_GRANDE) for c in entran) for f in salen
     )
     return MatrizTransbordo(tuple(salen), tuple(entran), oferta, demanda, costos, b)
+
+
+
+# =============================================================================
+# La red real de abastecimiento como flujo (F2)
+# =============================================================================
+#: Nodo ficticio que reparte los camiones del período entre los orígenes (con su tope).
+ORIGENES = "__ORIGENES__"
+
+
+def arcos_de_ruta(red, cerrados=()) -> list[ArcoRed]:
+    """Los tramos de la red (RED-*) en los dos sentidos, con costo = km; sin los `cerrados`."""
+    fuera = {frozenset(par) for par in cerrados}
+    salida = []
+    for a in red.arcos:
+        if frozenset((a.a, a.b)) in fuera:
+            continue
+        salida += [ArcoRed(a.a, a.b, a.km), ArcoRed(a.b, a.a, a.km)]
+    return salida
+
+
+class Plan(NamedTuple):
+    """El plan de abastecimiento del período (flujo de costo mínimo en camiones)."""
+
+    camiones: float                                  # los que hay que traer
+    enviados: float                                  # los que se pueden traer (< camiones si un corte aísla)
+    por_origen: tuple[tuple[str, float], ...]        # (origen, camiones)
+    km_total: float                                  # camión-km de ida
+    tramos: tuple[tuple[str, str, float], ...]       # (desde, hasta, camiones) de los tramos usados
+    cuotas: tuple[tuple[str, float], ...]            # (origen, fracción) para despachar según el plan
+
+
+def plan_de_abastecimiento(red, camiones: float, topes: dict[str, float], cerrados=()) -> Plan:
+    """Reparte `camiones` entre los orígenes (cada uno hasta su tope × camiones) por las rutas más baratas en km.
+
+    Es un transbordo: el nodo ficticio de los orígenes ofrece los camiones, cada origen los pasa por la red y San
+    Rafael (el destino de la red) los recibe. Se resuelve con el flujo de costo mínimo.
+    """
+    arcos = arcos_de_ruta(red, cerrados) + [
+        ArcoRed(ORIGENES, origen, 0.0, max(0.0, tope) * camiones) for origen, tope in topes.items() if tope > 0
+    ]
+    flujo = flujo_costo_minimo(arcos, {ORIGENES: camiones, red.destino: -camiones})
+    por_origen = tuple((h, f) for d, h, f in flujo.flujos if d == ORIGENES)
+    tramos = tuple(x for x in flujo.flujos if x[0] != ORIGENES)
+    enviados = flujo.valor
+    cuotas = tuple((o, f / enviados) for o, f in por_origen) if enviados > 0 else ()
+    return Plan(camiones, enviados, por_origen, flujo.costo, tramos, cuotas)
+
+
+def rutas_independientes(red, origenes, cerrados=()) -> Flujo:
+    """Cuántas rutas que no comparten tramos llegan desde los `origenes` a San Rafael, y el corte mínimo.
+
+    Flujo máximo con capacidad FLU-01 (1) en cada tramo y en cada sentido (teorema de Menger): el valor es la
+    cantidad de rutas independientes y el corte mínimo, los tramos que habría que cortar para aislar la estación.
+    """
+    from sim.datos import valor
+
+    cap = float(valor("FLU-01"))
+    arcos = [ArcoRed(a.desde, a.hasta, 0.0, cap) for a in arcos_de_ruta(red, cerrados)]
+    arcos += [ArcoRed(ORIGENES, o, 0.0, float("inf")) for o in origenes]
+    return flujo_maximo(arcos, ORIGENES, red.destino)

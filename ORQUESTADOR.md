@@ -409,7 +409,7 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
 
 | Etapa | Qué incluye | Compuerta |
 |---|---|---|
-| **P1 · Serie real** | Buscar y bajar la serie mensual de ventas (Secretaría de Energía, datos abiertos); nota `research_notes/…/11_serie_ventas.md` con URL, alcance, unidad y criterio (§17); la serie entra al Registro (**PRO-01**, nivel y confianza según lo que se consiga) junto con los meses de prueba (**PRO-02** = 12) y el z del IC (**PRO-03**) | La serie tiene fuente y URL. **Si no se consigue ni la provincial, se frena y se le pregunta a Nico** (no se inventa) |
+| **P1 · Serie real** | Buscar y bajar la serie mensual de ventas (Secretaría de Energía, datos abiertos); nota `research_notes/…/12_serie_ventas.md` con URL, alcance, unidad y criterio (§17); la serie entra al Registro (**PRO-01**, nivel y confianza según lo que se consiga) junto con los meses de prueba (**PRO-02** = 12) y el z del IC (**PRO-03**) | La serie tiene fuente y URL. **Si no se consigue ni la provincial, se frena y se le pregunta a Nico** (no se inventa) |
 | **P2 · Métodos de pronóstico** | `sim/pronostico.py` (sin Streamlit, `numpy`): los cuatro métodos, MAE / MAPE / RMSE / sesgo, IC, backtest entrenamiento/prueba y elección por RMSE | Controles con el práctico de Pronóstico: Cable Televisora con los pronósticos dados ⇒ **MAE = 107/12 = 8,92** y **RMSE = 37/√12 = 10,68**; tendencia A = 1.650, B = 30 ⇒ **2.010 · 2.040 · 2.070** para t = 12, 13, 14; los índices estacionales promedian 1 |
 | **P3 · Pronóstico en la app** | Pestaña **📈 Pronóstico** (después de Demanda): la serie real y el ajuste de cada método, tabla de errores, el método elegido y por qué, los próximos 12 meses con su IC, "¿Cómo se comprueba?" con las cuentas; en el menú, la opción de estacionalidad "índices del pronóstico" (§17) | Control: con la opción apagada la corrida es idéntica; con la opción, Σ de litros del año = la del pronóstico; QA, 0 errores de consola |
 | **P4 · Stock de seguridad** | Política "por pronóstico" (§17) en la búsqueda de la mejor política (Caso de informe) y en el menú de abastecimiento; Inventario muestra la cuenta del s de cada tanque | Control: con z = 0 el s es la demanda del plazo; el s de la app = la fórmula a mano; la búsqueda la evalúa como una más |
@@ -534,3 +534,21 @@ Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico
   (35: autos cargando = playeros ocupados en los 89.280 cuadros de julio; ρ a mano). `verificar.py` **129/129**; QA
   `reports/qa_e0_gnc.py`: escenario único, tablero, modelo y método e indicadores sin textos viejos, 0 excepciones, 0
   errores de consola.
+- **E1 ✅ (motor de eventos: personal y equipos).** `sim/eventos.py` (sin Streamlit): el catálogo de los 14 eventos y el
+  **calendario** de la corrida, sorteado antes de correr con una **semilla propia** y **un stream por evento** (al final
+  de `STREAMS`); se sortean todos aunque estén apagados y después se filtran, así que prender uno no corre las fechas de
+  los otros. Registro: **EVT-00** (prendidos, semilla, multiplicador de frecuencia; apagados por defecto), **EVT-01…14**
+  (probabilidad por día, duración y efecto; supuestos del grupo, con los respaldos reales que hay: LCT art. 201, INV-09,
+  DEM-09) y **EVT-15** (200 h/mes para el valor de la hora); nota `research_notes/…/11_eventos_aleatorios.md`.
+  `ParametrosEventos` en `ParametrosSimulacion.eventos` (N14). Motor, eventos 1–8 y 14: un playero menos (reserva con
+  prioridad −1 hasta el cambio de turno, un turno, o el mismo turno todos los días de la licencia), estación parada (todos
+  los playeros y compresores reservados), cara fuera de servicio (reserva en la zona, dibujada tachada: código −2 en los
+  carriles), compresor fuera, cobro lento (+1 min por carga, caja × 1,5); la licencia cubierta no cambia el servicio. Las
+  caras pasaron a `PriorityResource` (los autos piden con la misma prioridad: sigue siendo FIFO; **sin eventos la
+  corrida da idéntica** a la anterior en enero, julio, el año y con azar). Cada evento cuenta los clientes que se fueron
+  mientras duraba (`ResultadoReplica.eventos`) y se anota en la traza para los avisos. Control nuevo (36: mismo
+  calendario con la misma semilla, filtrado sin correr fechas, sin eventos idéntico; cada mecanismo en su propia
+  corrida de enero ×5 —17 paradas, 12 de un playero, 4 caras, 3 compresores— sin descuadres playero/auto y con
+  conservación de clientes). `verificar.py` **131/131**; la app corre igual (QA de E0: 0 excepciones, 0 errores de consola).
+  Ejemplo, enero con datos reales y los eventos de E1 (semilla 1): 10 eventos (3 cortes de luz, 1 cara de GNC 23 h, 1
+  licencia sin reemplazo de 9 días en la mañana, 3 faltas…); atendidos 7.682 → 7.284.

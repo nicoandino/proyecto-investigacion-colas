@@ -44,12 +44,17 @@ import simpy
 
 from sim.config import ANO_REFERENCIA, MINUTOS_POR_DIA, ParametrosSimulacion, Triangular
 from sim.distribuciones import Aleatorio, AleatorioDeterminista
+from sim.datos import valor
 from sim.estadisticas import Indicadores, PedidoCamion
+from sim.eventos import MECANISMO, calendario
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
 from sim.red import demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
 MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
+
+#: Marca de una cara fuera de servicio en los carriles (evento EVT-05): no es un auto ni está libre.
+FUERA_DE_SERVICIO = object()
 
 
 @dataclass
@@ -99,6 +104,18 @@ class EstacionDeServicio:
         self.numero_aleatorio_dia = 0
         self.autos_llegados_hoy = 0
 
+        # Eventos aleatorios (parte 4): sin eventos prendidos nada de esto cambia la corrida.
+        self.eventos: tuple = ()
+        self.eventos_vigentes: set[int] = set()     # índices de los eventos que están pasando ahora
+        self.perdidos_evento: list[int] = []
+        self.turno_actual = 0                       # playeros del turno (sin descontar eventos)
+        self.playeros_fuera = 0                     # playeros que faltan por un evento
+        self.estacion_parada = 0                    # > 0 = corte de luz o asalto en curso
+        self.cobro_lento = 0                        # > 0 = se cayó el sistema de cobro
+        self.caras_fuera: dict[str, int] = {}
+        self.compresores_fuera = 0
+        self.extra_cobro, self.factor_caja = 0.0, 1.0
+
         if p.estacion_real:
             self._montar_real()
         else:
@@ -146,14 +163,17 @@ class EstacionDeServicio:
         self.cola_recurso: dict[str, simpy.Resource] = {}
         self.caras: dict[str, tuple[simpy.Resource, ...]] = {}
         for grupo in self.p.grupos:
+            # Con prioridad (todos los autos piden con la misma, así que sigue siendo FIFO): una cara fuera de
+            # servicio (EVT-05) se reserva con prioridad −1, como los turnos con los playeros.
             if self.p.disciplina_cola == "por_grupo":
-                self.cola_recurso[grupo.id] = simpy.Resource(
+                self.cola_recurso[grupo.id] = simpy.PriorityResource(
                     self.env, capacity=grupo.caras
                 )
             else:
                 self.caras[grupo.id] = tuple(
-                    simpy.Resource(self.env, capacity=1) for _ in range(grupo.caras)
+                    simpy.PriorityResource(self.env, capacity=1) for _ in range(grupo.caras)
                 )
+        self.caras_fuera = {g.id: 0 for g in self.p.grupos}
 
         # Playeros por turno: reservas ficticias con prioridad -1 ajustan la capacidad.
         self.max_playeros = self.p.playeros_maximos
@@ -214,6 +234,15 @@ class EstacionDeServicio:
 
         self._actualizar_sin_combustible()
 
+        # Eventos aleatorios (parte 4): el calendario se sortea antes de correr, con su propia semilla.
+        self.eventos = calendario(self.p)
+        self.perdidos_evento = [0] * len(self.eventos)
+        self.ind.eventos = self.eventos
+        self.ind.perdidos_evento = self.perdidos_evento
+        self.extra_cobro, self.factor_caja = valor("EVT-08")[3:5]
+        for i, ev in enumerate(self.eventos):
+            self.env.process(self._correr_evento(i, ev))
+
     # =========================================================================
     # Playeros por turno (§7.2): capacidad - reservas = playeros del turno
     # =========================================================================
@@ -242,7 +271,95 @@ class EstacionDeServicio:
                     self.playeros.release(pedido)
                 else:
                     pedido.cancel()
-        self.ind.playeros_en_turno.cambiar(self.env.now, float(playeros_del_turno))
+        self.turno_actual = playeros_del_turno
+        self._actualizar_en_turno()
+
+    def _actualizar_en_turno(self) -> None:
+        """Playeros trabajando = los del turno menos los que faltan por un evento (0 si la estación está parada)."""
+        n = 0 if self.estacion_parada else max(0, self.turno_actual - self.playeros_fuera)
+        self.ind.playeros_en_turno.cambiar(self.env.now, float(n))
+
+    # =========================================================================
+    # Eventos aleatorios (parte 4, sim/eventos.py): el motor aplica el calendario
+    # =========================================================================
+    def _correr_evento(self, i: int, ev):
+        """Espera el inicio del evento, lo aplica mientras dura y lo deshace."""
+        if ev.inicio >= self.p.duracion:
+            return
+        if ev.inicio > self.env.now:
+            yield self.env.timeout(ev.inicio - self.env.now)
+        if self.traza is not None:
+            self.traza.eventos.append(("evento", self.env.now, ev.id, ev.fin, ev.objetivo, ev.detalle))
+        mecanismo = MECANISMO.get(ev.id)
+        if mecanismo is None:                 # la licencia cubierta: no cambia el servicio, sólo el costo
+            return
+        if mecanismo == "playero_diario":     # licencia sin reemplazo: el mismo turno, todos los días
+            largo = (ev.fin - ev.inicio) - (int(ev.valor) - 1) * MINUTOS_POR_DIA
+            for k in range(int(ev.valor)):
+                desde = ev.inicio + k * MINUTOS_POR_DIA
+                if desde >= self.p.duracion:
+                    return
+                if desde > self.env.now:
+                    yield self.env.timeout(desde - self.env.now)
+                yield from self._durante(i, "playero", desde + largo, ev)
+            return
+        yield from self._durante(i, mecanismo, ev.fin, ev)
+
+    def _durante(self, i: int, mecanismo: str, fin: float, ev):
+        """Aplica un mecanismo hasta `fin` y lo deshace (reservas con prioridad −1, como los turnos)."""
+        reservas: list[tuple] = []          # (recurso, pedido)
+        carril = None
+        self.eventos_vigentes.add(i)
+        if mecanismo == "playero":
+            reservas.append((self.playeros, self.playeros.request(priority=-1)))
+            self.playeros_fuera += 1
+            self._actualizar_en_turno()
+        elif mecanismo == "parada":
+            reservas += [(self.playeros, self.playeros.request(priority=-1)) for _ in range(self.max_playeros)]
+            if self.compresores is not None:
+                reservas += [(self.compresores, self.compresores.request(priority=-1))
+                             for _ in range(self.compresores.capacity)]
+            self.estacion_parada += 1
+            self._actualizar_en_turno()
+        elif mecanismo == "compresor" and self.compresores is not None:
+            reservas.append((self.compresores, self.compresores.request(priority=-1)))
+            self.compresores_fuera += 1
+        elif mecanismo == "cobro":
+            self.cobro_lento += 1
+        elif mecanismo == "cara":
+            grupo = ev.objetivo
+            if self.cola_recurso:
+                recurso = self.cola_recurso[grupo]
+            else:
+                recurso = min(self.caras[grupo], key=lambda c: len(c.queue) + c.count)
+            pedido = recurso.request(priority=-1)
+            reservas.append((recurso, pedido))
+            resultado = yield pedido | self.env.timeout(max(0.0, fin - self.env.now))
+            if pedido in resultado:           # la cara se liberó: queda tachada hasta que llega el técnico
+                carril = self.carriles[grupo].index(None)
+                self.carriles[grupo][carril] = FUERA_DE_SERVICIO
+                self.caras_fuera[grupo] += 1
+        if fin > self.env.now:
+            yield self.env.timeout(fin - self.env.now)
+        for recurso, pedido in reservas:
+            if pedido.triggered:
+                recurso.release(pedido)
+            else:
+                pedido.cancel()
+        if mecanismo == "playero":
+            self.playeros_fuera -= 1
+            self._actualizar_en_turno()
+        elif mecanismo == "parada":
+            self.estacion_parada -= 1
+            self._actualizar_en_turno()
+        elif mecanismo == "compresor" and self.compresores is not None:
+            self.compresores_fuera -= 1
+        elif mecanismo == "cobro":
+            self.cobro_lento -= 1
+        elif mecanismo == "cara" and carril is not None:
+            self.carriles[ev.objetivo][carril] = None
+            self.caras_fuera[ev.objetivo] -= 1
+        self.eventos_vigentes.discard(i)
 
     # =========================================================================
     # GNC: episodios de corte y compresores (§7.5)
@@ -292,7 +409,8 @@ class EstacionDeServicio:
     def _compresores_habilitados(self) -> int:
         if self.compresores is None:
             return 0
-        return self.compresores.capacity - len(self.reservas_compresores)
+        fuera = self.compresores.capacity if self.estacion_parada else self.compresores_fuera
+        return max(0, self.compresores.capacity - len(self.reservas_compresores) - fuera)
 
     def _gnc_al_llegar_con_corte(self, auto: Auto) -> bool:
         """Cliente GNC que llega con el GNC cortado: pasa a Súper o se pierde (§7.5).
@@ -599,6 +717,7 @@ class EstacionDeServicio:
         for grupo in self.p.grupos:
             carriles = tuple(
                 -1 if auto is None
+                else -2 if auto is FUERA_DE_SERVICIO       # cara fuera de servicio (EVT-05)
                 else 2 * self._indice_producto(auto.producto) + (1 if auto.espera_playero else 0)
                 for auto in self.carriles[grupo.id]
             )
@@ -668,9 +787,10 @@ class EstacionDeServicio:
     def _caras_ocupadas(self) -> int:
         if not self.es_real:
             return self.surtidores.count
+        fuera = sum(self.caras_fuera.values())        # las caras tachadas no tienen un auto
         if self.cola_recurso:
-            return sum(r.count for r in self.cola_recurso.values())
-        return sum(c.count for caras in self.caras.values() for c in caras)
+            return sum(r.count for r in self.cola_recurso.values()) - fuera
+        return sum(c.count for caras in self.caras.values() for c in caras) - fuera
 
     def _cola_total(self) -> int:
         if not self.es_real:
@@ -837,6 +957,8 @@ class EstacionDeServicio:
     # =========================================================================
     def registrar_perdida(self, auto: Auto, motivo: str) -> None:
         """Un cliente que se va sin cargar, con su motivo (taxonomía fija §7.6)."""
+        for i in self.eventos_vigentes:          # se le cuenta a cada evento que estaba pasando
+            self.perdidos_evento[i] += 1
         if auto.producto != "gnc":
             self.ind.contar("litros_no_vendidos", auto.litros)
         self.ind.contar_producto(auto.producto, "litros_no_vendidos", auto.litros)
@@ -1119,6 +1241,8 @@ class EstacionDeServicio:
 
     def _servir(self, auto: Auto, grupo: str) -> None:
         """El tiempo de carga en la cara, contado para la utilización del grupo."""
+        if self.cobro_lento:
+            auto.t_carga += self.extra_cobro      # EVT-08: sin tarjeta, cobrar tarda más
         self.ind.ocupados_grupo[grupo].sumar(self.env.now, +1)
         self.ind.ocupados_surtidores.sumar(self.env.now, +1)
         yield self.env.timeout(auto.t_carga)
@@ -1149,7 +1273,7 @@ class EstacionDeServicio:
 
             self.ind.espera_caja.agregar(self.env.now - t_entrada_cola)
             self.ind.ocupadas_cajas.sumar(self.env.now, +1)
-            yield self.env.timeout(auto.t_compra)
+            yield self.env.timeout(auto.t_compra * (self.factor_caja if self.cobro_lento else 1.0))
             self.ind.ocupadas_cajas.sumar(self.env.now, -1)
             self.ind.contar("compras_atendidas")
 

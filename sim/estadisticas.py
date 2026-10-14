@@ -266,6 +266,8 @@ class Indicadores:
     def __init__(self, p: ParametrosSimulacion) -> None:
         self.p = p
         self.pedidos: list[PedidoCamion] = []      # cada camión pedido (día, plazo, demora de ruta)
+        self.eventos: tuple = ()                   # calendario de eventos aleatorios de la corrida (parte 4)
+        self.perdidos_evento: list[int] = []       # clientes perdidos mientras duraba cada evento
         self.capacidad_surtidores = p.surtidores
         self.capacidad_cajas = p.cajas
 

@@ -21,6 +21,7 @@ from sim.config import (
     ParametrosTanque,
     escenarios_desde,
 )
+from sim.eventos import EventoOcurrido
 from sim.modelo import simular
 from sim.traza import Traza
 
@@ -125,6 +126,8 @@ class ResultadoReplica:
     quiebres: tuple[tuple[str, int, float, float], ...] = ()
     # (tanque, cuántas veces se vació, horas vacío en total, horas del quiebre más largo)
     pedidos_por_origen: tuple[tuple[str, int, int], ...] = ()   # (origen, camiones, redirigidos); vacío = todos del habitual
+    # Parte 4: los eventos aleatorios de la corrida, con los clientes que se fueron mientras duraba cada uno
+    eventos: tuple[EventoOcurrido, ...] = ()
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -149,6 +152,7 @@ NO_METRICAS = {
     "litros_perdidos_causa",
     "quiebres",
     "pedidos_por_origen",
+    "eventos",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -371,6 +375,10 @@ def correr_replica(
         ) if p.estacion_real and p.red is not None and (
             p.red.origenes_alternativos or p.red.origenes_no_disponibles
         ) else (),   # sin orígenes alternativos todos salen del habitual: vacío (la corrida neutra no cambia)
+        eventos=tuple(
+            EventoOcurrido(*ev, perdidos=n)
+            for ev, n in zip(ind.eventos, ind.perdidos_evento) if ev.inicio < p.duracion
+        ),
     )
     return resultado, traza
 

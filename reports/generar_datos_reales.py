@@ -30,6 +30,7 @@ SECCIONES = {
     "REC": "Configuración del caso clásico",
     "CAL": "Calendario y corrida",
     "MOD": "Modelo",
+    "EVT": "Eventos aleatorios",
 }
 ETIQUETA_TIPO = {
     "dato": "🟢 dato", "estimacion": "🟡 estimación", "observacion": "🔵 observación",

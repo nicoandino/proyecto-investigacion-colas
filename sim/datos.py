@@ -930,6 +930,89 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "orquestador", "orquestador",
                     "", (), "dia | semana | mes | estacion | anio", None, None),
           "mes"),
+
+        # ------------------------------------------- J. Eventos aleatorios (parte 4, §20–23)
+        # Frecuencias y duraciones: SUPUESTOS del grupo (no hay registros de la estación). Cada día se
+        # sortea si ocurre cada evento (probabilidad por día); duración uniforme entre el mínimo y el máximo.
+        ("EVT-00", ("Eventos aleatorios: cuáles están prendidos, semilla y frecuencia", "—", "A", "supuesto",
+                    "sin_dato", "pedido del grupo (14/10/2026): eventos que se prenden desde el menú", "grupo",
+                    "", (),
+                    "(eventos prendidos, semilla del sorteo, multiplicador de la frecuencia). Apagados por "
+                    "defecto: con ninguno prendido la corrida es idéntica", None, None),
+          ((), 1, 1.0)),
+        ("EVT-01", ("Abandono repentino del turno", "prob./día", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 cada 2 meses; a una hora al azar un playero se va y nadie lo reemplaza hasta el "
+                    "próximo cambio de turno (06, 14 o 22 h)", None, None),
+          (1 / 60,)),
+        ("EVT-02", ("Licencia por accidente cubierta con horas extra", "prob./día · días · recargos", "A",
+                    "supuesto", "sin_dato",
+                    "grupo (14/10/2026); recargos: Ley de Contrato de Trabajo, art. 201", "grupo", "", (),
+                    "≈ 1 cada 6 meses; un playero falta de 3 a 15 días y otro cubre su turno con horas extra: "
+                    "recargo 50 % (lunes a sábado) y 100 % (domingo; el sábado después de las 13 y los "
+                    "feriados se simplifican)", None, None),
+          (1 / 180, 3, 15, 0.50, 1.00)),
+        ("EVT-03", ("Falta sin aviso", "prob./día", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 2 por mes; un turno entero (8 h) arranca con un playero menos", None, None),
+          (1 / 15,)),
+        ("EVT-04", ("Licencia sin reemplazo", "fracción de las licencias", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "de las licencias de EVT-02, el 30 % no consigue reemplazo: ese turno queda con un "
+                    "playero menos todos los días de la licencia", None, None),
+          (0.30,)),
+        ("EVT-05", ("Falla de un surtidor", "prob./día · h · $", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 por mes; una cara queda fuera de servicio de 2 a 24 h hasta que llega el técnico. "
+                    "Costo de la visita: sin dato (0)", None, None),
+          (1 / 30, 2.0, 24.0, 0.0)),
+        ("EVT-06", ("Falla de un compresor de GNC", "prob./día · h", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 cada 2 meses; un compresor menos (SUR-06) de 4 a 48 h", None, None),
+          (1 / 60, 4.0, 48.0)),
+        ("EVT-07", ("Corte de luz", "prob./día · h", "B", "supuesto", "sin_dato",
+                    "grupo (14/10/2026): tormentas y calor de verano", "grupo", "", (),
+                    "dic–feb ≈ 2 por mes, el resto ≈ 1 cada 2 meses; sin surtidores ni compresores la "
+                    "estación se para de 1 a 4 h", None, None),
+          (1 / 15, 1 / 60, 1.0, 4.0)),
+        ("EVT-08", ("Se cae el sistema de cobro", "prob./día · h · min · ×", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 por mes; de 1 a 6 h sólo efectivo: cada carga tarda 1 min más y la caja del "
+                    "minimarket × 1,5", None, None),
+          (1 / 30, 1.0, 6.0, 1.0, 1.5)),
+        ("EVT-09", ("Aumento de precio", "prob./día · aumento · adelanto", "E", "supuesto", "sin_dato",
+                    "grupo (14/10/2026): en Argentina los aumentos son casi mensuales", "grupo", "", (),
+                    "≈ 1 por mes; nafta y diésel +10 % desde ese día con el MISMO margen en $/L; el día "
+                    "anterior llegan 20 % más clientes (se adelantan a cargar)", None, None),
+          (1 / 30, 0.10, 0.20)),
+        ("EVT-10", ("Faltante de combustible con cupo", "prob./día · días · L · ×", "C", "supuesto", "sin_dato",
+                    "grupo (14/10/2026); precedentes: faltante de gasoil 2022 con cupos y crisis de Mendoza "
+                    "2023 (INV-09)", "grupo", "", (),
+                    "≈ 1 por año; de 3 a 7 días: cada cliente carga como máximo 30 L, y los camiones pedidos "
+                    "tardan el plazo de crisis (INV-09) y traen la mitad", None, None),
+          (1 / 365, 3, 7, 30.0, 0.5)),
+        ("EVT-11", ("Rotura del camión en la ruta", "prob./viaje · h", "C", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "5 % de los viajes llegan de 12 a 48 h tarde", None, None),
+          (0.05, 12.0, 48.0)),
+        ("EVT-12", ("Corte de la avenida (choque u obra)", "prob./día · h · fracción · hora", "A", "supuesto",
+                    "sin_dato", "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 por mes; de 2 a 8 h, empezando entre las 7 y las 20, llega la mitad de los clientes",
+                    None, None),
+          (1 / 30, 2.0, 8.0, 0.5, 7.0, 20.0)),
+        ("EVT-13", ("Evento masivo en San Rafael", "prob./día · días · aumento", "B", "supuesto", "baja",
+                    "grupo (14/10/2026); el aumento es el piso de DEM-09 (Vendimia +30–50 %)", "grupo", "", (),
+                    "≈ 4 por año; de 1 a 3 días con 30 % más clientes (fiesta, fin de semana largo)", None, None),
+          (4 / 365, 1, 3, 0.30)),
+        ("EVT-14", ("Asalto", "prob./día · h", "A", "supuesto", "sin_dato",
+                    "grupo (14/10/2026)", "grupo", "", (),
+                    "≈ 1 por año; la estación se para de 30 a 60 min mientras actúa la policía", None, None),
+          (1 / 365, 0.5, 1.0)),
+        ("EVT-15", ("Horas de trabajo por mes de un playero (valor de la hora)", "h/mes", "A", "supuesto",
+                    "sin_dato", "grupo (14/10/2026): jornada de 8 h, unos 25 días por mes", "grupo", "", (),
+                    "valor de la hora = sueldo del playero (ECO-04) ÷ estas horas; sirve para las horas extra",
+                    None, None),
+          200.0),
     ]
 )
 
@@ -1006,6 +1089,11 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosRed.prob_origen_no_disponible": "RED-20",
     "ParametrosRed.origenes_no_disponibles": "RED-19",
     "ParametrosRed.demora_redireccion_h": "RED-21",
+    # ParametrosEventos (parte 4)
+    "ParametrosSimulacion.eventos": "EVT-00",
+    "ParametrosEventos.activos": "EVT-00",
+    "ParametrosEventos.semilla": "EVT-00",
+    "ParametrosEventos.frecuencia": "EVT-00",
     "ParametrosSimulacion.estacion_real": "MOD-01",
     "ParametrosSimulacion.grupos": "SUR-00",
     "ParametrosSimulacion.productos": "DEM-04",

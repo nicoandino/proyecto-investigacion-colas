@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 124 datos · 🟢 dato 38 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 54
+**Resumen:** 140 datos · 🟢 dato 38 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 70
 
 ## La estación
 
@@ -204,6 +204,27 @@
 |---|---|---|---|---|---|---|---|---|
 | MOD-02 | Simulación con datos reales: sin azar (determinista) | True | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): con datos reales no se sortea nada | con azar = False |
 | MOD-01 | Modelo de la estación (real vs. clásico) | True | — | 🟠 supuesto | la estación | sin_dato | orquestador (el clásico reproduce los dorados, §10.1) | clasico = False |
+
+## Eventos aleatorios
+
+| ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
+|---|---|---|---|---|---|---|---|---|
+| EVT-00 | Eventos aleatorios: cuáles están prendidos, semilla y frecuencia | ((), 1, 1.0) | — | 🟠 supuesto | la estación | sin_dato | pedido del grupo (14/10/2026): eventos que se prenden desde el menú | — |
+| EVT-01 | Abandono repentino del turno | (0.016666666666666666,) | prob./día | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-02 | Licencia por accidente cubierta con horas extra | (0.005555555555555556, 3, 15, 0.5, 1.0) | prob./día · días · recargos | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026); recargos: Ley de Contrato de Trabajo, art. 201 | — |
+| EVT-03 | Falta sin aviso | (0.06666666666666667,) | prob./día | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-04 | Licencia sin reemplazo | (0.3,) | fracción de las licencias | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-05 | Falla de un surtidor | (0.03333333333333333, 2.0, 24.0, 0.0) | prob./día · h · $ | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-06 | Falla de un compresor de GNC | (0.016666666666666666, 4.0, 48.0) | prob./día · h | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-07 | Corte de luz | (0.06666666666666667, 0.016666666666666666, 1.0, 4.0) | prob./día · h | 🟠 supuesto | San Rafael | sin_dato | grupo (14/10/2026): tormentas y calor de verano | — |
+| EVT-08 | Se cae el sistema de cobro | (0.03333333333333333, 1.0, 6.0, 1.0, 1.5) | prob./día · h · min · × | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-09 | Aumento de precio | (0.03333333333333333, 0.1, 0.2) | prob./día · aumento · adelanto | 🟠 supuesto | Argentina / otro | sin_dato | grupo (14/10/2026): en Argentina los aumentos son casi mensuales | — |
+| EVT-10 | Faltante de combustible con cupo | (0.0027397260273972603, 3, 7, 30.0, 0.5) | prob./día · días · L · × | 🟠 supuesto | Mendoza | sin_dato | grupo (14/10/2026); precedentes: faltante de gasoil 2022 con cupos y crisis de Mendoza 2023 (INV-09) | — |
+| EVT-11 | Rotura del camión en la ruta | (0.05, 12.0, 48.0) | prob./viaje · h | 🟠 supuesto | Mendoza | sin_dato | grupo (14/10/2026) | — |
+| EVT-12 | Corte de la avenida (choque u obra) | (0.03333333333333333, 2.0, 8.0, 0.5, 7.0, 20.0) | prob./día · h · fracción · hora | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-13 | Evento masivo en San Rafael | (0.010958904109589041, 1, 3, 0.3) | prob./día · días · aumento | 🟠 supuesto | San Rafael | baja | grupo (14/10/2026); el aumento es el piso de DEM-09 (Vendimia +30–50 %) | — |
+| EVT-14 | Asalto | (0.0027397260273972603, 0.5, 1.0) | prob./día · h | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
+| EVT-15 | Horas de trabajo por mes de un playero (valor de la hora) | 200.0 | h/mes | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026): jornada de 8 h, unos 25 días por mes | — |
 
 ## Contradicciones entre fuentes: qué se eligió y por qué
 

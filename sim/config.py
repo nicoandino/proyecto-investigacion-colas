@@ -539,6 +539,26 @@ class ParametrosGNC:
             raise ValueError("cortes_extra y dias_extra_frio ≥ 0; prob_invierno_frio entre 0 y 1.")
 
 
+# =============================================================================
+# Eventos aleatorios que alteran la estación (parte 4, sim/eventos.py)
+# =============================================================================
+@dataclass(frozen=True)
+class ParametrosEventos:
+    """Qué eventos aleatorios están prendidos (EVT-01…14), con qué semilla se sortean y qué tan seguido.
+
+    Apagados por defecto: con `activos` vacío la corrida es idéntica a la de siempre. Los eventos se sortean
+    con su propia semilla aunque el resto de la simulación no tenga azar (datos reales).
+    """
+
+    activos: tuple[str, ...] = valor("EVT-00")[0]     # ids "EVT-01"…"EVT-14" prendidos
+    semilla: int = valor("EVT-00")[1]                 # la semilla del sorteo de los eventos (se muestra)
+    frecuencia: float = valor("EVT-00")[2]            # multiplica la probabilidad por día de todos
+
+    def __post_init__(self) -> None:
+        if self.frecuencia < 0:
+            raise ValueError("La frecuencia de los eventos no puede ser negativa.")
+
+
 #: Los cinco productos de la estación real.
 PRODUCTOS_REALES = productos_desde_registro()
 #: Las tres zonas de surtidores.
@@ -740,6 +760,9 @@ class ParametrosSimulacion:
     crisis: tuple[float, float, float] | None = None       # S7: plazo (h) de crisis; None = no hay
     crisis_dia: int = valor("INV-11")[0]                   # día de la corrida en que arranca
     crisis_dias: float = valor("INV-11")[1]                # cuántos días dura
+
+    # --- Eventos aleatorios (parte 4): apagados por defecto -------------------
+    eventos: ParametrosEventos = ParametrosEventos()
 
     # --- Inventario (clásico: un solo tanque) ---------------------------------
     tanque: ParametrosTanque = ParametrosTanque()

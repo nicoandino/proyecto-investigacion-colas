@@ -54,6 +54,12 @@ STREAMS = (
     "origen_vpower",
     "origen_diesel_g2",
     "origen_diesel_g3",
+    # Parte 4: eventos aleatorios. Un stream por evento (prenderlos o apagarlos no corre a los otros), más el
+    # de la rotura de cada viaje y el de los clientes que no llegan por el corte de la avenida.
+    "evento_01", "evento_02", "evento_03", "evento_04", "evento_05", "evento_06", "evento_07",
+    "evento_08", "evento_09", "evento_10", "evento_11", "evento_12", "evento_13", "evento_14",
+    "evento_11_viaje",
+    "evento_12_llegadas",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

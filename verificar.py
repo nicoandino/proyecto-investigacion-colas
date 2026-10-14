@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   36. Parte 4, etapa E1: eventos de personal y equipos (mismo calendario con la misma semilla,
+       prender uno no corre a los otros, cada mecanismo hace lo que dice, conservación de clientes).
    35. Parte 4, etapa E0: el GNC lo carga un playero (autos cargando = playeros ocupados en cada
        cuadro; ρ con los minutos del GNC; el autoservicio queda como alternativa).
 
@@ -645,6 +647,7 @@ def main() -> int:
 
     from sim.config import (
         ParametrosEconomicos,
+        ParametrosEventos,
         ParametrosGNC,
         ParametrosRed,
         ParametrosTanque,
@@ -655,6 +658,7 @@ def main() -> int:
     huerfanos = []
     for clase in (
         ParametrosSimulacion, ParametrosTanque, ParametrosEconomicos, ParametrosRed, ParametrosGNC,
+        ParametrosEventos,
     ):
         for campo in fields(clase):
             clave = f"{clase.__name__}.{campo.name}"
@@ -2013,6 +2017,88 @@ def main() -> int:
         f"julio: {len(traza35.cuadros)} cuadros sin descuadre ({gnc_con_playero} cuadros-auto de GNC con playero) · "
         f"ρ pico {auto35.rho_pico:.3f} → {p35.rho_pico:.3f} · atendidos {ta35['atendidos']} (autoservicio) → "
         f"{t35['atendidos']} (con playero)",
+    )
+
+    # ------------------------------------------------------------------ 36
+    separador("36. Parte 4, etapa E1: eventos de personal y equipos (sorteo y mecanismos)")
+    from sim.config import ParametrosEventos
+    from sim.eventos import calendario
+
+    E1 = ("EVT-01", "EVT-02", "EVT-03", "EVT-04", "EVT-05", "EVT-06", "EVT-07", "EVT-08", "EVT-14")
+    base36 = con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1))
+    def con_ev(activos, semilla=1, frecuencia=1.0, p=base36):
+        return dataclasses.replace(p, eventos=ParametrosEventos(activos=activos, semilla=semilla, frecuencia=frecuencia))
+    cal_todos = calendario(con_ev(E1))
+    cal_solo = calendario(con_ev(("EVT-05",)))
+    cal_otra = calendario(con_ev(E1, semilla=2))
+    r_base, _ = correr_replica(base36, semilla=1)
+    r_cero, _ = correr_replica(con_ev(E1, frecuencia=0.0), semilla=1)
+    controlar(
+        cal_todos == calendario(con_ev(E1)) and cal_todos != cal_otra and len(cal_todos) > 0
+        and cal_solo == tuple(e for e in cal_todos if e.id == "EVT-05")
+        and calendario(base36) == () and tuple(r_cero.totales) == tuple(r_base.totales),
+        "El sorteo de los eventos: misma semilla ⇒ mismo calendario; prender uno no corre a los otros; sin eventos, idéntico",
+        f"enero, semilla 1: {len(cal_todos)} eventos ({len(cal_solo)} fallas de surtidor, las mismas solas); "
+        f"semilla 2: {len(cal_otra)}",
+    )
+
+    # Mecanismos: cada uno en su propia corrida de enero (5 veces más seguido), con la animación de todos los días
+    import bisect
+
+    def correr36(activos, frecuencia=5.0):
+        p_ = dataclasses.replace(con_ev(activos, frecuencia=frecuencia), animar_todo=True)
+        r_, tr_ = correr_replica(p_, semilla=1, con_traza=True)
+        return p_, r_, tr_.cuadros, [c.t for c in tr_.cuadros]
+
+    def en(cuadros, tiempos, desde, hasta):
+        return cuadros[bisect.bisect_left(tiempos, desde):bisect.bisect_left(tiempos, hasta)]
+
+    def sueltos(eventos):
+        return [a for a in eventos if not any(b is not a and a.inicio < b.fin and b.inicio < a.fin for b in eventos)]
+
+    def descuadres(p_, cuadros):
+        return sum(1 for c in cuadros if sum(
+            1 for k_, g in enumerate(c.grupos) if p_.grupos[k_].requiere_playero
+            for k in g[1] if k >= 0 and (k & 1) == 0) != c.playeros_ocupados)
+
+    def turno_base(p_, t):
+        h = (t % 1440) / 60.0
+        return [n for hora, n in p_.turnos if hora <= h][-1]
+
+    pA, rA, cA, tA = correr36(("EVT-07", "EVT-14"))
+    paradas = sueltos(rA.eventos)
+    parada_ok = all(c.playeros_en_turno == 0 and c.playeros_ocupados == 0
+                    for e in paradas for c in en(cA, tA, e.inicio + 30.0, e.fin))
+    pB, rB, cB, tB = correr36(("EVT-01", "EVT-03"))
+    playero = sueltos(rB.eventos)
+    playero_ok = all(c.playeros_en_turno == max(0, turno_base(pB, c.t) - 1)
+                     for e in playero for c in en(cB, tB, e.inicio + 1.0, e.fin)) and all(
+        c.playeros_en_turno == turno_base(pB, c.t) for e in playero for c in en(cB, tB, e.fin + 1.0, e.fin + 60.0)
+        if not any(o.inicio <= c.t < o.fin for o in rB.eventos)
+    )
+    pC, rC, cC, tC = correr36(("EVT-05",))
+    caras = sueltos(rC.eventos)
+    ventanas05 = [(e.inicio, e.fin) for e in rC.eventos]
+    cara_ok = all(any(-2 in g[1] for g in c.grupos) for e in caras for c in en(cC, tC, e.inicio + 120.0, e.fin)) \
+        and not any(any(-2 in g[1] for g in c.grupos) and not any(a <= c.t < b for a, b in ventanas05) for c in cC)
+    pD, rD, cD, tD = correr36(("EVT-06",))
+    compresor = sueltos(rD.eventos)
+    compresor_ok = all(c.compresores_total == pD.gnc.compresores - 1
+                       for e in compresor for c in en(cD, tD, e.inicio + 1.0, e.fin))
+    pE, rE, _, _ = correr36(E1, frecuencia=10.0)
+    tE = dict(rE.totales)
+    perdidosE = tE["perdidos_espera"] + tE["perdidos_cola_llena"] + tE["perdidos_sin_combustible"] + tE["perdidos_corte_gnc"]
+    controlar(
+        parada_ok and playero_ok and cara_ok and compresor_ok and min(len(paradas), len(playero), len(caras), len(compresor)) > 0
+        and descuadres(pA, cA) + descuadres(pB, cB) + descuadres(pC, cC) + descuadres(pD, cD) == 0
+        and 0 <= tE["llegadas"] - tE["atendidos"] - perdidosE <= 60
+        and tE["atendidos"] < dict(r_base.totales)["atendidos"] and sum(e.perdidos for e in rE.eventos) > 0,
+        "Cada mecanismo hace lo que dice: estación parada sin playeros, un playero menos hasta el cambio de turno, "
+        "cara tachada y un compresor menos; los clientes se conservan",
+        f"enero ×5, cada uno solo y sin superponerse: {len(paradas)} paradas, {len(playero)} de un playero, {len(caras)} "
+        f"caras, {len(compresor)} compresores · todos ×10: {len(rE.eventos)} eventos, atendidos "
+        f"{dict(r_base.totales)['atendidos']} → {tE['atendidos']}, {sum(e.perdidos for e in rE.eventos)} clientes perdidos "
+        f"durante los eventos",
     )
 
     # ------------------------------------------------------------------

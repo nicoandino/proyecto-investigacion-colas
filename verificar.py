@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   47. Etapa 6: el desglose de Economía (cantidad de la simulación × precio del Registro) suma los
+       ingresos y costos del mes.
    46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
        barata de las 14 candidatas en el año completo con datos reales.
    45. §24, G1: la tabla de camiones tiene un camión por pedido y la ruta recorrida se reconstruye
@@ -2463,6 +2465,24 @@ def main() -> int:
         "La app usa por defecto los índices de la serie real y la política más barata de las 14 en el año",
         f"año con datos reales: INV-13 (s = {_valor('INV-13')[0]:g}, Q = {_valor('INV-13')[1]:g} días) ${total46[k46]:,.0f}/mes · "
         f"pronóstico ${total46[-1]:,.0f} · INV-07 ${total46[0]:,.0f} · la más cara ${max(total46):,.0f}",
+    )
+
+    # ------------------------------------------------------------------ 47
+    separador("47. Etapa 6 del rediseño: Economía separa lo verificable (cantidades) de lo supuesto (precios)")
+    from sim.economia_real import desglose_verificable
+
+    r47, _ = correr_replica(p_app, semilla=1)
+    e47 = economia_mensual(r47, p_app, eco46)
+    renglones47 = desglose_verificable(r47, p_app, eco46)
+    ingresos47 = sum(x.importe for x in renglones47 if x.tipo == "ingreso")
+    costos47 = sum(x.importe for x in renglones47 if x.tipo == "costo")
+    controlar(
+        abs(ingresos47 - e47.ingreso_total) < 1e-6 and abs(costos47 - e47.costo_total) < 1e-6
+        and all(abs(x.cantidad * x.precio - x.importe) < 1e-6 for x in renglones47 if x.unidad != "mes")
+        and all(_valor(i) is not None for x in renglones47 for i in x.datos),
+        "Cada importe = cantidad de la simulación × precio del Registro, y suman los ingresos y costos del mes",
+        f"enero: {len(renglones47)} renglones · ingresos ${ingresos47:,.0f} = {e47.ingreso_total:,.0f} · "
+        f"costos ${costos47:,.0f} = {e47.costo_total:,.0f}",
     )
 
     # ------------------------------------------------------------------

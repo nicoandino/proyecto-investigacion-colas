@@ -800,6 +800,8 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         )
     )
 
+    vistas.tabla_verificable_supuesto(p, base.replicas[0], eco)
+
     st.caption(
         "Lo que cada escenario S0–S12 le suma o resta al margen mensual está en el **Caso de informe** (menú principal)."
     )

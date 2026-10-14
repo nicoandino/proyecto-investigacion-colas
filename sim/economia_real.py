@@ -19,6 +19,7 @@ económica con datos propios (§12, prioridad 9).
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from typing import NamedTuple
 
 from sim.config import ParametrosEconomicos, ParametrosSimulacion, dias_del_mes
 from sim.escenarios import es_significativa
@@ -359,3 +360,53 @@ def avisos(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> list[str]:
             "el flete está casi seguro subestimado. Consultar transportistas."
         )
     return lista
+
+
+
+# =============================================================================
+# Lo verificable y lo supuesto (etapa 6 del rediseño): importe = cantidad × precio
+# =============================================================================
+class RenglonEconomia(NamedTuple):
+    """Un renglón del mes: la cantidad sale de la simulación (se comprueba); el precio, del Registro."""
+
+    concepto: str
+    tipo: str                  # "ingreso" | "costo"
+    cantidad: float            # del mes, de la corrida
+    unidad: str
+    precio: float              # $ por unidad (para el personal: el importe ÷ los puestos)
+    datos: tuple[str, ...]     # ids del Registro de donde sale el precio
+    importe: float
+
+
+def desglose_verificable(r: ResultadoReplica, p: ParametrosSimulacion, eco: ParametrosEconomicos) -> list[RenglonEconomia]:
+    """Cada importe del mes partido en cantidad (verificable) × precio (supuesto o heredado, con su Dato).
+
+    Los importes son exactamente los de `economia_mensual` (el control 47 lo comprueba).
+    """
+    e = economia_mensual(r, p, eco)
+    dias = e.dias_mes
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    salida: list[RenglonEconomia] = []
+    for producto, vendido in r.litros_vendidos_por_producto:
+        margen = eco.margen_de(producto)
+        gnc = producto == "gnc"
+        salida.append(RenglonEconomia(
+            f"Venta de {nombres.get(producto, producto)}", "ingreso", vendido * dias, "m³" if gnc else "L", margen,
+            ("ECO-03",) if gnc else ("ECO-01",), vendido * dias * margen))
+    salida.append(RenglonEconomia("Compras en el Shell Shop", "ingreso", r.compras_dia * dias, "compras",
+                                  eco.margen_compra, ("ECO-02",), e.ingreso_minimarket))
+    camiones = sum(v for _, v in r.pedidos_por_producto) * dias
+    salida.append(RenglonEconomia("Flete de los camiones", "costo", camiones, "camiones", flete_por_pedido(p, eco),
+                                  ("ECO-06",), e.flete))
+    litros_tanque = sum(v for _, v in r.nivel_por_producto)
+    salida.append(RenglonEconomia("Almacenamiento", "costo", litros_tanque, "L promedio en los tanques",
+                                  eco.costo_almacenamiento_litro_mes, ("ECO-07",), e.almacenamiento))
+    puestos = (personas_turno_playeros(p) + p.cajas * (24.0 / HORAS_POR_TURNO) + eco.puestos_encargado
+               + eco.puestos_tienda) * eco.cobertura_francos
+    salida.append(RenglonEconomia("Personal", "costo", puestos, "personas (puestos × francos)",
+                                  e.personal_total / puestos if puestos else 0.0, ("ECO-04", "ECO-04C", "ECO-10", "ECO-11"),
+                                  e.personal_total))
+    if e.costo_eventos:
+        salida.append(RenglonEconomia("Eventos aleatorios (horas extra, técnico)", "costo", 1.0, "mes", e.costo_eventos,
+                                      ("EVT-02", "EVT-05", "EVT-15"), e.costo_eventos))
+    return salida

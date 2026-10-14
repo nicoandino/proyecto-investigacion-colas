@@ -1058,3 +1058,41 @@ def seccion_red_por_producto(p: ParametrosSimulacion, r: ResultadoReplica) -> No
         "distribuidora Ecogas lo lleva a los usuarios (GNC-11, nota 13; informativo: el modelo no simula la red de gas). "
         "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña 🔥 GNC)."
     )
+
+
+
+# =============================================================================
+# Economía: lo verificable (cantidades) y lo supuesto (precios)
+# =============================================================================
+def tabla_verificable_supuesto(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """Cada importe del mes = cantidad (sale de la simulación, se comprueba) × precio (del Registro, con su tipo)."""
+    from sim.datos import por_id
+    from sim.economia_real import desglose_verificable
+
+    etiqueta_tipo = {"dato": "dato", "estimacion": "estimación", "observacion": "observación", "supuesto": "supuesto",
+                     "heredado": "heredado sin fuente"}
+    renglones = desglose_verificable(r, p, eco)
+    st.markdown("##### Lo verificable y lo supuesto")
+    st.caption(
+        "Cada importe es **cantidad × precio**. La **cantidad** sale de la simulación y se comprueba en las otras "
+        "pestañas (litros y compras en Indicadores, camiones en Inventario, dotación en el Modelo). El **precio** sale "
+        "del Registro, y casi todos son **heredados sin fuente** o estimaciones: ahí está la incertidumbre de la plata."
+    )
+    filas = []
+    for x in renglones:
+        datos = [por_id(i) for i in x.datos]
+        filas.append({
+            "Concepto": x.concepto,
+            "": "➕" if x.tipo == "ingreso" else "➖",
+            "Cantidad del mes (verificable)": f"{ent(x.cantidad)} {x.unidad}" if x.unidad != "mes" else "—",
+            "Precio unitario": _pesos(x.precio) if x.unidad != "mes" else "—",
+            "De dónde sale el precio": " · ".join(f"{d.id} ({etiqueta_tipo.get(d.tipo, d.tipo)})" for d in datos),
+            "Importe del mes": _pesos(x.importe),
+        })
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+    heredados = sorted({i for x in renglones for i in x.datos if por_id(i).tipo == "heredado"})
+    st.caption(_md(
+        f"Ingresos: {_pesos(sum(x.importe for x in renglones if x.tipo == 'ingreso'))} · costos: "
+        f"{_pesos(sum(x.importe for x in renglones if x.tipo == 'costo'))} (los mismos de arriba). Precios heredados sin "
+        f"fuente: {', '.join(heredados) if heredados else 'ninguno'}; se cambian en el menú 💰 Economía."
+    ))

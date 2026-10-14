@@ -50,6 +50,11 @@ with sync_playwright() as pw:
           "| tabla de cortes oculta sin edición:", "Qué le hace cada corte a cada origen" not in texto,
           "| sin 'barra lateral':", "barra lateral" not in texto)
     pagina.screenshot(path=str(SALIDA / "red_y_rutas.png"), full_page=True)
+
+    texto = pestania("Economía")
+    print("Etapa 6 Economía | verificable y supuesto:", "Lo verificable y lo supuesto" in texto,
+          "| suma igual:", "(los mismos de arriba)" in texto, "| $ visibles:", "$ " in texto)
+    pagina.screenshot(path=str(SALIDA / "economia.png"), full_page=True)
     print("excepciones:", pagina.locator("[data-testid='stException']").count())
     navegador.close()
 

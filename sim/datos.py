@@ -1013,6 +1013,30 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "valor de la hora = sueldo del playero (ECO-04) ÷ estas horas; sirve para las horas extra",
                     None, None),
           200.0),
+
+        # ------------------------------------------- K. Pronóstico (parte 3, §15–19)
+        ("PRO-01", ("Ventas mensuales al público de Shell en Mendoza (Súper, Ultra, gasoil G2 y G3)", "m³/mes", "C",
+                    "dato", "alta",
+                    "Secretaría de Energía, datos abiertos: 'Refinación y comercialización… (Tablas dinámicas)', "
+                    "recurso 'Ventas (excluye ventas a empresas del sector)'; empresa SHELL C.A.P.S.A., subtipo Al "
+                    "Público, provincia Mendoza (descargado 14-oct-2026; nota 12)", "investigacion", "", (),
+                    "(primer mes, 92 valores de ene-2019 a ago-2026). Es la suma de TODAS las Shell de Mendoza, no la "
+                    "estación: el modelo usa la forma (índices por mes, tendencia en %) escalada a DEM-01", None, None),
+          ((2019, 1), (8607, 9188, 9224, 9031, 9625, 9174, 10736, 9770, 9141, 10543, 9477, 10975, 10975, 10711, 8450, 5278, 7336, 8261, 10352, 10719, 8264, 10728, 11487, 15756, 15660, 15790, 16842, 11719, 12323, 14108, 14157, 15279, 15498, 16577, 14174, 14982, 13000, 14958, 14788, 14563, 14691, 14682, 13662, 14782, 14999, 14693, 14623, 16120, 16120, 13892, 15778, 15616, 15384, 12985, 13010, 12398, 12280, 13093, 12488, 12013, 10474, 12516, 13320, 10997, 12853, 11751, 14783, 15310, 12514, 14709, 13807, 14468, 14423, 14858, 13748, 11723, 12638, 11555, 12301, 12909, 12023, 12286, 11863, 13089, 11437, 11048, 12111, 11330, 11495, 11248, 11035, 11297))),
+        ("PRO-02", ("Ventana de ajuste del pronóstico: primer mes y meses de prueba", "mes · meses", "C", "supuesto",
+                    "media", "grupo (14/10/2026): se excluyen la pandemia (2020) y el rebote de 2021 (nota 12)",
+                    "grupo", "", (),
+                    "se ajusta desde ene-2022 y los últimos 12 meses (sep-2025 – ago-2026) quedan para probar cada "
+                    "método (no se usan para ajustarlo)", None, None),
+          ((2022, 1), 12)),
+        ("PRO-03", ("Nivel de confianza del intervalo del pronóstico (z)", "—", "E", "dato", "alta",
+                    "estadística: z de la normal estándar para 95 %", "investigacion", "", (),
+                    "IC del pronóstico = pronóstico ± z · RMSE (como en el práctico de Pronóstico)", None, None),
+          1.96),
+        ("PRO-04", ("Parámetros de los métodos: meses del promedio móvil y α del suavizado exponencial", "meses · α",
+                    "E", "supuesto", "sin_dato", "grupo (14/10/2026): valores típicos de la cátedra", "grupo", "", (),
+                    "promedio móvil de 3 meses; suavizado exponencial simple con α = 0,3", None, None),
+          (3, 0.3)),
     ]
 )
 

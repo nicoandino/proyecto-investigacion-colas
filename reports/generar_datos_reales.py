@@ -31,6 +31,7 @@ SECCIONES = {
     "CAL": "Calendario y corrida",
     "MOD": "Modelo",
     "EVT": "Eventos aleatorios",
+    "PRO": "Pronóstico",
 }
 ETIQUETA_TIPO = {
     "dato": "🟢 dato", "estimacion": "🟡 estimación", "observacion": "🔵 observación",

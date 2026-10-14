@@ -423,7 +423,14 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
 
 ## 19. Avance
 
-- (sin etapas cerradas todavía)
+- **P1 ✅ (serie real).** Fuente: Secretaría de Energía, datos abiertos, "Refinación y comercialización… (Tablas
+  dinámicas)", recurso "Ventas (excluye ventas a empresas del sector)" (actualizado el 2-oct-2026). Filtro: **SHELL
+  C.A.P.S.A.** (la bandera de la estación), **Al Público**, **Mendoza**, Súper + Ultra + gasoil G2 + G3: 92 meses
+  (ene-2019 – ago-2026), sin faltantes. **No hay datos por estación**: es la suma de las Shell de Mendoza (≈ 11–16 mil m³
+  por mes, 16,6 % del mercado provincial en 2026), así que se usa la forma de la serie escalada a DEM-01. Nota
+  `research_notes/…/12_serie_ventas.md` (URL, filtro, totales por año verificados). Registro: **PRO-01** (la serie, dato,
+  nivel C), **PRO-02** (ventana desde ene-2022 —sin la pandemia ni el rebote de 2021— y 12 meses de prueba), **PRO-03**
+  (z = 1,96) y **PRO-04** (promedio móvil de 3 meses, α = 0,3). `verificar.py` 133/133.
 
 ---
 

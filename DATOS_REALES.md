@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 140 datos · 🟢 dato 38 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 70
+**Resumen:** 144 datos · 🟢 dato 40 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 72
 
 ## La estación
 
@@ -225,6 +225,15 @@
 | EVT-13 | Evento masivo en San Rafael | (0.010958904109589041, 1, 3, 0.3) | prob./día · días · aumento | 🟠 supuesto | San Rafael | baja | grupo (14/10/2026); el aumento es el piso de DEM-09 (Vendimia +30–50 %) | — |
 | EVT-14 | Asalto | (0.0027397260273972603, 0.5, 1.0) | prob./día · h | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026) | — |
 | EVT-15 | Horas de trabajo por mes de un playero (valor de la hora) | 200.0 | h/mes | 🟠 supuesto | la estación | sin_dato | grupo (14/10/2026): jornada de 8 h, unos 25 días por mes | — |
+
+## Pronóstico
+
+| ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
+|---|---|---|---|---|---|---|---|---|
+| PRO-01 | Ventas mensuales al público de Shell en Mendoza (Súper, Ultra, gasoil G2 y G3) | ((2019, 1), (8607, 9188, 9224, 9031, 9625, 9174, 10736, 9770, 9141, 10543, 9477, 10975, 10975, 10711, 8450, 5278, 7336, 8261, 10352, 10719, 8264, 1… | m³/mes | 🟢 dato | Mendoza | alta | Secretaría de Energía, datos abiertos: 'Refinación y comercialización… (Tablas dinámicas)', recurso 'Ventas (excluye ventas a empresas del sector)'… | — |
+| PRO-02 | Ventana de ajuste del pronóstico: primer mes y meses de prueba | ((2022, 1), 12) | mes · meses | 🟠 supuesto | Mendoza | media | grupo (14/10/2026): se excluyen la pandemia (2020) y el rebote de 2021 (nota 12) | — |
+| PRO-03 | Nivel de confianza del intervalo del pronóstico (z) | 1.96 | — | 🟢 dato | Argentina / otro | alta | estadística: z de la normal estándar para 95 % | — |
+| PRO-04 | Parámetros de los métodos: meses del promedio móvil y α del suavizado exponencial | (3, 0.3) | meses · α | 🟠 supuesto | Argentina / otro | sin_dato | grupo (14/10/2026): valores típicos de la cátedra | — |
 
 ## Contradicciones entre fuentes: qué se eligió y por qué
 

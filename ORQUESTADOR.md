@@ -73,10 +73,10 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 | **2 · Menú inicial ✅** | Por días (con rango de meses), meses, estaciones y año; flujo Menú → Simulación → Resultados; "Editar simulación" aparte | captura del menú; las 4 formas de elegir el tiempo corren |
 | **3 · Animación ✅** | Todos los días (1 por 5 s), diseño según la imagen, S1–S4 arriba y cola abajo (3 lugares por cara), gráficos opcionales | todos los días se reproducen; QA con capturas |
 | **4 · Indicadores y Demanda ✅** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
-| **5 · Inventario, Red y GNC** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | idem |
-| **6 · Escenarios, Economía, Conclusión** | Escenario elegido antes de simular y explicado; economía separando verificable y supuesto; conclusión según el período; réplicas y efecto de cortes en pestaña aparte; tornado fuera | idem |
-| **7 · Frontend** | Ajustes en un menú (no en la barra lateral), nuevo diseño con una skill de diseño | QA visual en escritorio y celular |
-| **8 · Cierre** | `verificar.py` completo, QA visual, `CLAUDE.md` y `DATOS_REALES.md` al día | todo en verde |
+| **5 · Inventario, Red y GNC ✅** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | Hecho en las tandas 3, 7, 8 y 9 (§14) y en G1–G2 (§26): tabla de camiones con ruta, km y flete; red de nafta, diésel y GNC; cortes sólo si se editó |
+| **6 · Escenarios, Economía, Conclusión ✅** | Escenario elegido antes de simular y explicado; economía separando verificable y supuesto; conclusión según el período; réplicas y efecto de cortes en pestaña aparte; tornado fuera | Tanda 6 (escenario único, conclusión armada con la corrida, Caso de informe con el catálogo explicado, réplicas y tornado) y §28 (Economía: cantidad verificable × precio supuesto) |
+| **7 · Frontend** (pendiente) | Ajustes en un menú (no en la barra lateral), nuevo diseño con una skill de diseño | QA visual en escritorio y celular. **Nico inicia la skill "impeccable".** La barra lateral ya no existe (G3) y los ajustes están en el menú inicial; falta el diseño |
+| **8 · Cierre ✅** | `verificar.py` completo, QA visual, `CLAUDE.md` y `DATOS_REALES.md` al día | §28 |
 
 ## 4. Decisiones tomadas (6/10/2026)
 
@@ -91,8 +91,8 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 - **Skill de diseño:** el usuario la inicia él mismo cuando llegue la etapa de Frontend; yo le aviso en ese momento.
 
 ## 5. Pendientes
-- **La imagen del diseño de la animación** (la pasa el usuario).
-- El OK del usuario para arrancar la **Etapa 1**.
+- ~~La imagen del diseño de la animación~~ (llegó; etapa 3) · ~~el OK para la etapa 1~~ (dado).
+- Al 14/10/2026 sólo queda la **etapa 7 (Frontend)**, que arranca cuando Nico inicie la skill de diseño (ver §28).
 
 ## 6. Etapa 1 cerrada (6/10/2026)
 
@@ -554,158 +554,17 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   valor por defecto viejo (`qa_p4_stock`, `qa_tanda5_calendario`, `qa_p3_pronostico`) piden la opción explícita; 0
   excepciones, 0 errores de consola.
 
----
+## 28. Cierre del plan (etapas 6 y 8, 14/10/2026)
 
-# Parte 4 — Eventos aleatorios que alteran la estación (14/10/2026)
-
-> Pedido de Nico: eventos discretos **al azar** que cambian el funcionamiento de la estación (un playero que se va, una
-> licencia con horas extra, un aumento de precio, un faltante con cupo…), **por lo menos 10**, que se prenden y apagan
-> desde el **menú principal**. Aprobó la lista de 14 de §21 el 14/10/2026.
-
-## 20. Decisiones de Nico (14/10/2026)
-
-- **El GNC lo carga un playero** (en las estaciones argentinas el GNC es atendido, no hay autoservicio). Hoy el modelo
-  dice lo contrario (PER-04 = "no retiene playero, sólo conecta la manguera"): **es un error de lógica y se corrige
-  primero** (etapa E0; el efecto medido está en §25).
-- **Turnos:** los que ya están (noche 22–06 · mañana 06–14 · tarde 14–22, PER-01). El ejemplo "se va a las 3 y vuelve
-  alguien a las 8" era ilustrativo: **el hueco dura hasta el próximo cambio de turno** (a las 06 si es de noche).
-- **Aumento de precio (+10 %):** sube el precio; **el margen en $ por litro queda igual** (si se ganaban $100 por litro,
-  se siguen ganando $100). Cambia la facturación, no la ganancia por litro; lo que se ve es la gente que **se adelanta a
-  cargar el día anterior**.
-- **"Caída de nafta" = faltante con cupo:** menos camiones (tardan más y traen menos) y **cada cliente carga como máximo
-  30 L**, es decir, menos litros por cliente.
-- Se suman los dos de reserva: **evento masivo en San Rafael** y **asalto**. Total: 14 eventos.
-
-## 21. Los 14 eventos
-
-Frecuencias y duraciones: **supuestos rotulados** (no hay registros de la estación); donde hay un dato real que respalde
-el evento, se cita. Cada evento es un `Dato` del Registro (**EVT-01…EVT-14**) con frecuencia, duración y efecto editables.
-
-| # | Evento | Qué hace en la simulación | Frecuencia · duración (supuesto) | Costo / efecto |
-|---|---|---|---|---|
-| **Personal** |||||
-| 1 | Abandono repentino del turno | A una hora sorteada, un playero se va; **nadie lo reemplaza hasta el próximo cambio de turno** | ≈ 1 cada 2 meses · hasta el cambio de turno | De noche (1 playero) **la estación queda sin atención**; en el pico, 2 → 1. Venta perdida |
-| 2 | Licencia por accidente, cubierta con horas extra | Un playero falta N días; otro hace horas extra y el turno **no** queda corto | ≈ 1 cada 6 meses · 3–15 días | **Horas extra** con recargo 50 % (día hábil) y 100 % (sábado después de las 13, domingo y feriado), LCT art. 201 |
-| 3 | Falta sin aviso | El turno arranca con un playero menos las 8 h | ≈ 2 por mes · un turno | Venta perdida |
-| 4 | Licencia sin reemplazo | Como el 2, pero no consiguen a nadie: el turno queda corto esos días | 30 % de las licencias | Venta perdida (sin horas extra) |
-| **Equipos** |||||
-| 5 | Falla de un surtidor | Una cara sorteada queda fuera de servicio hasta que llega el técnico | ≈ 1 por mes · 2–24 h | En diésel (2 caras) queda 1. Venta perdida + visita del técnico |
-| 6 | Falla de un compresor de GNC | 3 → 2 compresores (SUR-06) | ≈ 1 cada 2 meses · 4–48 h | Más espera en GNC |
-| 7 | Corte de luz | Sin surtidores ni compresores: **la estación se para** | más probable dic–feb · 1–4 h | Venta perdida |
-| 8 | Se cae el sistema de cobro | Sólo efectivo: el cobro tarda más | ≈ 1 por mes · 1–6 h | Más espera y abandonos |
-| **Precio y abastecimiento** |||||
-| 9 | Aumento de precio +10 % | Desde la fecha, precio × 1,10 con **margen igual**; el día anterior, **+20 % de clientes** (se adelantan a cargar) | ≈ 1 por mes | Pico de colas y riesgo de quiebre el día anterior; facturación +10 % |
-| 10 | Faltante con cupo | N días: camiones con más plazo y menos carga, y **máximo 30 L por cliente** | ≈ 1 por año · 3–7 días. Precedentes: faltante de gasoil 2022 con cupos; crisis de Mendoza 2023 (INV-09) | Menos litros por cliente, tanques bajos, quiebres. La crisis S7 pasa a ser también un evento |
-| 11 | Rotura del camión en ruta | Un pedido sorteado llega 12–48 h tarde | 5 % de los viajes | Riesgo de quiebre en ese tanque |
-| **Demanda y seguridad** |||||
-| 12 | Corte de la avenida (choque u obra) | La mitad de las llegadas durante N horas | ≈ 1 por mes · 2–8 h | Menos ventas |
-| 13 | Evento masivo en San Rafael (fiesta, fin de semana largo) | Más llegadas ese día (DEM-09 "Eventos" ya está en el Registro) | ≈ 4 por año · 1–3 días | Más colas, más ventas |
-| 14 | Asalto | La estación se para mientras actúa la policía | ≈ 1 por año · 30–60 min | Venta perdida |
-
-## 22. Cómo funcionan
-
-- **Apagados por defecto:** con todos apagados la corrida es **idéntica** a la de hoy (dorados y controles intactos).
-- **Sólo se sortean los eventos.** Llegadas, mezcla y tiempos siguen con los datos reales sin azar. Cada evento tiene su
-  **stream propio al final de `STREAMS`** y la **semilla se muestra**: con la misma semilla se repiten los mismos eventos.
-  El encabezado dice "datos reales + eventos sorteados (semilla N)".
-- **Mecanismos del motor** (cada uno se prueba por separado): playeros de menos hasta una hora (reserva extra en el
-  recurso de playeros, como hoy los turnos), cara fuera de servicio, compresor fuera de servicio, estación parada,
-  factor sobre las llegadas en una franja, cobro más lento, tope de litros por cliente, demora o menor carga de un
-  camión, precio × factor desde una fecha.
-- **Pantalla:** desplegable **"⚡ Eventos aleatorios"** en el menú principal (casilla por evento, frecuencia editable,
-  semilla); cada evento es un **aviso con pausa** en la animación (el sistema de la tanda 7); tabla **"Eventos del
-  período"** (cuándo, cuánto duró, clientes perdidos, costo); los eventos también figuran en "Qué se sorteó" y en la
-  Conclusión; Economía suma **"Costo de los eventos"** (horas extra, técnico) aparte de la venta perdida.
-
-## 23. Etapas
-
-| Etapa | Qué incluye | Compuerta |
-|---|---|---|
-| **E0 · GNC con playero** | PER-04 pasa a "sí": el cliente de GNC necesita playero **y** compresor durante la carga; nota en `research_notes/` (el GNC es atendido); se corrigen los textos y las cuentas de ρ que dicen "el GNC no usa playero" (`config.rho_pico`, escenario único, Indicadores, `ui/textos.py`); el eje del tornado que probaba "GNC con playero" se reemplaza | `clasico()` intacto (no tiene zonas); se actualizan los controles que suponían GNC sin playero; QA |
-| **E1 · Motor de eventos: personal y equipos** | `sim/eventos.py` (catálogo, sorteo con streams nuevos, calendario de eventos de la corrida); eventos 1–8 y 14 en el motor; registro en `Traza.eventos` | Apagado ⇒ idéntico; misma semilla ⇒ mismos eventos; un control por mecanismo (p. ej. estación parada ⇒ 0 atendidos en esa franja; playero de menos ⇒ la dotación vuelve en el cambio de turno) |
-| **E2 · Precio, abastecimiento y demanda** | Eventos 9–13; costo de horas extra (LCT art. 201) y del técnico | Cupo ⇒ ninguna carga supera 30 L; aumento ⇒ margen por litro igual y facturación × 1,10; Σ costos de eventos = suma de la tabla |
-| **E3 · Menú y pantalla** | Desplegable "⚡ Eventos aleatorios", avisos en la animación, tabla de eventos, Qué se sorteó, Conclusión y Economía | QA con Playwright: prender y apagar cada evento, avisos con pausa, 0 errores de consola |
-
-**Orden:** E0 primero (el evento 1 depende de que el GNC use playero: de noche deja **toda** la estación sin atención).
-Después E1 → E2 → E3. Esta parte puede ir antes o después de la parte 3; lo decide Nico.
-
-## 24. Lo que falta del orquestador (al 14/10/2026)
-
-Lo de la parte 1 que **no** quedó cubierto por las tandas de la parte 2:
-
-- ~~**Inventario (etapa 5):** tabla de camiones~~ → hecho en G1 (§26). Antes: no había una **tabla de camiones** con día de pedido, día de llegada, origen, ruta, km y costo
-  de cada viaje (los datos ya están en el motor, `PedidoCamion` y `Traza.eventos`; falta mostrarlos).
-- ~~**Red y rutas (etapa 5)**~~ → hecho en G2 (§26). Pedía "la red de nafta, de diésel **y de GNC**": la del GNC (gasoducto) no está dibujada; la
-  pestaña GNC sólo dice que el gas viene de la red. "Qué le hace cada corte a cada origen sólo si se editó": hoy la tabla
-  de cortes se muestra siempre.
-- **Frontend (etapa 7):** el tema oscuro en toda la app y el menú lateral como la imagen; **Nico inicia la skill de
-  diseño ("impeccable")** cuando llegue el momento.
-- ~~**Limpieza:** la barra lateral vieja~~ → hecho en G3 (§26).
-- **Cierre (etapa 8):** la tabla de §3 y los pendientes de §5 quedaron viejos (no marcan lo hecho en la parte 2).
-
-Partes nuevas: **parte 3** (Pronóstico y Flujos, P1–P4, F1–F3, C3) y **parte 4** (Eventos, E0–E3), cerradas.
-Orden acordado con Nico (14/10/2026): **E0 → eventos (E1–E3) → pronóstico y flujos → pendientes de arriba → frontend**.
-
-## 25. Avance de la parte 4
-
-- **E0 ✅ (el GNC lo carga un playero).** Nota `research_notes/…/10_gnc_atendido.md`: servicio atendido de la propia
-  estación (EST-07), observación de Nico, ENARGAS Res. 369/2020 (sin personas a bordo); el Decreto 70/2023 habilita el
-  autoservicio como **opción**, que queda como alternativa. Registro: **PER-04 = sí** (dato, confianza media) y la zona C
-  de SUR-00 con playero; `grupos_desde_registro` lee PER-04. Motor: el cliente de GNC toma **cara → playero →
-  compresor** (siempre en ese orden) y el playero queda con el auto mientras espera el compresor y mientras carga; la
-  alternativa sin playero sigue funcionando (eje C9 del tornado: "GNC en autoservicio"). Antes, esa alternativa saltaba
-  el compresor y el chequeo del corte: quedó corregido en el mismo camino. ρ teórico =
-  λ_pico · [(1 − g) · E[S_líquidos] + g · E[S_GNC]] ÷ playeros (`media_servicio_playero`), en el método, en el escenario
-  único y en el tornado. **Economía:** la venta perdida "por corte de GNC" sumaba **todo** el GNC no vendido (también el
-  de los clientes que se cansan de esperar): ahora cuenta sólo los m³ perdidos por el corte. Textos corregidos (modelo,
-  supuestos, tablero: "lo carga un playero"). **Efecto** (datos reales): ρ pico 0,85 → **0,89**; julio 7.677 → **7.664**
-  atendidos; año completo 91.949 → **91.760** atendidos, 73 → **286** clientes que se van por la espera. Control nuevo
-  (35: autos cargando = playeros ocupados en los 89.280 cuadros de julio; ρ a mano). `verificar.py` **129/129**; QA
-  `reports/qa_e0_gnc.py`: escenario único, tablero, modelo y método e indicadores sin textos viejos, 0 excepciones, 0
-  errores de consola.
-- **E1 ✅ (motor de eventos: personal y equipos).** `sim/eventos.py` (sin Streamlit): el catálogo de los 14 eventos y el
-  **calendario** de la corrida, sorteado antes de correr con una **semilla propia** y **un stream por evento** (al final
-  de `STREAMS`); se sortean todos aunque estén apagados y después se filtran, así que prender uno no corre las fechas de
-  los otros. Registro: **EVT-00** (prendidos, semilla, multiplicador de frecuencia; apagados por defecto), **EVT-01…14**
-  (probabilidad por día, duración y efecto; supuestos del grupo, con los respaldos reales que hay: LCT art. 201, INV-09,
-  DEM-09) y **EVT-15** (200 h/mes para el valor de la hora); nota `research_notes/…/11_eventos_aleatorios.md`.
-  `ParametrosEventos` en `ParametrosSimulacion.eventos` (N14). Motor, eventos 1–8 y 14: un playero menos (reserva con
-  prioridad −1 hasta el cambio de turno, un turno, o el mismo turno todos los días de la licencia), estación parada (todos
-  los playeros y compresores reservados), cara fuera de servicio (reserva en la zona, dibujada tachada: código −2 en los
-  carriles), compresor fuera, cobro lento (+1 min por carga, caja × 1,5); la licencia cubierta no cambia el servicio. Las
-  caras pasaron a `PriorityResource` (los autos piden con la misma prioridad: sigue siendo FIFO; **sin eventos la
-  corrida da idéntica** a la anterior en enero, julio, el año y con azar). Cada evento cuenta los clientes que se fueron
-  mientras duraba (`ResultadoReplica.eventos`) y se anota en la traza para los avisos. Control nuevo (36: mismo
-  calendario con la misma semilla, filtrado sin correr fechas, sin eventos idéntico; cada mecanismo en su propia
-  corrida de enero ×5 —17 paradas, 12 de un playero, 4 caras, 3 compresores— sin descuadres playero/auto y con
-  conservación de clientes). `verificar.py` **131/131**; la app corre igual (QA de E0: 0 excepciones, 0 errores de consola).
-  Ejemplo, enero con datos reales y los eventos de E1 (semilla 1): 10 eventos (3 cortes de luz, 1 cara de GNC 23 h, 1
-  licencia sin reemplazo de 9 días en la mañana, 3 faltas…); atendidos 7.682 → 7.284.
-- **E2 ✅ (precio, abastecimiento y demanda; costos).** Eventos 9–13 en el calendario y el motor: **aumento de precio**
-  (+10 % con el mismo margen en $/L; el día anterior +20 % de clientes), **faltante con cupo** (máx. 30 L por cliente; los
-  camiones pedidos esos días traen la mitad y tardan el plazo de crisis INV-09), **rotura del camión** (se sortea en cada
-  viaje, stream `evento_11_viaje`: 12–48 h más), **corte de la avenida** (cada cliente entra con probabilidad 0,5, stream
-  `evento_12_llegadas`; los que no entran no son llegadas) y **evento masivo** (+30 %, el piso de DEM-09).
-  `EventoOcurrido.extra` guarda lo que hizo cada uno (clientes de más o que no llegaron, litros recortados, horas de
-  demora). **Economía:** `costo_eventos` (horas extra de las licencias cubiertas con el recargo de la LCT art. 201 y la
-  visita del técnico, sin dato = 0) entra en `costo_total`; la venta perdida sigue aparte. Control nuevo (37: llegadas =
-  base + de más − no llegaron; cupo ⇒ ≤ 30 L por carga y camiones con la mitad y ≥ 72 h; cada rotura es un pedido 12–48 h
-  más tarde; costo de las horas extra calculado a mano). `verificar.py` **132/132**. Ejemplo, enero con los 14 eventos y
-  frecuencia × 2 (semilla 1): 27 eventos, llegadas 7.791 → 7.988, atendidos 7.682 → 7.053, horas extra $403.200/mes.
-- **E3 ✅ (menú y pantalla).** Menú principal: desplegable **"⚡ Eventos aleatorios"** con una casilla por evento en
-  cuatro grupos (la ayuda "?" dice qué hace y cada cuánto pasa), **Prender todos / Apagar todos**, la **frecuencia**
-  (la del Registro, el doble, × 5 para verlos en un período corto, la mitad), la **semilla** y una vista previa ("con
-  esta semilla, en el período salen N eventos"). `Ajustes` guarda los eventos y `aplicar_ajustes` arma
-  `ParametrosEventos`; sin eventos, la corrida es la del Registro. Resultados: aviso "Con eventos aleatorios: ocurrieron
-  N (semilla S)" y la pestaña **⚡ Eventos** (sólo si hay eventos prendidos): cómo se sortearon, tarjetas (cuántos,
-  clientes perdidos mientras duraban, costo), la tabla **"Lo que pasó, en orden"** (cuándo, evento, duración, clientes
-  perdidos, qué hizo —clientes de más o que no llegaron, litros recortados, horas de demora, horas extra con su costo,
-  el precio del Súper antes y después—, detalle), los prendidos que no salieron y "¿Cómo se comprueba?". **Tablero:**
-  cada evento es un **aviso con pausa** (⚡, título, qué pasó y la semilla), los eventos en curso se listan en el panel
-  de playeros y la cara fuera de servicio se dibuja **tachada** ("fuera"). Economía: "Eventos aleatorios" en la cascada
-  y en "Cómo se calcula"; Conclusión: una línea con los eventos que más clientes costaron; Qué se sorteó (simulación
-  editada) los menciona. **Decisión:** la frecuencia es **un multiplicador para todos** en vez de una por evento (14
-  campos más en el menú era demasiado; cada probabilidad sigue editable en el Registro). Control nuevo (38: menú sin
-  eventos = Registro; cada evento ocurrido es un aviso). `verificar.py` **133/133**; QA `reports/qa_e3_eventos.py`
-  (los 14 prendidos × 5 en enero: 56 eventos, 56 avisos, 281 cuadros con una cara tachada, pestaña, economía y
-  conclusión; después apagados: sin pestaña ni aviso), 0 excepciones, 0 errores de consola. **Parte 4 cerrada.**
+- **Etapa 6, lo que faltaba (Economía: verificable vs. supuesto).** `economia_real.desglose_verificable`: cada importe del
+  mes = **cantidad** que sale de la simulación (litros y m³ vendidos, compras, camiones, litros promedio en los tanques,
+  personas) × **precio** del Registro con su id y su tipo (casi todos heredados sin fuente: ECO-01/02/03/06/07). Economía
+  muestra la tabla **"Lo verificable y lo supuesto"** y que la suma da los ingresos y costos de arriba. Control nuevo (47).
+- **Etapa 8 (cierre).** `verificar.py` **145/145** (≈ 5 min). QA con Playwright de toda la app sobre un servidor nuevo: los 16
+  scripts de las tandas 0–9 y de las partes 3, 4 y los pendientes dan **0 excepciones y 0 errores de consola**. Dos
+  scripts viejos estaban desactualizados (no la app) y se corrigieron: `qa_tanda1_limpieza` buscaba una ayuda "?" en
+  Inventario, que desde la tanda 6 ya no tiene (ahora la prueba en Modelo y método: abre con el mouse, se va al salir,
+  anda con el teclado); `qa_tanda5_calendario` y `qa_p4_stock` piden la opción explícita desde que cambiaron los valores
+  por defecto. `CLAUDE.md` y `DATOS_REALES.md` (148 datos) al día; la tabla de §3 marca cada etapa con dónde se hizo.
+- **Queda sólo la etapa 7 (Frontend):** el tema oscuro en toda la app y la navegación como la imagen de Nico. Arranca
+  cuando Nico inicie la skill de diseño ("impeccable"); la barra lateral ya no existe y los ajustes ya están en el menú.

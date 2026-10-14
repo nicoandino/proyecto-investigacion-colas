@@ -45,8 +45,9 @@ with sync_playwright() as pw:
     print("Animación | Shell Shop:", marco.locator("text=Shell Shop").count() > 0,
           "| Shell Select:", marco.locator("text=Shell Select").count())
 
-    # --- Ayuda "?" (Inventario): con el mouse aparece y se va; el clic no la traba; teclado
-    pestania("Inventario")
+    # --- Ayuda "?": con el mouse aparece y se va; el clic no la traba; teclado. Desde la tanda 6 Inventario ya no
+    # tiene ninguna ayuda (la búsqueda pasó al Caso de informe): se prueba en Modelo y método (las tarjetas de ρ).
+    pestania("Modelo y método")
     icono = pagina.locator("[role='tabpanel']:visible [data-testid='stTooltipIcon'] button").first
     icono.scroll_into_view_if_needed()
 

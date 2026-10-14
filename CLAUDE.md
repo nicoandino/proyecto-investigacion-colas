@@ -25,12 +25,17 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 - **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (1·2·2); cola finita;
   abandono; caja del minimarket.
 - **Demanda:** litros/mes (270.000) ⇒ clientes/día (≈ 252) con perfil horario, fin de semana ×1,30 normalizado,
-  estacionalidad neutra por defecto. Cada cliente: producto → tipo de vehículo → litros → ¿compra?
+  estacionalidad neutra + **calendario de temporadas** (verano, vacaciones de invierno de Mendoza 6–17/7, resto del
+  invierno; DEM-14/15, activo en la app y neutro en los parámetros por defecto). Cada cliente: producto → tipo de
+  vehículo → litros → ¿compra?
 - **Inventario:** un tanque por líquido, política (s, Q) por producto, camión por producto (plazo 24–36–48 h)
-  desde Dock Sud (991 km) o Luján por una red de rutas (Dijkstra) con cortes.
-- **GNC:** 3 compresores; episodios de corte total en jun–ago; el cliente pasa a Súper (30 %) o se pierde.
-- **Salidas:** indicadores con IC 95 %, 19 escenarios (S0–S12) con diferencias pareadas, estaciones del año,
-  economía mensual, tornado de sensibilidad. `verificar.py`: **118 controles**.
+  desde Dock Sud (991 km) por una red de rutas (Dijkstra) con cortes; orígenes alternativos Arroyo Seco y Luján
+  (apagados por defecto). Quiebres y litros no vendidos por causa.
+- **GNC:** 3 compresores; episodios de corte total en jun–ago (opción: más cortes en todo el invierno e invierno
+  frío); el cliente pasa a Súper (30 %) o se pierde.
+- **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
+  avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **128 controles**.
 
 ## Reglas de oro (no romper)
 
@@ -50,7 +55,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada)
-verificar.py      118 controles
+verificar.py      128 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · gnc · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
@@ -62,7 +67,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 118 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 128 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s.
@@ -76,8 +81,8 @@ Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo
 - Todo se calcula **por réplica** y recién después se promedia (IC 95 % y diferencias pareadas).
 - La venta perdida es un costo de oportunidad: se informa aparte y no se resta del margen.
 
-## Rediseño en curso
+## Rediseño y pulido
 
-El usuario pidió rehacer el flujo de la app (menú inicial por tiempo, simulación de todos los días, modo "datos
-reales" sin azar y modo "editar simulación", indicadores más claros, ajustes en un menú aparte). El plan por
-etapas está en **`ORQUESTADOR.md`**.
+Rediseño del flujo (etapas 1–4) y pulido en tandas 0–9 (13/10/2026): el plan, las decisiones y el avance de cada
+tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuentes se resolvieron con un criterio único
+(`research_notes/…/07_decisiones_fuentes.md`); la app muestra sólo el valor elegido y una frase general.

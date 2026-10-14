@@ -1,7 +1,7 @@
 """QA de la tanda 0: la búsqueda de la mejor política no se cuelga (año completo).
 
-Corre el año completo con datos reales, aprieta "Buscar la mejor política", hace clics en otras pestañas
-mientras corre (no tiene que reiniciarse) y espera a que muestre las 13 evaluaciones con la ganadora.
+Elige el año completo, abre el Caso de informe (ahí vive la búsqueda desde la tanda 6), aprieta "Buscar la mejor
+política", hace clics en otras pestañas mientras corre (no tiene que reiniciarse) y espera las 13 evaluaciones.
 
     .venv/Scripts/python reports/qa_tanda0_busqueda.py http://localhost:8503 reports/qa/tanda0
 """
@@ -42,10 +42,10 @@ with sync_playwright() as pw:
 
     pagina.locator("[data-testid='stRadio'] label").filter(has_text="Año completo").first.click()
     quieto(30)
-    pagina.get_by_role("button", name="Simular con datos reales").click()
-    pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)
+    # Desde la tanda 6 la búsqueda vive en el Caso de informe (fuera del flujo normal).
+    pagina.get_by_role("button", name="Abrir el caso de informe").click()
+    pagina.wait_for_selector("text=Caso de informe", timeout=120000)
     quieto()
-    pestania("Inventario")
     t0 = time.time()
     pagina.get_by_role("button", name="Buscar la mejor política de cada tanque").click()
     pagina.wait_for_selector("text=Evaluando políticas", timeout=120000)
@@ -60,10 +60,9 @@ with sync_playwright() as pw:
             break
         # Mientras corre: otra pestaña y un radio de Indicadores (antes esto reiniciaba la búsqueda)
         if clics < 2 and m and int(m.group(1)) >= 3 + 4 * clics:
-            pestania("Indicadores")
-            pagina.locator("[data-testid='stRadio'] label").filter(has_text="Clientes").first.click()
+            pestania("Sensibilidad")
             time.sleep(1)
-            pestania("Inventario")
+            pestania("Mejor política")
             clics += 1
         time.sleep(1)
     duracion = time.time() - t0

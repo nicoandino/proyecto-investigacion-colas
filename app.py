@@ -10,6 +10,7 @@ Para ejecutar:
 
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from datetime import date
 
@@ -91,15 +92,19 @@ from sim.economia import (
     recomendacion,
 )
 from sim.runner import (
+    Q_EN_DIAS,
+    S_EN_DIAS,
+    PuntoBarrido,
+    ResultadoBarridoReal,
     ResultadoEscenario,
     barrer_politicas,
-    barrer_politicas_real,
     buscar,
     con_politica,
     con_politicas,
     correr_escenarios,
     correr_estacion_real,
     correr_replica,
+    correr_replicas,
     grilla_politicas_real,
     grilla_sugerida,
     promedio_por_producto,
@@ -162,11 +167,6 @@ def correr_estacion_real_cacheado(
     p: ParametrosSimulacion, replicas: int, semilla: int
 ) -> ResultadoEscenario:
     return correr_estacion_real(p, replicas=replicas, semilla_base=semilla)
-
-
-@st.cache_data(show_spinner=False, max_entries=4)
-def barrer_politicas_real_cacheado(p: ParametrosSimulacion, replicas: int, semilla: int):
-    return barrer_politicas_real(p, replicas=replicas, semilla_base=semilla)
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
@@ -1274,35 +1274,151 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
     )
 
     st.divider()
+    seccion_mejor_politica(p, eco)
+
+
+# --- Búsqueda de la mejor política (s, Q): de a una política por vez ------------------
+#: Tope de tiempo real de la búsqueda (segundos). Si se pasa, se detiene y muestra lo evaluado.
+TOPE_BUSQUEDA_S = 180.0
+#: Segundos reales por día simulado de una réplica (medido: un año ≈ 5,2 s); sólo para estimar.
+SEGUNDOS_POR_DIA = 5.2 / 365
+
+
+def etiquetas_grilla() -> list[str]:
+    """Nombre de cada punto de la grilla, en el orden de `grilla_politicas_real`."""
+    return ["La cargada hoy (INV-07)"] + [
+        f"s = {s:g} · Q = {q:g} días de venta".replace(".", ",") for s in S_EN_DIAS for q in Q_EN_DIAS
+    ]
+
+
+def seccion_mejor_politica(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
+    """Explicación + el buscador (que corre en un fragmento aparte, sin bloquear la app)."""
     st.subheader("¿Cuál es la mejor política de reposición de cada tanque?")
     st.markdown(
         "Se prueban 13 combinaciones de **punto de pedido (s)** y **cantidad a pedir (Q)** "
-        "—medidas en días de consumo de cada producto— y se elige, **tanque por tanque**, la "
+        "—medidas en días de venta de cada producto— y se elige, **tanque por tanque**, la "
         "de menor costo mensual:\n\n"
         "**costo = flete de los pedidos + almacenamiento + venta perdida por falta de stock**\n\n"
         "Como cada camión es independiente y cada producto tiene su propio stream de plazos, "
-        "las 4 curvas se miden en las mismas corridas. La política cargada es el primer punto "
-        "de la grilla, así que la mejor nunca es peor que ella."
+        "las 4 curvas se miden en las mismas corridas. La política cargada es la primera "
+        "evaluación, así que la mejor nunca es peor que ella."
     )
-    c1, c2 = st.columns([1, 2])
-    replicas_barrido = c1.slider("Réplicas por política", 1, 4, 2, 1, key="rep_barrido_real")
-    puntos = len(grilla_politicas_real(p))
-    c2.caption(
-        f"Se van a probar **{puntos} políticas** × {replicas_barrido} réplicas de {p.dias} días. "
-        f"Tarda aproximadamente {puntos * replicas_barrido * 1.1:.0f} segundos."
-    )
-    if st.button("🔎 Buscar la mejor política de cada tanque", type="primary"):
-        with st.spinner("Probando políticas de reposición…"):
-            barrido = barrer_politicas_real_cacheado(
-                p, replicas_barrido, st.session_state.semilla_usada
-            )
-            st.session_state.costos_real = analizar_politicas_real(barrido, eco, p)
-        st.rerun()
+    busqueda = st.session_state.get("busqueda")
+    corriendo = busqueda is not None and busqueda["estado"] == "corriendo" and busqueda["p"] == p
+    # Mientras corre, el fragmento se vuelve a ejecutar solo y evalúa UNA política por vuelta: el resto
+    # de la app sigue respondiendo y un clic en otra parte no la reinicia (el avance queda en la sesión).
+    st.fragment(run_every=0.2 if corriendo else None)(_buscador_de_politicas)(p, eco)
 
-    costos = st.session_state.get("costos_real")
-    if not costos:
-        st.info("Todavía no se corrió el barrido.", icon="ℹ️")
+
+def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
+    busqueda = st.session_state.get("busqueda")
+    if busqueda is not None and busqueda["p"] != p:
+        busqueda = None                      # es de otra corrida: no vale
+    total = len(grilla_politicas_real(p))
+
+    if busqueda is None or busqueda["estado"] != "corriendo":
+        c1, c2 = st.columns([1, 2])
+        if p.determinista:
+            replicas = 1
+            c1.caption("Sin azar: **1 corrida por política** (dos réplicas darían idénticas).")
+        else:
+            replicas = c1.slider("Réplicas por política", 1, 4, 2, 1, key="rep_barrido_real")
+        estimado = total * replicas * p.dias * SEGUNDOS_POR_DIA
+        c2.caption(
+            f"Se van a evaluar **{total} políticas** × {replicas} corrida{'s' if replicas > 1 else ''} "
+            f"de {p.dias} días: ≈ {estimado:.0f} s. Se ve el avance, se puede detener y se corta sola "
+            f"a los {TOPE_BUSQUEDA_S:.0f} s mostrando lo evaluado."
+        )
+        if st.button("🔎 Buscar la mejor política de cada tanque", type="primary", key="btn_buscar_pol"):
+            st.session_state.busqueda = {
+                "p": p, "replicas": replicas, "semilla": st.session_state.semilla_usada,
+                "puntos": grilla_politicas_real(p), "hechos": [], "inicio": time.time(),
+                "estado": "corriendo", "segundos": 0.0,
+            }
+            st.session_state.costos_real = None
+            st.rerun()                       # vuelta completa: el fragmento queda con run_every
+        if busqueda is not None:
+            _resultados_busqueda(p, busqueda)
+        else:
+            st.info("Todavía no se buscó la mejor política.", icon="ℹ️")
         return
+
+    # --- Corriendo: la barra y el botón Detener primero (quedan a la vista mientras se evalúa),
+    # después UNA evaluación. La vuelta siguiente la dispara `run_every`.
+    hechos = busqueda["hechos"]
+    st.progress(
+        len(hechos) / total,
+        text=f"Evaluando políticas: {len(hechos)} de {total} listas · {time.time() - busqueda['inicio']:.0f} s "
+             f"(tope {TOPE_BUSQUEDA_S:.0f} s)",
+    )
+    if st.button("⏹ Detener la búsqueda", key="btn_detener_pol"):
+        _cerrar_busqueda(p, eco, busqueda, "detenida")
+    if len(hechos) < total:
+        politicas = busqueda["puntos"][len(hechos)]
+        replicas = correr_replicas(
+            con_politicas(p, politicas), replicas=busqueda["replicas"], semilla_base=busqueda["semilla"]
+        )
+        hechos.append(PuntoBarrido(politicas=politicas, replicas=replicas))
+    busqueda["segundos"] = time.time() - busqueda["inicio"]
+    if len(hechos) >= total:
+        _cerrar_busqueda(p, eco, busqueda, "terminada")
+    if busqueda["segundos"] > TOPE_BUSQUEDA_S:
+        _cerrar_busqueda(p, eco, busqueda, "tope")
+
+
+def _cerrar_busqueda(p: ParametrosSimulacion, eco: ParametrosEconomicos, busqueda: dict, estado: str) -> None:
+    """Costea lo evaluado (todo o una parte) y vuelve a correr la app para mostrar los resultados."""
+    busqueda["estado"] = estado
+    busqueda["segundos"] = time.time() - busqueda["inicio"]
+    if busqueda["hechos"]:
+        barrido = ResultadoBarridoReal(
+            productos=tuple(i.producto for i in p.inventario), puntos=list(busqueda["hechos"])
+        )
+        st.session_state.costos_real = analizar_politicas_real(barrido, eco, p)
+    st.rerun()
+
+
+def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
+    """Las evaluaciones juntas, con la ganadora marcada, y el detalle por tanque."""
+    costos = st.session_state.get("costos_real")
+    total = len(busqueda["puntos"])
+    hechas = len(busqueda["hechos"])
+    if not costos:
+        st.info("La búsqueda se detuvo antes de evaluar alguna política.", icon="⏹")
+        return
+    if busqueda["estado"] != "terminada":
+        motivo = "la detuviste" if busqueda["estado"] == "detenida" else f"llegó al tope de {TOPE_BUSQUEDA_S:.0f} s"
+        st.warning(
+            f"Búsqueda **incompleta** ({motivo}): se evaluaron {hechas} de {total} políticas. "
+            f"La ganadora es la mejor **entre esas**.",
+            icon="⏱",
+        )
+    else:
+        st.success(f"Se evaluaron las {total} políticas en {busqueda['segundos']:.0f} s.", icon="✅")
+
+    nombres = {pr.id: pr.nombre for pr in p.productos}
+    etiquetas = etiquetas_grilla()
+    totales = [sum(lista[k].costo_total for lista in costos.values()) for k in range(hechas)]
+    ganadora = min(range(hechas), key=lambda k: totales[k])
+    filas = []
+    for k in range(hechas):
+        filas.append({
+            "": "🏆 ganadora" if k == ganadora else "",
+            "N°": k + 1,
+            "Política (igual en los 4 tanques)": etiquetas[k],
+            "Camiones por mes": vistas.dec(sum(lista[k].pedidos_mes for lista in costos.values()), 1),
+            "Litros sin vender por quiebre (por mes)": f"{sum(lista[k].litros_no_vendidos_mes for lista in costos.values()):,.0f} L".replace(",", "."),
+            "Flete": pesos(sum(lista[k].costo_pedidos for lista in costos.values())),
+            "Almacenamiento": pesos(sum(lista[k].costo_almacenamiento for lista in costos.values())),
+            "Venta perdida": pesos(sum(lista[k].costo_faltante for lista in costos.values())),
+            "COSTO TOTAL por mes": pesos(totales[k]),
+        })
+    st.markdown(f"##### Las {hechas} evaluaciones (costo de los 4 tanques juntos)")
+    st.dataframe(pd.DataFrame(filas), hide_index=True, height=36 * (len(filas) + 1) + 3)
+    st.caption(
+        f"Ganadora: **{etiquetas[ganadora]}**. Costos con márgenes y flete heredados sin fuente (ECO-01/06/07): "
+        "ordenan las políticas, no son cifras del negocio. Abajo, la mejor de **cada tanque** por separado."
+    )
 
     ahorros = ahorro_por_producto(costos)
     ahorro_total = sum(ahorros.values())
@@ -1333,7 +1449,7 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
     st.dataframe(pd.DataFrame(resumen), hide_index=True)
     if ahorro_total > 0 and st.button(
         "✅ Usar las mejores políticas",
-        help="Las carga en la barra lateral. Después hay que apretar Correr simulación.",
+        help="Vuelve a simular el período con la mejor política de cada tanque.",
     ):
         st.session_state.politica_sugerida_real = {
             producto: (m.punto_pedido, m.cantidad_pedido) for producto, m in mejores.items()

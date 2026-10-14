@@ -174,3 +174,78 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
   aleatorio", "Qué se sorteó" ausente con datos reales y presente al editar, **0 errores de consola**. Capturas en `reports/qa/etapa4/`.
 - **Pendiente:** con estacionalidad neutra (default, C10) el verano **no** es más cargado que el invierno; para que el turismo suba la
   demanda hay que usar el preset "proxy turístico" (hoy sólo en el escenario S11). Inventario, Red y GNC siguen con el diseño viejo (etapa 5).
+
+---
+
+# Parte 2 — Pulido de la app en tandas (13/10/2026)
+
+> Pedido unificado de Nico después de probar la app entera (reemplaza a `PROMPT_AJUSTES_ESTACION_Y_ALERTAS.md` y
+> `PROMPT_PARTE_2_INDICADORES_RED_GNC_ECONOMIA.md`). **Una tanda = un commit**, con `verificar.py` en verde y QA con
+> Playwright mirando la pantalla. No se espera aprobación entre tandas salvo que algo falle o cambie el alcance.
+
+## 10. Reglas para esta parte
+
+- Lo que Nico aprobó **no se toca** (indicadores generales, "¿Cómo se comprueba?", colas, clientes, playeros, detalle, gráficos).
+- Todo comportamiento nuevo es un **parámetro con su `Dato`**, apagado o neutro en `clasico()` y en los defaults de
+  `ParametrosSimulacion()` (así no se mueven los dorados ni los 118 controles); la app lo enciende desde el menú.
+- Un cambio de presentación no toca `sim/`. Si hace falta marcar un momento (alerta, causa de pérdida), es un **registro
+  en la traza o en los indicadores, sin consumir números aleatorios**.
+- Streams nuevos sólo al final de `STREAMS`. Nada de multiprocessing, hilos, dependencias nuevas ni componentes a medida.
+- Si algo cuesta mucho más de lo que aporta, se hace la versión mínima y se anota acá qué quedó afuera.
+
+## 11. Diagnóstico previo (lo que encontré al leer el código)
+
+- **El cuelgue de "Buscar la mejor política"** (pestaña Inventario): la búsqueda corre 13 políticas × 2 réplicas **de todo
+  el período elegido** dentro de la ejecución del script, con un spinner y nada más. Medido: una réplica de un año tarda
+  5,2 s ⇒ **≈ 135 s bloqueado**. Además: (1) con datos reales (sin azar) las 2 réplicas son **idénticas**, así que la mitad
+  del tiempo se tira; (2) cualquier clic durante esos 2 minutos corta la ejecución, Streamlit vuelve a correr el script y la
+  búsqueda **arranca de cero** (parece colgada para siempre); (3) cada vuelta de script reenvía el tablero animado (≈ 3,8 MB
+  para un año), lo que puede tumbar la pestaña del navegador (el "crash").
+- **Orígenes alternativos:** de los nombrados por Nico, **La Paz y Pareditas son cruces de ruta de la red, no puntos de
+  despacho** de combustible: no se agregan. Lo que sí se puede respaldar: la **terminal de despacho de Arroyo Seco**
+  (Santa Fe), activo de Raízen/Shell incluido en la venta a Mercuria (jun-2026), a 806 km de General Alvear por ruta
+  (OSRM), y la refinería de **Luján de Cuyo** (YPF), que ya estaba en el Registro como alternativa de INV-05.
+- **Vacaciones de invierno de Mendoza 2026:** receso del **6 al 17 de julio** (calendario de la DGE citado por Los Andes,
+  Ámbito y El Sol). El Registro (DEM-09) decía 9–20 jul, que no coincide.
+
+## 12. Tandas (ordenadas por valor para el informe ÷ costo)
+
+| Tanda | Qué incluye | Riesgo | Cómo se verifica |
+|---|---|---|---|
+| **0 · Cuelgue** | La búsqueda corre **de a una política por vez** dentro de un `st.fragment` (barra de progreso, botón Detener, tope de tiempo, sigue sola sin bloquear la app); 1 réplica si no hay azar; al terminar, **tabla de las 13 evaluaciones con la ganadora marcada** | Bajo: sólo `app.py`; el motor no cambia | Playwright: el año completo termina, la barra avanza, un clic en otra pestaña no la reinicia; tiempo medido |
+| **1 · Limpieza** | La estación sin insignias ni imagen del playón (una aclaración corta); "Shell Shop"; la ayuda "?" que aparece al pasar el mouse y se va al salir (arreglo de raíz + foco de teclado); Economía sin el estado de resultados detallado ni "por estación / año estimado" | Bajo | Capturas de cada pantalla; prueba del tooltip con el mouse y el teclado |
+| **2 · Contradicciones** | Criterio único (oficial/primaria > secundaria; más reciente; más local; empate → conservadora) aplicado a C1–C20 y a las advertencias; nota en `research_notes/`; en pantalla sólo el valor elegido + una frase honesta general; nada estimado se marca "confirmado" | Medio (textos y Registro, sin cambiar valores del motor salvo que el criterio lo exija) | `verificar.py`; capturas de La estación y Datos y fuentes |
+| **3 · Inventario y quiebre** | Rótulos y orden para alguien que lo ve por primera vez (qué es un quiebre, cuántos, cuánto duraron, qué costaron); **litros no vendidos por causa** en cada tanque (quiebre, abandono por espera, cola llena, GNC cortado que no pasó a Súper). Motor: contadores nuevos sin azar | Medio (campos nuevos en `ResultadoReplica`) | Control nuevo: Σ causas = litros no vendidos; capturas |
+| **4 · Menú con parámetros** | Desplegables antes de simular: **Economía** (margen por litro de cada producto, flete fijo y por km, almacenamiento, sueldo de playeros, con su valor del Registro y rango si existe, y la aclaración de heredado); **GNC** (cortes habituales / más cortes en todo el invierno + invierno frío que alarga el corte, stream nuevo `invierno_frio`; % de clientes GNC = DEM-05) | Medio (parámetros nuevos neutros por defecto) | Control: con los defaults da exactamente lo mismo; capturas del menú |
+| **5 · Calendario de demanda** | Factores por fecha (verano, vacaciones de invierno de Mendoza, resto del invierno) como `Dato` editables desde el menú, activos en la app y neutros en `clasico()`; Demanda con la cuenta a la vista y el **rango mín–máx por temporada**; Perfil del día y Día a día con selector de fechas y filtro de período sólo si la corrida es larga | Medio | Control: factores = 1 ⇒ mismos números; Σ por día = total; capturas |
+| **6 · Escenario único y conclusión** | Sale la pestaña Escenarios; en el menú, **"Simular escenario único"** (playeros, franja horaria, temporada, clientela) que muestra sólo ese escenario; conclusión armada con los resultados de la corrida; búsqueda de política, catálogo S0–S12 y tornado pasan a **"Caso de informe"**, fuera del flujo normal (`sim/escenarios.py` intacto) | Medio-alto (reordena la navegación) | Playwright: el flujo completo; `verificar.py` |
+| **8 · Red y rutas** (antes que la 7) | Rutas alternativas debajo de la óptima (todas las rutas simples de la red, de mejor a peor, con km y plazo); **orígenes alternativos** (Dock Sud → Arroyo Seco → Luján) con indisponibilidad aleatoria (streams nuevos al final) y marcado manual de un origen como no disponible; interruptor en el menú (apagado = siempre la ruta óptima) | Medio | Control: apagado ⇒ mismos números; con Dock Sud no disponible el pedido sale de Arroyo Seco con su plazo |
+| **7 · Alertas con pausa** | La animación se detiene en cada pedido de camión (cruce del punto s: "Bajo nivel de combustible: Diésel G2, 18 %", con el **origen realmente usado**) y en cada corte de GNC ("El GNC se cortó por N días" + contador en la zona GNC); "Seguir trayectoria del camión" cambia a Red y rutas (clic sobre la pestaña desde el iframe) donde se ve el camión sobre la ruta y el cartel del pedido; carteles en cola, de a uno; el camión se ve llegar y descargar en el playón | Medio (JS del tablero; el cambio de pestaña desde el iframe puede no estar permitido → plan B: mensaje claro de dónde mirar) | Playwright: la pausa, los dos botones, el cambio de pestaña, 0 errores de consola |
+| **9 · Mapa con relieve** (opcional) | Mapa base abierto con relieve (OpenTopoMap/OSM con su atribución) y rutas más visibles; si choca con el QA o pide algo pesado, sólo más contraste | Bajo | Captura |
+
+**Por qué este orden:** la 0 primero (todo lo demás la usa). Limpieza y contradicciones son baratas y mejoran lo que el
+profesor ve primero. La 3 y la 5 son las de más valor para el informe (por qué se pierde venta; temporadas sin azar). La 4
+va antes que la 5 y la 6 porque arma el menú donde ellas se enganchan. **La 8 va antes que la 7** porque el cartel del
+camión tiene que decir el origen realmente usado: hacerlas al revés obliga a rehacer el cartel. La 9 última y opcional.
+
+## 13. Lecturas tomadas (del pedido y mías)
+
+- "Caso de informe" = modo aparte con el catálogo completo, el tornado y la búsqueda de la mejor política.
+- "Escenario único" reemplaza la pestaña Escenarios; es una micro simulación lanzada desde el menú principal.
+- Economía: se quitan el estado de resultados detallado y el bloque **"Por estación y año estimado"** ("prestaciones" en
+  el dictado lo leí como "por estación"); la sección de ingresos (tarjetas y cascada) queda.
+- Los "óptimos" de márgenes y flete son **valores por defecto con rango de referencia**, no un optimizador.
+- "Diésel G12" = Diésel G2; "Duxac" = Dock Sud. Los orígenes alternativos son para los líquidos (el GNC sale de la red de gas).
+- El calendario multiplica los litros del día (no se renormaliza al año): el promedio anual sube < 1 % y se dice en pantalla.
+
+## 14. Avance
+
+- **Tanda 0 ✅ (cuelgue).** La búsqueda vive en un `st.fragment(run_every=0.2)` que evalúa **una política por vuelta**
+  y guarda el avance en la sesión: la barra se ve, hay botón *Detener*, se corta sola a los 180 s mostrando lo evaluado y
+  los clics en otras pestañas no la reinician. Sin azar corre 1 réplica por política (antes 2 idénticas). Al terminar,
+  **las 13 evaluaciones en una tabla con la ganadora 🏆** (costo de los 4 tanques) y debajo la mejor de cada tanque.
+  QA (`reports/qa_tanda0_busqueda.py`): año completo en **84 s** (antes ≈ 135 s bloqueados), avance 0→12 monótono con 2
+  clics en otras pestañas en el medio, 0 excepciones, 0 errores de consola. `verificar.py` 118/118.
+  Causa de raíz del "crash": no se pudo reproducir un cierre del programa; la explicación más probable es la
+  re-ejecución completa del script en cada clic durante la búsqueda (que la reiniciaba) con el tablero de un año (≈ 3,8 MB)
+  reenviado cada vez. Con el fragmento, durante la búsqueda sólo se re-ejecuta el fragmento.

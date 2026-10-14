@@ -431,6 +431,19 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   `research_notes/…/12_serie_ventas.md` (URL, filtro, totales por año verificados). Registro: **PRO-01** (la serie, dato,
   nivel C), **PRO-02** (ventana desde ene-2022 —sin la pandemia ni el rebote de 2021— y 12 meses de prueba), **PRO-03**
   (z = 1,96) y **PRO-04** (promedio móvil de 3 meses, α = 0,3). `verificar.py` 133/133.
+- **P2 ✅ (métodos).** `sim/pronostico.py` (sin Streamlit ni dependencias nuevas): promedio móvil, suavizado exponencial
+  simple, tendencia (recta de mínimos cuadrados), estacional (promedio × índice) y tendencia estacional multiplicativa
+  (índices por cocientes al promedio móvil centrado de 12 meses, normalizados a 1; recta sobre la serie
+  desestacionalizada); MAE, MAPE, RMSE y sesgo; se ajusta con ene-2022 – ago-2025, se prueba en los 12 meses siguientes,
+  se elige el de menor RMSE, se reajusta con toda la ventana y se pronostican 12 meses con ± z·RMSE. **Validación con la
+  cátedra:** Cable Televisora da MAE = 107/12 = 8,92 y RMSE = 37/√12 = 10,68, y **la recta de mínimos cuadrados de sus
+  datos (A = 1.702,4, B = 23,09) reproduce los pronósticos del práctico**; Lincoln Motors da índices trimestrales
+  0,81 · 1,28 · 1,19 · 0,73. **Resultado con la serie real:** los métodos quedan casi empatados (RMSE en m³: promedio
+  móvil 812 · tendencia 814 · tendencia estacional 832 · suavizado 1.148 · estacional 2.100); gana el **promedio móvil**
+  (MAPE 6,2 %). Todos tienen sesgo negativo: la serie bajó más de lo que cualquiera esperaba. Índices estacionales:
+  ene 0,99 · feb 1,00 · **mar 1,06** · abr 0,95 · may 1,02 · **jun 0,91** · jul 1,00 · ago 1,03 · sep 0,97 · oct 1,03 ·
+  nov 1,00 · **dic 1,05**; tendencia −0,46 % por mes. **Hallazgo:** en Shell Mendoza el verano **no** vende más
+  (enero 0,99), al revés del supuesto DEM-14 (verano × 1,06). Control nuevo (39). `verificar.py` **135/135**.
 
 ---
 

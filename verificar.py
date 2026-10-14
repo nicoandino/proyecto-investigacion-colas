@@ -55,6 +55,8 @@ Los controles cubren las dos partes del modelo:
        encuentra una política ≤ a la cargada en cada tanque.
 
   REDISEÑO v3 (ORQUESTADOR.md)
+   39. Parte 3, etapa P2: métodos de pronóstico contra el práctico (Cable Televisora, Lincoln) y
+       elección por RMSE en la serie real de Shell Mendoza.
    38. Parte 4, etapa E3: el menú sin eventos deja la corrida del Registro; con eventos, cada uno es
        un aviso del tablero.
    37. Parte 4, etapa E2: llegadas = base + los de más − los que no llegaron; cupo de 30 L; camiones
@@ -2175,6 +2177,41 @@ def main() -> int:
         and all(texto_frecuencia(t.id) for t in CATALOGO_EV) and len(CATALOGO_EV) == 14,
         "El menú sin eventos deja la corrida del Registro; con eventos, cada evento ocurrido es un aviso del tablero",
         f"enero, los 14 prendidos ×5 (semilla 7): {len(r38.eventos)} eventos = {len(avisos38)} avisos en la traza",
+    )
+
+    # ------------------------------------------------------------------ 39
+    separador("39. Parte 3, etapa P2: métodos de pronóstico contra el práctico de la cátedra")
+    from sim import pronostico as pron
+
+    cable = [1704, 1712, 1752, 1764, 1805, 1835, 1831, 1866, 1884, 1930, 1919, 1951]
+    cable_f = [1702, 1725, 1749, 1772, 1795, 1818, 1841, 1864, 1887, 1910, 1933, 1956]
+    e_cable = pron.errores(cable, cable_f)
+    a_c, b_c = pron.recta(cable)
+    controlar(
+        abs(e_cable.mae - 107 / 12) < 1e-9 and abs(e_cable.rmse - 37 / 12 ** 0.5) < 1e-9
+        and all(abs(f - (a_c + b_c * t)) <= 0.6 for t, f in enumerate(cable_f))
+        and [1650 + 30 * t for t in (12, 13, 14)] == [2010, 2040, 2070],
+        "Práctico de Pronóstico (Cable Televisora): MAE, RMSE y la recta de mínimos cuadrados",
+        f"MAE = 107/12 = {e_cable.mae:.4f} · RMSE = 37/√12 = {e_cable.rmse:.4f} · la recta de los datos "
+        f"(A = {a_c:.1f}, B = {b_c:.2f}) da los pronósticos del práctico redondeados · A=1650, B=30 ⇒ 2010, 2040, 2070",
+    )
+    aj_pm, ad_pm = pron.promedio_movil([10, 20, 30], 2, 1)
+    aj_se, ad_se = pron.suavizado([10, 20, 30], 0.5, 1)
+    lincoln = [21, 39, 35, 21, 23, 38, 31, 23, 25, 34, 38, 20, 24, 43, 40, 20]
+    i_lin = pron.indices_estacionales(lincoln, [t % 4 for t in range(16)], 4)
+    analisis = pron.analizar()
+    elegido = min(analisis.ajustes, key=lambda a: a.errores.rmse)
+    banda = _valor("PRO-03") * elegido.errores.rmse
+    controlar(
+        aj_pm == [None, None, 15.0] and ad_pm == [25.0] and aj_se == [None, 10.0, 15.0] and ad_se == [22.5]
+        and abs(sum(i_lin) / 4 - 1) < 1e-12 and i_lin[1] > 1 and i_lin[3] < 1
+        and abs(sum(analisis.indices) / 12 - 1) < 1e-12 and len(analisis.reales) == 56 and analisis.n_prueba == 12
+        and analisis.elegido == elegido.metodo
+        and all(abs((h - l) / 2 - banda) < 1e-6 for l, h in analisis.intervalo),
+        "Promedio móvil y suavizado a mano; índices estacionales que promedian 1; se elige el de menor RMSE",
+        f"Lincoln: índices {', '.join(f'{x:.2f}' for x in i_lin)} · Shell Mendoza (ene-2022 – ago-2026, 12 de prueba): "
+        + " · ".join(f"{a.metodo} {a.errores.rmse:,.0f}" for a in analisis.ajustes)
+        + f" ⇒ {analisis.elegido} (MAPE {100 * elegido.errores.mape:.1f} %)",
     )
 
     # ------------------------------------------------------------------

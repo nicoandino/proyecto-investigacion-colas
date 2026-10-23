@@ -979,7 +979,8 @@ REGISTRO: tuple[Dato, ...] = tuple(
           (0.30,)),
         ("EVT-05", ("Falla de un surtidor", "prob./día · h · $", "A", "supuesto", "sin_dato",
                     "grupo (14/10/2026)", "grupo", "", (),
-                    "≈ 1 por mes; una cara queda fuera de servicio de 2 a 24 h hasta que llega el técnico. "
+                    "≈ 1 por mes; un surtidor queda fuera de servicio (sus dos caras: es de doble cara) de 2 a 24 h hasta "
+                    "que llega el técnico. "
                     "Costo de la visita: sin dato (0)", None, None),
           (1 / 30, 2.0, 24.0, 0.0)),
         ("EVT-06", ("Falla de un compresor de GNC", "prob./día · h", "A", "supuesto", "sin_dato",

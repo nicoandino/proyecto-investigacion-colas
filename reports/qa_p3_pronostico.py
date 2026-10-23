@@ -1,4 +1,4 @@
-"""QA de la etapa P3 (parte 3): pestaña 📈 Pronóstico y la opción "índices de la serie real" del menú.
+"""QA de la etapa P3 (parte 3): pestaña Pronóstico y la opción "índices de la serie real" del menú.
 
     .venv/Scripts/python reports/qa_p3_pronostico.py http://localhost:8502 reports/qa/p3
 """
@@ -50,7 +50,7 @@ with sync_playwright() as pw:
     pagina.get_by_role("button", name="Cambiar período").click()
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=60000)
     esperar()
-    pagina.get_by_text("📅 Calendario de demanda").first.click()
+    pagina.get_by_text("Calendario de demanda").first.click()
     esperar()
     pagina.get_by_text("Índices de la serie real de Shell Mendoza").first.click()
     esperar(2)

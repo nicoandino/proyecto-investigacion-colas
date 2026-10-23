@@ -45,7 +45,7 @@ with sync_playwright() as pw:
     pagina.get_by_role("button", name="Cambiar período").click()
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=60000)
     esperar()
-    pagina.get_by_text("🚚 Abastecimiento").first.click()
+    pagina.get_by_text("Abastecimiento: de dónde").first.click()
     esperar()
     pagina.get_by_text("Por pronóstico: s con stock de seguridad").first.click()
     esperar(2)

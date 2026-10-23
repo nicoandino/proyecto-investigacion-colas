@@ -28,7 +28,7 @@ from sim.eventos import POR_ID as TIPOS_EVENTO
 from sim.red import ETIQUETA_ESCENARIO, NOMBRE_NODO, camino_mas_corto, descripcion_ruta
 from sim.traza import Cuadro, Traza
 from ui.graficos_red import POSICION_NODO
-from ui.tema import COLOR_PRODUCTO_OSCURO, paleta_json, paleta_oscura_json
+from ui.tema import ANCHO_TOTEM, COLOR_PRODUCTO, paleta_json
 
 #: Alto del componente en píxeles.
 ALTO_COMPONENTE = 1080
@@ -189,7 +189,7 @@ def _configuracion(
         {
             "id": pr.id,
             "nombre": pr.nombre,
-            "color": COLOR_PRODUCTO_OSCURO[pr.id],
+            "color": COLOR_PRODUCTO[pr.id],
             "gnc": pr.es_gnc,
             "precio": float(precios.get(pr.id, 0.0)),
         }
@@ -226,7 +226,7 @@ def _configuracion(
         "probCompra": float(p.prob_compra),
         "esperado": _por_dia(p, precios),
         "frames": _columnas(traza.cuadros, p),
-        "paleta": paleta_oscura_json(),
+        "paleta": paleta_json(),
         "eventos": _eventos(traza, p),
         "semillaEventos": int(p.eventos.semilla) if p.eventos.activos else None,
         "corrida": corrida,
@@ -244,8 +244,20 @@ def reproductor_html(
     if not p.estacion_real:
         raise ValueError("La animación es del caso real (12 caras en 3 zonas).")
     configuracion = _configuracion(traza, p, precios, titulo, corrida)
-    return _PLANTILLA.replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":")))
+    return (_PLANTILLA.replace("__FUENTE__", _FUENTE)
+            .replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":"))))
 
+
+#: Archivo (la de toda la app) dentro del iframe: el componente no hereda las fuentes de la página. El iframe
+#: es `srcdoc`, así que la ruta relativa se resuelve contra la página de Streamlit (app/static/…).
+_FUENTE = (
+    "@font-face { font-family: 'Archivo'; src: url('app/static/fonts/Archivo-latin.woff2') format('woff2');"
+    " font-weight: 100 900; font-stretch: 62% 125%; font-display: swap; }"
+    "@font-face { font-family: 'Archivo'; src: url('app/static/fonts/Archivo-latin-ext.woff2') format('woff2');"
+    " font-weight: 100 900; font-stretch: 62% 125%; font-display: swap;"
+    " unicode-range: U+0100-02BA, U+1E00-1E9F, U+20A0-20C0; }"
+    f".totem {{ font-variation-settings: 'wdth' {ANCHO_TOTEM}; }}"
+)
 
 _PLANTILLA = r"""<!doctype html>
 <html lang="es">
@@ -256,52 +268,75 @@ _PLANTILLA = r"""<!doctype html>
   :root { --fondo: transparent; --panel: transparent; --panel2: transparent; --borde: transparent;
           --tinta: transparent; --tenue: transparent; --amarillo: transparent; --rojo: transparent;
           --azul: transparent; --libre: transparent; --naranja: transparent; --asfalto: transparent; }
+  __FUENTE__
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; height: 100%; background: var(--fondo); color: var(--tinta);
-               font-family: system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+               font-family: "Archivo", "Segoe UI", system-ui, sans-serif; overflow: hidden;
+               font-variant-numeric: tabular-nums; }
+  ::selection { background: var(--amarillo); color: var(--sobreAmarillo); }
+  .ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.75;
+         stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
   #app { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 10px; height: 100%;
          padding: 10px; }
-  .tarjeta { background: var(--panel); border: 1px solid var(--borde); border-radius: 12px; padding: 10px 14px; }
-  .titulo { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--tenue);
-            font-weight: 700; margin-bottom: 6px; }
-  .grande { font-size: clamp(16px, 1.55vw, 22px); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tarjeta { background: var(--panel); border: 1px solid var(--borde); border-radius: 6px; padding: 10px 14px; }
+  .titulo { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--tenue);
+            font-weight: 650; margin-bottom: 6px; }
+  .grande { font-size: clamp(18px, 1.8vw, 27px); font-weight: 750; font-variation-settings: "wdth" 72;
+            line-height: 1.1; white-space: nowrap; }
   .chico { font-size: 12px; color: var(--tenue); }
-  button, select { background: var(--panel2); color: var(--tinta); border: 1px solid var(--borde);
-                   border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
-  button:hover:not(:disabled) { border-color: var(--tinta); }
-  button:disabled { opacity: .4; cursor: not-allowed; }
+  button, select { background: var(--panel2); color: var(--tinta); border: 1px solid var(--bordeFuerte);
+                   border-radius: 4px; padding: 7px 12px; font-size: 13px; cursor: pointer; font-family: inherit;
+                   display: inline-flex; align-items: center; gap: 6px; transition: border-color 160ms, color 160ms; }
+  select { display: inline-block; }
+  [hidden] { display: none !important; }   /* los botones son inline-flex: sin esto, "hidden" no los escondía */
+  button:hover:not(:disabled) { border-color: var(--amarillo); color: var(--amarillo); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
   button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--amarillo); outline-offset: 2px; }
 
-  #cabecera { display: grid; grid-template-columns: minmax(250px, 1.5fr) repeat(4, minmax(130px, 1fr)) auto; gap: 10px; }
-  #marca { display: flex; align-items: center; gap: 12px; }
-  #marca .logo { width: 44px; height: 44px; border-radius: 12px; background: var(--amarillo); color: var(--fondo);
-                 display: flex; align-items: center; justify-content: center; font-size: 24px; }
-  #marca b { font-size: 18px; } #marca div div { font-size: 12px; color: var(--tenue); }
+  /* Columnas que pueden achicarse (minmax 0): en una pantalla angosta nada se sale por la derecha. */
+  #cabecera { display: grid; grid-template-columns: minmax(170px, 1.3fr) repeat(4, minmax(0, 1fr)) minmax(0, 1.5fr);
+              gap: 16px; }
+  #cabecera .tarjeta { background: transparent; border: 0; border-radius: 0; border-top: 1px solid
+                       color-mix(in srgb, var(--amarillo) 55%, transparent); padding: 10px 0 4px; }
+  #cabecera .grande { font-size: clamp(18px, 2.2vw, 34px); }
+  #cabecera .tarjeta { min-width: 0; }
+  #marca { display: flex; flex-direction: column; justify-content: center; }
+  #cabecera #marca { border-top: 3px solid var(--amarillo); }
+  #marca b { font-size: 21px; font-weight: 800; letter-spacing: .02em; text-transform: uppercase;
+             font-variation-settings: "wdth" 72; line-height: 1.05; }
+  #marca div { font-size: 12px; color: var(--tenue); }
   #estado .punto { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
-  #tiempo { display: flex; align-items: center; gap: 10px; }
-  #play { background: var(--amarillo); color: var(--fondo); border-color: var(--amarillo); font-weight: 800;
-          min-width: 108px; font-size: 14px; }
+  #tiempo { display: flex; align-items: center; justify-content: space-between; gap: 8px 10px; flex-wrap: wrap; }
+  #play { background: var(--amarillo); color: var(--sobreAmarillo); border-color: var(--amarillo); font-weight: 750;
+          font-size: 14px; justify-content: center; }
+  #play:hover { color: var(--sobreAmarillo); filter: brightness(1.06); }
 
-  #cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 10px; min-height: 0; }
-  #lienzo { background: var(--asfalto); border: 1px solid var(--borde); border-radius: 12px; min-height: 0;
+  #cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 300px); gap: 10px; min-height: 0; }
+  #lienzo { background: var(--asfalto); border: 1px solid var(--borde); border-radius: 6px; min-height: 0;
             overflow: hidden; }
   #lienzo svg { width: 100%; height: 100%; display: block; }
   #derecha { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow: hidden; }
   #derecha .tarjeta { padding: 10px 12px; }
   .fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .pastilla { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 800; }
-  .barra { height: 8px; border-radius: 6px; background: var(--panel2); overflow: hidden; margin-top: 5px; }
-  .barra > i { display: block; height: 100%; border-radius: 6px; }
+  .pastilla { display: inline-block; border-radius: 999px; padding: 2px 10px; font-size: 11.5px; font-weight: 700;
+              letter-spacing: .04em; }
+  .pastilla.alerta { background: color-mix(in srgb, var(--rojo) 20%, transparent); color: var(--rojoTexto);
+                     border: 1px solid var(--rojo); }
+  .barra { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; margin-top: 5px; }
+  .barra > i { display: block; height: 100%; border-radius: 3px; }
 
-  #inferior { display: grid; grid-template-columns: 1.3fr 1.2fr 1fr 1.2fr; gap: 10px; }
+  #inferior { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+              gap: 10px; }
   #inferior .tarjeta { min-height: 196px; }
   .tanque { text-align: center; }
-  .tanque .cuerpo { position: relative; width: 38px; height: 78px; margin: 4px auto; border: 2px solid var(--tenue);
-                    border-radius: 7px; overflow: hidden; background: var(--fondo); }
+  .tanque .cuerpo { position: relative; width: 38px; height: 78px; margin: 4px auto; border: 1px solid var(--bordeFuerte);
+                    border-radius: 5px; overflow: hidden; background: var(--fondo); }
   .tanque .cuerpo i { position: absolute; left: 0; right: 0; bottom: 0; }
   .tanque b { font-size: 11.5px; display: block; white-space: nowrap; } .tanque span { font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .zona-cola { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px;
-               border-radius: 10px; background: var(--panel2); margin-bottom: 6px; font-size: 12.5px; }
+               border-radius: 4px; background: var(--panel2); margin-bottom: 6px; font-size: 12.5px; }
+  .zona-cola .chico { display: inline-flex; align-items: center; gap: 4px; }
+  .zona-cola { flex-wrap: wrap; }
   .zona-cola span { white-space: nowrap; }
   .zona-cola b { font-variant-numeric: tabular-nums; }
   #grafico select { float: right; padding: 3px 8px; font-size: 12px; }
@@ -309,19 +344,41 @@ _PLANTILLA = r"""<!doctype html>
   #controles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 2px 2px 0; }
   #barra { flex: 1; min-width: 200px; accent-color: var(--amarillo); }
   #saltos { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* Alertas: un botón abre el panel para elegir qué avisos pausan la animación. */
+  #alertas { position: relative; }
+  #panelAlertas { position: absolute; bottom: calc(100% + 8px); right: 0; z-index: 5; width: 300px; max-height: 420px;
+                  overflow: auto; background: var(--panel); border: 1px solid var(--bordeFuerte); border-radius: 6px;
+                  padding: 12px 14px; box-shadow: 0 14px 36px color-mix(in srgb, var(--fondo) 80%, transparent); }
+  #panelAlertas[hidden] { display: none; }
+  #panelAlertas label { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; padding: 4px 0; cursor: pointer; }
+  #panelAlertas label.maestro { font-weight: 700; padding-bottom: 8px; border-bottom: 1px solid var(--borde); margin-bottom: 6px; }
+  #panelAlertas .sub { padding-left: 22px; }
+  #panelAlertas .sub label { font-size: 12.5px; color: var(--tenue); }
+  #panelAlertas input { accent-color: var(--amarillo); margin-top: 2px; }
+  #panelAlertas.apagado .tipos { opacity: .45; pointer-events: none; }
+  #botonAlertas[aria-expanded="true"] { border-color: var(--amarillo); color: var(--amarillo); }
   /* Avisos con pausa (tanda 7) */
   #aviso { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 10;
            background: color-mix(in srgb, var(--fondo) 72%, transparent); }
   #aviso.abierto { display: flex; }
-  #aviso .caja { max-width: 560px; width: calc(100% - 32px); background: var(--panel); border: 2px solid var(--amarillo);
-                 border-radius: 16px; padding: 20px 22px; box-shadow: 0 12px 40px color-mix(in srgb, var(--fondo) 80%, transparent); }
-  #aviso h2 { margin: 6px 0 8px; font-size: 22px; }
+  #aviso .caja { max-width: 560px; width: calc(100% - 32px); background: var(--panel); border: 1px solid var(--amarillo);
+                 border-top-width: 4px; border-radius: 6px; padding: 20px 22px;
+                 box-shadow: 0 18px 48px color-mix(in srgb, var(--fondo) 85%, transparent);
+                 animation: entra 260ms cubic-bezier(.16,1,.3,1); }
+  @keyframes entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { #aviso .caja { animation: none; } }
+  #aviso h2 { margin: 6px 0 8px; font-size: 26px; font-weight: 800; font-variation-settings: "wdth" 72; line-height: 1.1; }
   #aviso p { margin: 0 0 8px; font-size: 15px; line-height: 1.45; }
   #aviso .botones { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; margin-top: 14px; }
   #aviso .botones button { font-size: 14px; padding: 9px 14px; }
-  #avisoOk { background: var(--amarillo); color: var(--fondo); border-color: var(--amarillo); font-weight: 800; }
-  #avisoIcono { font-size: 30px; }
+  #avisoOk { background: var(--amarillo); color: var(--sobreAmarillo); border-color: var(--amarillo); font-weight: 750; }
+  #avisoOk:hover { color: var(--sobreAmarillo); filter: brightness(1.06); }
+  #avisoIcono { color: var(--amarillo); height: 30px; }
+  #avisoIcono .ico { width: 30px; height: 30px; stroke-width: 1.5; }
   #avisoCola { float: right; }
+  @media (max-width: 1180px) {
+    #cabecera { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: 10px; }
+  }
   @media (max-width: 1000px) {
     #cabecera { grid-template-columns: 1fr 1fr; } #cuerpo { grid-template-columns: 1fr; }
     #inferior { grid-template-columns: 1fr 1fr; } html, body { overflow: auto; }
@@ -332,15 +389,14 @@ _PLANTILLA = r"""<!doctype html>
 <div id="app">
   <div id="cabecera">
     <div id="marca" class="tarjeta">
-      <div class="logo" aria-hidden="true">⛽</div>
-      <div><b>Estación Shell</b><div>Av. Balloffet 1810 esq. Av. Los Sauces</div><div>San Rafael, Mendoza</div></div>
+      <b>Estación Shell</b><div>Av. Balloffet 1810 esq. Av. Los Sauces</div><div>San Rafael, Mendoza</div>
     </div>
     <div id="estado" class="tarjeta"><div class="titulo">Simulación</div><div id="estadoTexto" class="grande"></div><div id="estadoDia" class="chico"></div></div>
     <div class="tarjeta"><div class="titulo">Clientes hoy</div><div id="kClientes" class="grande"></div><div class="chico">atendidos / esperados</div></div>
     <div class="tarjeta"><div class="titulo">Litros hoy</div><div id="kLitros" class="grande"></div><div class="chico">vendidos / esperados</div></div>
     <div class="tarjeta"><div class="titulo">Ventas hoy</div><div id="kVentas" class="grande"></div><div id="kVentasSub" class="chico"></div></div>
     <div class="tarjeta" id="tiempo"><div><div class="titulo">Tiempo simulado</div><div id="kTiempo" class="grande"></div></div>
-      <button id="play" type="button">▶ Reproducir</button></div>
+      <button id="play" type="button"></button></div>
   </div>
 
   <div id="cuerpo">
@@ -372,21 +428,30 @@ _PLANTILLA = r"""<!doctype html>
   </div>
 
   <div id="controles">
-    <button id="diaMenos" type="button" title="Día anterior">◀ Día</button>
-    <button id="diaMas" type="button" title="Día siguiente">Día ▶</button>
+    <button id="diaMenos" type="button" title="Día anterior"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Día</button>
+    <button id="diaMas" type="button" title="Día siguiente">Día<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
     <input type="range" id="barra" min="0" value="0" step="1" aria-label="Posición en el período">
     <label class="chico" for="velocidad">Velocidad</label>
     <select id="velocidad" title="Segundos reales que dura cada día simulado">
       <option value="2">2 s por día</option><option value="5">5 s por día</option>
       <option value="10">10 s por día</option><option value="20">20 s por día</option>
+      <option value="60">60 s por día (para ver moverse a los autos)</option>
     </select>
     <div id="saltos">
-      <button id="saltoPico" type="button">⏭ la hora pico</button>
-      <button id="saltoQuiebre" type="button">⏭ el primer quiebre</button>
-      <button id="saltoDescarga" type="button">⏭ la próxima descarga</button>
-      <button id="saltoCorte" type="button">⏭ el corte de GNC</button>
+      <button id="saltoPico" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8 6-8 6zM18 6v12"/></svg>la hora pico</button>
+      <button id="saltoQuiebre" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8 6-8 6zM18 6v12"/></svg>el primer quiebre</button>
+      <button id="saltoDescarga" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8 6-8 6zM18 6v12"/></svg>la próxima descarga</button>
+      <button id="saltoCorte" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l8 6-8 6zM18 6v12"/></svg>el corte de GNC</button>
     </div>
-    <label class="chico"><input type="checkbox" id="pausarAvisos" checked> Pausar en los avisos</label>
+    <label class="chico" title="Autos de más en la cola, sólo para ver cómo se forman: no salen de la simulación">
+      <input type="checkbox" id="colasIlus" checked> Colas ilustrativas</label>
+    <div id="alertas">
+      <button id="botonAlertas" type="button" aria-expanded="false" aria-controls="panelAlertas"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0"/></svg><span id="estadoAlertas">Alertas</span></button>
+      <div id="panelAlertas" hidden role="group" aria-label="Qué avisos pausan la animación">
+        <label class="maestro"><input type="checkbox" id="pausarAvisos" checked> Pausar en los avisos</label>
+        <div class="tipos" id="tiposAlertas"></div>
+      </div>
+    </div>
   </div>
 </div>
 <div id="aviso" role="dialog" aria-modal="true" aria-labelledby="avisoTitulo" aria-describedby="avisoTexto">
@@ -397,7 +462,7 @@ _PLANTILLA = r"""<!doctype html>
     <p id="avisoTexto"></p>
     <div id="avisoNota" class="chico"></div>
     <div class="botones">
-      <button id="avisoSeguir" type="button">🚚 Seguir trayectoria del camión</button>
+      <button id="avisoSeguir" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Seguir trayectoria del camión</button>
       <button id="avisoOk" type="button">Ok, seguir</button>
     </div>
   </div>
@@ -408,8 +473,20 @@ const CONFIG = __CONFIG__;
 const P = CONFIG.paleta;
 const RAIZ = document.documentElement;
 for (const [css, clave] of [["--fondo", "fondo"], ["--panel", "panel"], ["--panel2", "panel2"], ["--borde", "borde"],
-     ["--tinta", "tinta"], ["--tenue", "tenue"], ["--amarillo", "amarillo"], ["--rojo", "rojo"], ["--azul", "azul"],
+     ["--bordeFuerte", "bordeFuerte"], ["--tinta", "tinta"], ["--tenue", "tenue"], ["--amarillo", "amarillo"],
+     ["--sobreAmarillo", "sobreAmarillo"], ["--rojo", "rojo"], ["--rojoTexto", "rojoTexto"], ["--azul", "azul"],
      ["--libre", "libre"], ["--naranja", "naranja"], ["--asfalto", "asfalto"]]) RAIZ.style.setProperty(css, P[clave]);
+// Íconos de línea (trazo 1,75, como los Material Symbols finos de la app).
+const ICONOS = {
+  play: '<path d="M7 5l12 7-12 7z"/>',
+  pausa: '<path d="M8 5v14M16 5v14"/>',
+  rayo: '<path d="M13 3L5 14h6l-1 7 8-11h-6z"/>',
+  surtidor: '<path d="M4 20V5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v15M3 20h11M5.5 8h6M13 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3"/>',
+  llama: '<path d="M12 3c1 3 5 5 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .3 1.6 1 2.5 2 3 0-3-.5-5.5.5-8z"/>',
+  reloj: '<circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2M10 3h4"/>',
+};
+function icono(nombre) { return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONOS[nombre]}</svg>`; }
+const BOTON_PLAY = icono("play") + "Reproducir", BOTON_PAUSA = icono("pausa") + "Pausar";
 const REDUCIDO = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 const F = CONFIG.frames, N = F.t.length, NDIAS = CONFIG.dias;
@@ -456,25 +533,30 @@ function camionesTotal(i) { return CONFIG.tanques.reduce((a, id) => a + F.tk[id]
 // ---------------- piezas del dibujo ----------------
 function texto(x, y, t, tam, o) {
   o = o || {};
-  return `<text x="${x}" y="${y}" fill="${o.color || P.tinta}" font-size="${tam}" font-weight="${o.peso || 400}"
+  return `<text x="${x}" y="${y}" fill="${o.color || P.tinta}" font-size="${tam}" font-weight="${o.peso || 400}" font-family="Archivo, Segoe UI, sans-serif"
     text-anchor="${o.ancla || "start"}" ${o.espaciado ? `letter-spacing="${o.espaciado}"` : ""}>${esc(t)}</text>`;
 }
 function pastilla(x, y, ancho, alto, relleno, t, colorTexto) {
   return `<rect x="${x}" y="${y}" width="${ancho}" height="${alto}" rx="${alto / 2}" fill="${relleno}"/>` +
-    texto(x + ancho / 2, y + alto / 2 + 4, t, 11.5, { ancla: "middle", peso: 800, color: colorTexto });
+    texto(x + ancho / 2, y + alto / 2 + 4, t, 11.5, { ancla: "middle", peso: 750, color: colorTexto });
+}
+// Alerta: el rojo Shell como filete y el texto en el rojo legible sobre la noche.
+function pastillaAlerta(x, y, ancho, alto, t) {
+  return `<rect x="${x}" y="${y}" width="${ancho}" height="${alto}" rx="${alto / 2}" fill="${P.fondo}" stroke="${P.rojo}" stroke-width="1.2"/>` +
+    texto(x + ancho / 2, y + alto / 2 + 4, t, 11, { ancla: "middle", peso: 750, color: P.rojoTexto, espaciado: 0.5 });
 }
 // Auto visto desde arriba: el frente (parabrisas y faros) mira hacia el surtidor (arriba).
-function autoV(cx, cy, color, espera) {
+function autoV(cx, cy, color, espera, abajo) {
   const aro = espera ? `<rect x="-24" y="-33" width="48" height="66" rx="12" fill="none" stroke="${P.naranja}" stroke-width="3" stroke-dasharray="6 4"/>` : "";
-  return `<g transform="translate(${cx},${cy})">${aro}
-    <rect x="-17" y="-27" width="34" height="54" rx="10" fill="${color}" stroke="${P.tinta}" stroke-width="1.4"/>
+  return `<g transform="translate(${cx},${cy})${abajo ? " rotate(180)" : ""}">${aro}
+    <rect x="-17" y="-27" width="34" height="54" rx="10" fill="${color}" stroke="${P.neumatico}" stroke-width="1.4"/>
     <rect x="-12" y="-17" width="24" height="9" rx="3" fill="${P.vidrio}" opacity="0.75"/>
     <rect x="-12" y="8" width="24" height="9" rx="3" fill="${P.vidrio}" opacity="0.55"/>
     <circle cx="-10" cy="-25" r="2.3" fill="${P.faros}"/><circle cx="10" cy="-25" r="2.3" fill="${P.faros}"/>
   </g>`;
 }
-function autoH(cx, cy, color) {
-  return `<g transform="translate(${cx},${cy})"><rect x="-22" y="-9" width="44" height="18" rx="6" fill="${color}" stroke="${P.tinta}" stroke-width="1.2"/>
+function autoH(cx, cy, color, izquierda) {
+  return `<g transform="translate(${cx},${cy})${izquierda ? " scale(-1,1)" : ""}"><rect x="-22" y="-9" width="44" height="18" rx="6" fill="${color}" stroke="${P.neumatico}" stroke-width="1.2"/>
     <rect x="-8" y="-6" width="14" height="12" rx="3" fill="${P.vidrio}" opacity="0.6"/>
     <circle cx="20" cy="-5" r="1.8" fill="${P.faros}"/><circle cx="20" cy="5" r="1.8" fill="${P.faros}"/></g>`;
 }
@@ -494,14 +576,96 @@ function camionIcono(cx, cy, color, escala) {
 // ---------------- geometría del playón (SVG 940 × 592) ----------------
 const W = 940, H = 592, LANE = 64, PAD = 12, GAP = 14, X0 = 30;
 const Y_PANEL = 40, Y_TAG = 48, Y_ALERTA = 78, Y_BOMBA = 104, Y_BAHIA = 164, Y_ESTADO = 246, Y_COLA = 262, FILA = 66;
-const Y_AV = 500;
-let cursor = X0;
-for (const g of GRUPOS) { g.x = cursor; g.w = g.caras * LANE + 2 * PAD; cursor += g.w + GAP; }
+const Y_AV = 500, Y_IDA = Y_AV + 28, Y_VUELTA = Y_AV + 66;   // los dos carriles de la avenida
+let cursor = X0, surtidores = 0, carasAntes = 0;
+for (const g of GRUPOS) {
+  g.x = cursor; g.w = g.caras * LANE + 2 * PAD; cursor += g.w + GAP;
+  g.surt0 = surtidores; surtidores += Math.ceil(g.caras / 2);   // un surtidor de doble cara atiende dos caras
+  g.cara0 = carasAntes; carasAntes += g.caras;                   // las caras van numeradas 1…12, como en la estación
+}
 const X_FIN = cursor - GAP;
-const COLOR_TAG = { A: ["amarillo", "fondo"], B: ["rojo", "blanco"], C: ["azul", "blanco"] };
-let BOMBA_N = {};   // número de surtidor (S1, S2…) dentro de cada zona: una cara = un surtidor
+// La zona A lleva la luz amarilla de la marquesina; las otras, un rótulo callado (el rojo queda para las alertas).
+const COLOR_TAG = { A: ["amarillo", "sobreAmarillo"], B: ["panel2", "tinta"], C: ["panel2", "tinta"] };
+function xCara(g, c) { return g.x + PAD + c * LANE + LANE / 2; }
+
+// ---------------- movimiento: los autos entran desde la avenida y salen por ella ----------------
+// Sólo es dibujo: un auto que en el cuadro siguiente aparece en una cara se lo ve entrar, y uno que desaparece, salir.
+// Un auto tarda unos 8 minutos simulados en entrar o salir, entre 0,35 y 1,1 s reales; a 5 s por día llegan decenas
+// por segundo, así que se mueven a lo sumo MAX_MOVIENDO a la vez (los demás aparecen directamente en su lugar).
+const MAX_MOVIENDO = 8;
+let DURA = 600;
+function ajustarDuracion() { DURA = Math.max(350, Math.min(1100, 8 * 1000 * Number(selVel.value) / 1440)); }
+let movimientos = [], previo = -1, reloj = performance.now(), relojTrafico = 0;
+function registrarMovimientos(i, enMarcha) {
+  if (!enMarcha || REDUCIDO || previo < 0 || i <= previo || i - previo > 4) { previo = i; movimientos = []; return; }
+  GRUPOS.forEach((g) => {
+    const antes = carriles(g, previo), ahora = carriles(g, i);
+    for (let c = 0; c < g.caras; c++) {
+      const a = antes[c], b = ahora[c];
+      if (movimientos.length >= MAX_MOVIENDO) continue;
+      if (a >= 0 && (b < 0 || (a >> 1) !== (b >> 1))) movimientos.push({ g, c, color: PROD[a >> 1].color, tipo: "sale", t0: reloj });
+      if (b >= 0 && (a < 0 || (a >> 1) !== (b >> 1))) movimientos.push({ g, c, color: PROD[b >> 1].color, tipo: "entra", t0: reloj + (a >= 0 ? DURA / 2 : 0) });
+    }
+  });
+  previo = i;
+}
+function suave(u) { return 1 - Math.pow(1 - u, 3); }
+function entrando(g, c) { return movimientos.some((m) => m.g === g && m.c === c && m.tipo === "entra" && reloj - m.t0 < DURA); }
+function dibujarMovimientos(ahora) {
+  movimientos = movimientos.filter((m) => ahora - m.t0 < DURA);
+  let s = "";
+  for (const m of movimientos) {
+    const u = (ahora - m.t0) / DURA;
+    if (u < 0) continue;
+    const cx = xCara(m.g, m.c), yB = Y_BAHIA + 37;
+    if (m.tipo === "entra") {        // por la avenida hasta la entrada de su zona y después sube hasta la cara
+      if (u < 0.45) s += autoH(cx - 120 + 120 * suave(u / 0.45), Y_IDA, m.color);
+      else s += autoV(cx, Y_IDA - (Y_IDA - yB) * suave((u - 0.45) / 0.55), m.color, false);
+    } else {                          // baja hasta la avenida y se va
+      if (u < 0.5) s += autoV(cx, yB + (Y_IDA - yB) * suave(u / 0.5), m.color, false, true);
+      else s += autoH(cx + 140 * suave((u - 0.5) / 0.5), Y_IDA, m.color);
+    }
+  }
+  return s;
+}
+
+// ---------------- tránsito de la avenida (decorativo: no son clientes; más autos en las horas pico) ----------------
+const TRAFICO = [0, 1, 2, 3, 4, 5, 6, 7].map((k) => ({
+  ida: k % 2 === 0, vel: 0.07 + 0.012 * ((k * 5) % 7), x0: (k * 173) % (W + 160),
+  color: [P.plata, P.tenue, P.bordeFuerte, P.tenue3][k % 4],
+}));
+function trafico(i) {
+  const h = (F.t[i] % 1440) / 60;
+  const densidad = (h >= 7 && h < 10) || (h >= 16 && h < 19) ? 1 : (h >= 22 || h < 6 ? 0.25 : 0.6);
+  let s = "";
+  TRAFICO.forEach((a, k) => {
+    if (k >= Math.round(TRAFICO.length * densidad)) return;
+    const L = W + 160, x = ((a.x0 + relojTrafico * a.vel) % L + L) % L - 80;
+    s += a.ida ? autoH(x, Y_IDA, a.color) : autoH(W - x, Y_VUELTA, a.color, true);
+  });
+  return s;
+}
+
+// ---------------- colas ilustrativas (sólo para la presentación; se apagan abajo) ----------------
+// Con la demanda real casi nunca hay cola: esto suma autos a la cola según lo ocupada que está la zona y la hora.
+// No cambia ningún número: el panel "Colas actuales" y el rótulo "cola n / cap" siguen mostrando la simulación.
+let hayIlustrativos = false;
+function ilustrativos(g, i, lugares) {
+  if (!document.getElementById("colasIlus").checked) return 0;
+  const h = (F.t[i] % 1440) / 60;
+  const pico = (h >= 7 && h < 10) || (h >= 16 && h < 19) ? 1 : (h >= 22 || h < 6 ? 0 : 0.45);
+  let suma = 0, n = 0;
+  for (let j = Math.max(0, i - 4); j <= Math.min(N - 1, i + 4); j++) { suma += carriles(g, j).filter((k) => k >= 0).length; n++; }
+  const ahora = carriles(g, i).filter((k) => k >= 0).length;    // sin nadie cargando no se dibuja cola
+  return ahora === 0 ? 0 : Math.max(0, Math.min(lugares, 2 * ahora, Math.round((suma / n) * (0.6 + 2.2 * pico))));
+}
+function colorIlustrativo(g, i, k) {
+  const semilla = (Math.floor(i / 6) * 31 + k * 17 + g.cara0 * 7) % 97;
+  return PROD[g.productos[semilla % g.productos.length]].color;
+}
 
 function dibujarCanvas(i) {
+  reloj = performance.now();
   const faltantes = sinCombustible(i), hayCorte = F.gnc[i] === 1;
   const ventana = Math.max(1, Math.round(20 / CONFIG.dt));
   let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Playón de la estación a las ${hhmm(F.t[i] % 1440)}" preserveAspectRatio="xMidYMid meet">`;
@@ -510,6 +674,7 @@ function dibujarCanvas(i) {
   // techo del playón
   s += `<rect x="${X0 - 8}" y="10" width="${X_FIN - X0 + 16}" height="24" rx="8" fill="${P.amarillo}"/><rect x="${X0 - 8}" y="28" width="${X_FIN - X0 + 16}" height="6" fill="${P.rojo}"/>`;
   let esperando = 0;
+  hayIlustrativos = false;
   GRUPOS.forEach((g) => {
     const datos = F.g[g.id], car = carriles(g, i), cl = cola(g, i), largo = datos.n[i];
     const llena = g.cap !== null && largo >= g.cap;
@@ -520,46 +685,57 @@ function dibujarCanvas(i) {
     const cortado = esGnc && hayCorte;
     const ocup = car.filter((k) => k >= 0).length;
     s += `<rect x="${g.x}" y="${Y_PANEL}" width="${g.w}" height="${Y_AV - 14 - Y_PANEL}" rx="12" fill="${P.asfalto2}" stroke="${llena ? P.rojo : P.borde}" stroke-width="${llena ? 3 : 1.5}"/>`;
-    const [fondoTag, textoTag] = COLOR_TAG[g.id] || ["amarillo", "fondo"];
+    const [fondoTag, textoTag] = COLOR_TAG[g.id] || ["panel2", "tinta"];
     const nombre = esGnc ? "GNC" : g.nombre.toUpperCase();
     s += `<rect x="${g.x + 8}" y="${Y_TAG}" width="${g.w - 16}" height="24" rx="6" fill="${P[fondoTag]}"/>` +
-         texto(g.x + 16, Y_TAG + 17, `ZONA ${g.id} · ${nombre}`, 12.5, { peso: 800, color: P[textoTag] });
+         texto(g.x + 16, Y_TAG + 17, `ZONA ${g.id} · ${nombre}`, 12.5, { peso: 750, color: P[textoTag], espaciado: 0.6 });
     s += texto(g.x + g.w - 10, Y_ALERTA + 14, (g.w < 200 ? `${ocup} / ${g.caras}` : `${ocup} / ${g.caras} ocupadas`), 11.5, { ancla: "end", peso: 700, color: P.tenue });
     const alerta = cortado ? "GNC CORTADO" : (falta.length ? "SIN STOCK" : (llena ? "COLA LLENA" : ""));
-    if (alerta) s += pastilla(g.x + 8, Y_ALERTA, Math.min(112, Math.max(64, g.w - 16 - 74)), 18, P.rojo, alerta, P.blanco);
+    if (alerta) s += pastillaAlerta(g.x + 8, Y_ALERTA, Math.min(112, Math.max(64, g.w - 16 - 74)), 18, alerta);
     if (cortado) {
       const corte = corteActivo(F.t[i]);
-      if (corte) s += texto(g.x + g.w / 2, Y_AV - 44, `el GNC vuelve en ${faltaTexto(corte.fin - F.t[i])}`, 13, { ancla: "middle", peso: 800, color: P.rojo });
+      if (corte) s += texto(g.x + g.w / 2, Y_AV - 44, `el GNC vuelve en ${faltaTexto(corte.fin - F.t[i])}`, 13, { ancla: "middle", peso: 800, color: P.rojoTexto });
     }
-    // surtidores y bahías, una por cara
+    // surtidores: uno de doble cara cada dos caras (S1, S2…), con el número de cada cara arriba de su carril
+    for (let c0 = 0; c0 < g.caras; c0 += 2) {
+      const ultima = Math.min(g.caras - 1, c0 + 1), xa = xCara(g, c0) - 21, xb = xCara(g, ultima) + 21;
+      const roto = car[c0] === -2 && car[ultima] === -2;
+      s += `<rect x="${xa}" y="${Y_BOMBA}" width="${xb - xa}" height="58" rx="6" fill="${P.panel2}" stroke="${roto ? P.rojo : P.tenue3}" stroke-width="1.2"/>`;
+      for (let c = c0; c <= ultima; c++) {
+        const cx = xCara(g, c), nb = prods.length;
+        prods.forEach((pr, q) => { s += `<rect x="${cx - 17 + q * (34 / nb)}" y="${Y_BOMBA + 5}" width="${34 / nb}" height="8" fill="${pr.color}"/>`; });
+        s += texto(cx, Y_BOMBA + 52, String(g.cara0 + c + 1), 10.5, { ancla: "middle", peso: 650, color: P.tenue });
+      }
+      s += texto((xa + xb) / 2, Y_BOMBA + 36, `S${g.surt0 + c0 / 2 + 1}`, 17, { ancla: "middle", peso: 800 });
+      if (roto) {                 // surtidor roto (evento aleatorio): tachado con sus dos caras hasta que llega el técnico
+        s += `<line x1="${xa + 4}" y1="${Y_BOMBA + 4}" x2="${xb - 4}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>` +
+             `<line x1="${xb - 4}" y1="${Y_BOMBA + 4}" x2="${xa + 4}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>`;
+      }
+    }
+    // bahías: una por cara
     for (let c = 0; c < g.caras; c++) {
-      const cx = g.x + PAD + c * LANE + LANE / 2;
-      s += `<rect x="${cx - 21}" y="${Y_BOMBA}" width="42" height="58" rx="8" fill="${P.panel2}" stroke="${P.tinta}" stroke-width="1.6"/>`;
-      const nb = prods.length;
-      prods.forEach((pr, q) => { s += `<rect x="${cx - 17 + q * (34 / nb)}" y="${Y_BOMBA + 5}" width="${34 / nb}" height="10" fill="${pr.color}"/>`; });
-      s += texto(cx, Y_BOMBA + 40, `S${c + 1}`, 15, { ancla: "middle", peso: 800 });
+      const cx = xCara(g, c);
       s += `<rect x="${cx - 28}" y="${Y_BAHIA}" width="56" height="74" rx="8" fill="${P.asfalto}" stroke="${P.linea}" stroke-width="1.4" stroke-dasharray="5 5" opacity="0.8"/>`;
       const codigo = car[c];
       let estado = "libre", colorEstado = P.tenue;
-      if (cortado) { estado = "cortada"; colorEstado = P.rojo; }
-      if (codigo === -2) {            // cara fuera de servicio (evento aleatorio): tachada hasta que llega el técnico
-        estado = "fuera"; colorEstado = P.rojo;
-        s += `<line x1="${cx - 18}" y1="${Y_BOMBA + 4}" x2="${cx + 18}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>` +
-             `<line x1="${cx + 18}" y1="${Y_BOMBA + 4}" x2="${cx - 18}" y2="${Y_BOMBA + 54}" stroke="${P.rojo}" stroke-width="4"/>`;
-      }
+      if (cortado) { estado = "cortada"; colorEstado = P.rojoTexto; }
+      if (codigo === -2) { estado = "fuera"; colorEstado = P.rojoTexto; }
       if (codigo >= 0) {
         const k = codigo >> 1, espera = (codigo & 1) === 1;
-        s += autoV(cx, Y_BAHIA + 37, PROD[k].color, espera);
+        if (!entrando(g, c)) s += autoV(cx, Y_BAHIA + 37, PROD[k].color, espera);
         estado = espera ? "espera" : "carga"; colorEstado = P.tinta; if (espera) esperando++;
       }
       s += texto(cx, Y_ESTADO + 4, estado, 11.5, { ancla: "middle", color: colorEstado, peso: codigo >= 0 ? 800 : 400 });
     }
-    // cola: 3 lugares por cara, ordenados desde la cara hacia atrás
+    // cola: 3 lugares por cara, ordenados desde la cara hacia atrás (más los ilustrativos, si están prendidos)
     const cols = g.caras, filas = Math.ceil((g.cap === null ? 12 : g.cap) / cols);
+    const extra = ilustrativos(g, i, filas * cols - cl.length);
+    if (extra > 0) hayIlustrativos = true;
     for (let k = 0; k < filas * cols; k++) {
       const f = Math.floor(k / cols), c = k % cols;
-      const cx = g.x + PAD + c * LANE + LANE / 2, cy = Y_COLA + f * FILA + FILA / 2;
+      const cx = xCara(g, c), cy = Y_COLA + f * FILA + FILA / 2;
       if (k < cl.length) s += autoV(cx, cy, PROD[cl[k]].color, false);
+      else if (k < cl.length + extra) s += autoV(cx, cy, colorIlustrativo(g, i, k), false);
       else s += `<rect x="${cx - 21}" y="${cy - 30}" width="42" height="60" rx="9" fill="none" stroke="${P.tenue}" stroke-width="1.3" stroke-dasharray="4 4" opacity="0.55"/>`;
     }
     if (largo > cl.length) s += pastilla(g.x + g.w / 2 - 36, Y_COLA + filas * FILA + 2, 72, 18, P.panel2, `+${largo - cl.length} más`, P.tinta);
@@ -571,9 +747,10 @@ function dibujarCanvas(i) {
       s += texto(xr, Y_AV + 16, `+${rec} pasaron de largo`, 12, { ancla: "middle", peso: 800 });
     }
   });
-  // avenida
+  // avenida, con su tránsito
   s += `<rect x="0" y="${Y_AV}" width="${W}" height="${H - Y_AV}" fill="${P.negro}"/><line x1="0" y1="${Y_AV + 46}" x2="${W}" y2="${Y_AV + 46}" stroke="${P.linea}" stroke-width="2" stroke-dasharray="26 18" opacity="0.7"/>`;
-  s += texto(W - 14, Y_AV + 18, "AV. BALLOFFET — RN 143 (tramo urbano)", 12.5, { ancla: "end", peso: 800, espaciado: 1 });
+  s += trafico(i);
+  s += texto(W - 14, Y_AV + 18, "AV. BALLOFFET — RN 143 (tramo urbano)", 12.5, { ancla: "end", peso: 700, espaciado: 1.2, color: P.tenue });
   // camión cisterna: se lo ve llegar por la avenida (2 h antes) y descargar (45 min, INV-04)
   const ahora = F.t[i];
   DESCARGAS.filter((e) => e.t - 120 <= ahora && ahora <= e.t + 45).slice(0, 2).forEach((e, k) => {
@@ -583,10 +760,14 @@ function dibujarCanvas(i) {
     s += camionIcono(x, Y_AV + 62, prod ? prod.color : P.amarillo, 1.25);
     s += texto(x, Y_AV + 38, llegando ? `camión de ${e.producto} llegando` : `descargando ${miles(e.litros)} L de ${e.producto}`, 11.5, { ancla: "middle", peso: 800 });
   });
+  s += dibujarMovimientos(reloj);
+  if (document.getElementById("colasIlus").checked && hayIlustrativos)
+    s += texto(X0 + 8, 26, "COLAS ILUSTRATIVAS: LOS AUTOS DE MÁS EN LA COLA NO SALEN DE LA SIMULACIÓN", 11, { peso: 800, color: P.sobreAmarillo, espaciado: 0.4 });
   s += `</svg>`;
   document.getElementById("lienzo").innerHTML = s;
   return esperando;
 }
+
 
 // ---------------- paneles ----------------
 function panelDerecho(i, esperando) {
@@ -599,7 +780,7 @@ function panelDerecho(i, esperando) {
   h += `</svg>`;
   for (let k = 0; k < CONFIG.cajas; k++) {
     const ocupada = k < ocupC;
-    h += `<div class="fila" style="border:2px solid ${ocupada ? P.naranja : P.libre};border-radius:8px;padding:6px 10px;margin-top:4px"><b>CAJA ${k + 1}</b><span style="color:${ocupada ? P.tinta : P.libre};font-weight:700">${ocupada ? "cobrando" : "libre"}</span></div>`;
+    h += `<div class="fila" style="border:1px solid ${ocupada ? P.naranja : P.libre};border-radius:4px;padding:6px 10px;margin-top:4px"><b>CAJA ${k + 1}</b><span style="color:${ocupada ? P.tinta : P.libre};font-weight:650">${ocupada ? "cobrando" : "libre"}</span></div>`;
   }
   document.getElementById("pMini").innerHTML = h;
 
@@ -609,12 +790,12 @@ function panelDerecho(i, esperando) {
   pl += `</svg><div class="chico">${turno} en turno · ${ocup} atendiendo · naranja punteado = cara esperando al playero</div>`;
   if (esperando > 0) pl += `<div style="margin-top:6px"><span class="pastilla" style="background:${P.naranja};color:${P.negro}">${esperando} cara${esperando > 1 ? "s" : ""} espera${esperando > 1 ? "n" : ""} playero</span></div>`;
   EVENTOS.filter((e) => e.t <= F.t[i] && F.t[i] < e.fin).slice(0, 3).forEach((e) => {
-    pl += `<div class="chico" style="margin-top:6px;color:${P.amarillo};font-weight:700">⚡ ${e.titulo} · hasta ${fechaHora(e.fin)}</div>`;
+    pl += `<div class="chico" style="margin-top:6px;color:${P.amarillo};font-weight:650">${icono("rayo")} ${e.titulo} · hasta ${fechaHora(e.fin)}</div>`;
   });
   document.getElementById("pPlay").innerHTML = pl;
 
   let gn = `<div class="titulo">GNC</div><div class="fila">`;
-  if (F.gnc[i] === 1) { const corte = corteActivo(F.t[i]); gn += `<span class="pastilla" style="background:${P.rojo};color:${P.blanco}">GNC CORTADO</span>` + (corte ? `<b>vuelve en ${faltaTexto(corte.fin - F.t[i])}</b>` : ""); }
+  if (F.gnc[i] === 1) { const corte = corteActivo(F.t[i]); gn += `<span class="pastilla alerta">GNC CORTADO</span>` + (corte ? `<b>vuelve en ${faltaTexto(corte.fin - F.t[i])}</b>` : ""); }
   else if (F.gnc[i] === 2) gn += `<span class="pastilla" style="background:${P.naranja};color:${P.negro}">COMPRESORES AL 50 %</span>`;
   else gn += `<span class="pastilla" style="background:${P.libre};color:${P.negro}">DISPONIBLE</span>`;
   gn += `</div><div class="chico" style="margin-top:6px">${F.comp[i]} de ${F.compTot[i]} compresores en uso · ${GRUPOS.some(g => g.playero && g.productos.includes(PROD.findIndex(x => x.id === "gnc"))) ? "lo carga un playero" : "sin playero"}</div>`;
@@ -635,8 +816,8 @@ function panelDerecho(i, esperando) {
   if (!panelDerecho.leyenda) {
     panelDerecho.leyenda = true;
     let ly = `<div class="titulo">Color del auto = producto</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px;font-size:12px">`;
-    PROD.forEach((pr) => { ly += `<div><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${pr.color};border:1px solid ${P.tinta};vertical-align:-2px"></span> ${esc(pr.nombre)}</div>`; });
-    ly += `</div>`;
+    PROD.forEach((pr) => { ly += `<div><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${pr.color};vertical-align:-2px"></span> ${esc(pr.nombre)}</div>`; });
+    ly += `</div><div class="chico" style="margin-top:6px">Autos grises en la avenida: tránsito (decorativo). S1…S6: surtidores de doble cara; 1…12: caras.</div>`;
     document.getElementById("pLeyenda").innerHTML = ly;
   }
 }
@@ -646,9 +827,9 @@ function panelesInferiores(i) {
   let t = `<div id="tanquesGrid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">`;
   CONFIG.tanques.forEach((id, k) => {
     const prod = PROD[TANQUES[k]], nivel = F.tk[id].n[i], fr = Math.max(0, Math.min(1, nivel / prod.capacidad));
-    const pct = Math.round(fr * 100), color = pct > 50 ? P.libre : (pct > 20 ? P.naranja : P.rojo);
+    const pct = Math.round(fr * 100), color = pct > 50 ? P.libre : (pct > 20 ? P.naranja : P.rojoTexto);
     t += `<div class="tanque"><b>${esc(prod.nombre)}</b><div class="cuerpo"><i style="height:${fr * 100}%;background:${prod.color}"></i></div>
-      <span>${miles(nivel)} L</span><br><span style="color:${color};font-weight:800">${pct} %</span></div>`;
+      <span>${miles(nivel)} L</span><br><span style="color:${color};font-weight:750">${pct} %</span></div>`;
   });
   document.getElementById("tanques").innerHTML = t + "</div>";
 
@@ -658,8 +839,9 @@ function panelesInferiores(i) {
     const dn = dat.ne[i] - dat.ne[ini], dsw = dat.sw[i] - dat.sw[ini];
     const tc = dn > 0 ? (dsw / dn) : null;
     const esGnc = g.productos.some((k) => PROD[k].gnc);
-    c += `<div class="zona-cola"><span>${esGnc ? "GNC" : esc(g.nombre)} · S1–S${g.caras}</span>
-      <span><b>${n}</b> en cola</span><span class="chico" title="espera promedio de hoy">⏱ ${tc === null ? "—" : tc.toFixed(1).replace(".", ",") + " min"}</span></div>`;
+    const nS = Math.ceil(g.caras / 2), surt = nS > 1 ? `S${g.surt0 + 1}–S${g.surt0 + nS}` : `S${g.surt0 + 1}`;
+    c += `<div class="zona-cola"><span>${esGnc ? "GNC" : esc(g.nombre)} · ${surt}</span>
+      <span><b>${n}</b> en cola</span><span class="chico" title="espera promedio de hoy">${icono("reloj")} ${tc === null ? "—" : tc.toFixed(1).replace(".", ",") + " min"}</span></div>`;
   });
   document.getElementById("colas").innerHTML = c;
 
@@ -725,14 +907,28 @@ const barra = document.getElementById("barra"), botonPlay = document.getElementB
 const ultimo = N - 1;
 let posicion = 0, reproduciendo = false, ultimoInstante = 0, ultimoDibujado = -1;
 barra.max = String(ultimo);
+botonPlay.innerHTML = BOTON_PLAY;
 selVel.value = REDUCIDO ? "20" : "5";
+ajustarDuracion();
+selVel.addEventListener("change", ajustarDuracion);
 
+// El playón se redibuja ~30 veces por segundo mientras corre (o mientras un auto entra o sale), así se ven moverse.
+let bucle = null, ultimoTic = performance.now(), ultimoTrazo = 0;
+function tic(ahora) {
+  if (reproduciendo) relojTrafico += ahora - ultimoTic;
+  ultimoTic = ahora;
+  if (ahora - ultimoTrazo > 33 && ultimoDibujado >= 0) { ultimoTrazo = ahora; dibujarCanvas(ultimoDibujado); }
+  bucle = (reproduciendo || movimientos.length) && !REDUCIDO ? requestAnimationFrame(tic) : null;
+}
+function encenderBucle() { if (!bucle && !REDUCIDO) { ultimoTic = performance.now(); bucle = requestAnimationFrame(tic); } }
 function mostrar(pos) {
   posicion = Math.max(0, Math.min(ultimo, pos));
   const i = Math.round(posicion);
   if (i === ultimoDibujado) return;
+  registrarMovimientos(i, reproduciendo);
   ultimoDibujado = i;
   const esperando = dibujarCanvas(i);
+  encenderBucle();
   panelDerecho(i, esperando);
   const k = panelesInferiores(i);
   cabecera(i, k, i >= ultimo && !reproduciendo);
@@ -751,21 +947,21 @@ function abrirAviso() {
   document.getElementById("avisoCola").textContent = colaAvisos.length ? `+${colaAvisos.length} aviso${colaAvisos.length > 1 ? "s" : ""} más` : "";
   document.getElementById("avisoNota").textContent = "";
   if (e.tipo === "pedido") {
-    document.getElementById("avisoIcono").textContent = "⛽";
+    document.getElementById("avisoIcono").innerHTML = icono("surtidor");
     document.getElementById("avisoTitulo").textContent = `Bajo nivel de combustible: ${e.producto}, ${e.pct} %`;
     document.getElementById("avisoTexto").textContent = `Se pidió un camión de ${miles(e.litros)} L a ${e.origen}` +
       (e.redirigido ? " (el origen habitual no podía cumplirlo: pedido redirigido)" : "") + `. Llega el ${fechaHora(e.llega)}.`;
     document.getElementById("avisoNota").textContent = "El aviso salta cuando lo que hay en el tanque más lo que viene en camino baja al punto de pedido s: es el mismo momento en que se pide el camión.";
     botonSeguir.hidden = false;
   } else if (e.tipo === "evento") {
-    document.getElementById("avisoIcono").textContent = "⚡";
+    document.getElementById("avisoIcono").innerHTML = icono("rayo");
     document.getElementById("avisoTitulo").textContent = e.titulo;
     document.getElementById("avisoTexto").textContent = e.texto;
-    document.getElementById("avisoNota").textContent = `Evento aleatorio sorteado con la semilla ${CONFIG.semillaEventos}: con la misma semilla sale siempre igual. El detalle de todos está en la pestaña ⚡ Eventos.`;
+    document.getElementById("avisoNota").textContent = `Evento aleatorio sorteado con la semilla ${CONFIG.semillaEventos}: con la misma semilla sale siempre igual. El detalle de todos está en la pestaña Eventos.`;
     botonSeguir.hidden = true;
   } else {
     const total = Math.round((e.fin - e.inicio) / 1440), resta = e.fin - e.t;
-    document.getElementById("avisoIcono").textContent = "🔥";
+    document.getElementById("avisoIcono").innerHTML = icono("llama");
     document.getElementById("avisoTitulo").textContent = e.inicio < e.t ? "El GNC sigue cortado" : `El GNC se cortó por ${total} día${total === 1 ? "" : "s"}`;
     document.getElementById("avisoTexto").textContent = (e.inicio < e.t ? "El corte empezó antes del período. " : "") +
       `Vuelve el ${fechaHora(e.fin)} (en ${faltaTexto(resta)}). Mientras tanto los clientes de GNC pasan a Súper o se van; en la zona GNC se ve la cuenta regresiva.`;
@@ -797,16 +993,69 @@ botonSeguir.addEventListener("click", () => {
     caja.classList.remove("abierto");
     avisoActual = null;
   } catch (err) {
-    document.getElementById("avisoNota").textContent = "Abrí la pestaña 🗺️ Red y rutas (arriba): ahí se ve el camión sobre su ruta.";
+    document.getElementById("avisoNota").textContent = "Abrí la pestaña Red y rutas (arriba): ahí se ve el camión sobre su ruta.";
   }
 });
+// ---------------- qué avisos pausan la animación (se elige en el botón "Alertas") ----------------
+const TIPOS_AVISO = [["pedido", "Camión pedido (tanque bajo)"], ["gnc", "Corte de GNC"], ["evento", "Eventos aleatorios"]];
+const ALERTAS = { maestro: true, tipos: { pedido: true, gnc: true, evento: true }, eventos: {} };
+const DE_LA_CORRIDA = {};          // eventos aleatorios que ocurrieron en esta corrida: id → [título, cuántas veces]
+EVENTOS.forEach((e) => { DE_LA_CORRIDA[e.id] = [e.titulo, ((DE_LA_CORRIDA[e.id] || [])[1] || 0) + 1]; ALERTAS.eventos[e.id] = true; });
+try { const g = JSON.parse(window.sessionStorage.getItem("alertasTablero") || "null");
+      if (g) { ALERTAS.maestro = g.maestro !== false; Object.assign(ALERTAS.tipos, g.tipos || {});
+               Object.keys(ALERTAS.eventos).forEach((id) => { if (g.eventos && id in g.eventos) ALERTAS.eventos[id] = g.eventos[id]; }); } }
+catch (err) { /* sin almacenamiento: quedan todas prendidas */ }
+function avisoActivo(e) {
+  return ALERTAS.maestro && ALERTAS.tipos[e.tipo] !== false && (e.tipo !== "evento" || ALERTAS.eventos[e.id] !== false);
+}
+function guardarAlertas() {
+  try { window.sessionStorage.setItem("alertasTablero", JSON.stringify(ALERTAS)); } catch (err) { /* nada */ }
+  const todos = TIPOS_AVISO.map(([t]) => t).filter((t) => EV.some((e) => e.tipo === t));
+  const algunoApagado = todos.some((t) => !ALERTAS.tipos[t]) || Object.values(ALERTAS.eventos).some((v) => !v);
+  document.getElementById("estadoAlertas").textContent = !ALERTAS.maestro ? "Alertas: apagadas" : (algunoApagado ? "Alertas: algunas" : "Alertas: todas");
+  document.getElementById("panelAlertas").classList.toggle("apagado", !ALERTAS.maestro);
+}
+function armarPanelAlertas() {
+  const caja = document.getElementById("tiposAlertas");
+  let h = "";
+  TIPOS_AVISO.forEach(([tipo, nombre]) => {
+    const cuantos = EV.filter((e) => e.tipo === tipo).length;
+    h += `<label><input type="checkbox" data-tipo="${tipo}" ${ALERTAS.tipos[tipo] ? "checked" : ""}> ${nombre} <span class="chico">(${cuantos})</span></label>`;
+    if (tipo === "evento" && cuantos) {
+      h += `<div class="sub">`;
+      Object.entries(DE_LA_CORRIDA).forEach(([id, [titulo, n]]) => {
+        h += `<label><input type="checkbox" data-evento="${esc(id)}" ${ALERTAS.eventos[id] ? "checked" : ""}> ${esc(titulo)} <span class="chico">(${n})</span></label>`;
+      });
+      h += `</div>`;
+    }
+  });
+  caja.innerHTML = h;
+  document.getElementById("pausarAvisos").checked = ALERTAS.maestro;
+  guardarAlertas();
+}
+document.getElementById("panelAlertas").addEventListener("change", (ev) => {
+  const x = ev.target;
+  if (x.id === "pausarAvisos") ALERTAS.maestro = x.checked;
+  else if (x.dataset.tipo) ALERTAS.tipos[x.dataset.tipo] = x.checked;
+  else if (x.dataset.evento) ALERTAS.eventos[x.dataset.evento] = x.checked;
+  guardarAlertas();
+});
+const botonAlertas = document.getElementById("botonAlertas"), panelAlertas = document.getElementById("panelAlertas");
+function abrirPanelAlertas(abrir) { panelAlertas.hidden = !abrir; botonAlertas.setAttribute("aria-expanded", String(abrir)); }
+botonAlertas.addEventListener("click", () => abrirPanelAlertas(panelAlertas.hidden));
+document.addEventListener("click", (ev) => { if (!ev.target.closest("#alertas")) abrirPanelAlertas(false); });
+document.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && !panelAlertas.hidden) { abrirPanelAlertas(false); botonAlertas.focus(); } });
+document.getElementById("colasIlus").addEventListener("change", () => dibujarCanvas(ultimoDibujado));
+armarPanelAlertas();
+
 function revisarAvisos(hasta) {
-  if (!document.getElementById("pausarAvisos").checked) { revisadoHasta = hasta; return false; }
+  if (!ALERTAS.maestro) { revisadoHasta = hasta; return false; }
   for (let f = revisadoHasta + 1; f <= hasta; f++) {
-    if (AVISOS.has(f)) {
+    const lista = AVISOS.has(f) ? AVISOS.get(f).filter(avisoActivo) : [];
+    if (lista.length) {
       revisadoHasta = f;
-      mostrar(f); reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(f);
-      colaAvisos = colaAvisos.concat(AVISOS.get(f)); reanudar = true; abrirAviso();
+      mostrar(f); reproduciendo = false; botonPlay.innerHTML = BOTON_PLAY; ultimoDibujado = -1; mostrar(f);
+      colaAvisos = colaAvisos.concat(lista); reanudar = true; abrirAviso();
       return true;
     }
   }
@@ -825,15 +1074,15 @@ function paso(instante) {
 function reproducir() {
   if (posicion >= ultimo) { ultimoDibujado = -1; mostrar(0); revisadoHasta = -1; }
   if (colaAvisos.length) { reanudar = true; abrirAviso(); return; }
-  reproduciendo = true; botonPlay.textContent = "⏸ Pausar"; ultimoInstante = performance.now();
+  reproduciendo = true; botonPlay.innerHTML = BOTON_PAUSA; ultimoInstante = performance.now();
   if (revisarAvisos(Math.round(posicion))) return;
   requestAnimationFrame(paso);
 }
-function pausar() { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(posicion); }
+function pausar() { reproduciendo = false; botonPlay.innerHTML = BOTON_PLAY; ultimoDibujado = -1; mostrar(posicion); }
 botonPlay.addEventListener("click", () => (reproduciendo ? pausar() : reproducir()));
-barra.addEventListener("input", () => { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(Number(barra.value)); revisadoHasta = Math.round(posicion); });
+barra.addEventListener("input", () => { reproduciendo = false; botonPlay.innerHTML = BOTON_PLAY; ultimoDibujado = -1; mostrar(Number(barra.value)); revisadoHasta = Math.round(posicion); });
 document.getElementById("tipoGrafico").addEventListener("change", () => grafico(Math.round(posicion)));
-function saltar(i) { reproduciendo = false; botonPlay.textContent = "▶ Reproducir"; ultimoDibujado = -1; mostrar(i); revisadoHasta = Math.round(posicion); }
+function saltar(i) { reproduciendo = false; botonPlay.innerHTML = BOTON_PLAY; ultimoDibujado = -1; mostrar(i); revisadoHasta = Math.round(posicion); }
 document.getElementById("diaMas").addEventListener("click", () => saltar(iniDia[Math.min(NDIAS - 1, diaDe(Math.round(posicion)) + 1)]));
 document.getElementById("diaMenos").addEventListener("click", () => saltar(iniDia[Math.max(0, diaDe(Math.round(posicion)) - 1)]));
 
@@ -882,17 +1131,22 @@ def seguimiento_html(p: ParametrosSimulacion, corrida: str = "") -> str:
         "habitual": red.origen if red else "DOCK",
         "paleta": paleta_json(),
     }
-    return _PLANTILLA_SEGUIMIENTO.replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":")))
+    return (_PLANTILLA_SEGUIMIENTO.replace("__FUENTE__", _FUENTE)
+            .replace("__CONFIG__", json.dumps(configuracion, separators=(",", ":"))))
 
 
 _PLANTILLA_SEGUIMIENTO = r"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+  __FUENTE__
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-  #cartel { border-radius: 12px; padding: 10px 14px; margin-bottom: 8px; font-size: 15px; line-height: 1.4; }
-  #cartel b { font-size: 16px; }
-  svg { width: 100%; height: 360px; display: block; border-radius: 12px; }
+  html, body { margin: 0; padding: 0; font-family: "Archivo", "Segoe UI", system-ui, sans-serif;
+               font-variant-numeric: tabular-nums; }
+  #cartel { border-radius: 6px; padding: 10px 14px; margin-bottom: 8px; font-size: 15px; line-height: 1.4; }
+  #cartel b { font-size: 16px; display: inline-flex; align-items: center; gap: 8px; }
+  .ico { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round;
+         stroke-linejoin: round; }
+  #mapa svg { width: 100%; height: 360px; display: block; border-radius: 6px; }
 </style></head><body>
 <div id="cartel" role="status" aria-live="polite"></div>
 <div id="mapa"></div>
@@ -914,14 +1168,14 @@ function dibujar(origen, progreso) {
   s += `<rect width="${W}" height="${H}" fill="${P.panel}"/>`;
   C.arcos.forEach(([a, b, km, nombre]) => {
     const [x1, y1] = pos(a), [x2, y2] = pos(b), activa = enRuta.has([a, b].sort().join("|"));
-    if (activa) s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${P.tinta}" stroke-width="12" stroke-linecap="round"/>`;
+    if (activa) s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${P.fondo}" stroke-width="12" stroke-linecap="round"/>`;
     s += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${activa ? P.amarillo : P.borde}" stroke-width="${activa ? 8 : 3}" stroke-linecap="round"/>`;
   });
   Object.keys(C.nodos).forEach((n) => {
     const [x, y] = pos(n), esDestino = n === "SANRAFAEL", esOrigen = n === origen;
     s += `<circle cx="${x}" cy="${y}" r="${esDestino || esOrigen ? 9 : 6}" fill="${esDestino ? P.rojo : (esOrigen ? P.tinta : P.tenue)}" stroke="${P.fondo}" stroke-width="2"/>`;
-    const abajo = ["MONTECOMAN", "ALVEAR", "SOSNEADO", "DOCK"].includes(n), izquierda = n === "SANRAFAEL";
-    s += `<text x="${x + (izquierda ? -12 : 0)}" y="${abajo ? y + 24 : y - 13}" font-size="13" font-weight="${esDestino || esOrigen ? 800 : 500}" fill="${P.tinta}" text-anchor="${izquierda ? "end" : "middle"}">${esc(C.nombres[n])}</text>`;
+    const abajo = ["ALVEAR", "SOSNEADO", "DOCK"].includes(n), izquierda = n === "SANRAFAEL";
+    s += `<text x="${x + (izquierda ? -12 : 0)}" y="${abajo ? y + 24 : y - 13}" font-size="13" font-family="Archivo, Segoe UI, sans-serif" font-weight="${esDestino || esOrigen ? 750 : 450}" fill="${esDestino || esOrigen ? P.tinta : P.tenue}" text-anchor="${izquierda ? "end" : "middle"}">${esc(C.nombres[n])}</text>`;
   });
   if (ruta.length > 1 && progreso !== null) {
     const largos = ruta.slice(1).map((n, k) => { const [a, b] = [pos(ruta[k]), pos(n)]; return Math.hypot(b[0] - a[0], b[1] - a[1]); });
@@ -929,17 +1183,17 @@ function dibujar(origen, progreso) {
     while (k < largos.length - 1 && objetivo > largos[k]) { objetivo -= largos[k]; k++; }
     const [a, b] = [pos(ruta[k]), pos(ruta[k + 1])], f = largos[k] ? Math.min(1, objetivo / largos[k]) : 1;
     const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f;
-    s += `<g transform="translate(${x},${y})"><rect x="-16" y="-10" width="22" height="16" rx="4" fill="${P.amarillo}" stroke="${P.tinta}" stroke-width="2"/>
-      <rect x="6" y="-6" width="11" height="12" rx="2" fill="${P.plata}" stroke="${P.tinta}" stroke-width="2"/>
-      <circle cx="-9" cy="8" r="3.5" fill="${P.tinta}"/><circle cx="10" cy="8" r="3.5" fill="${P.tinta}"/></g>`;
+    s += `<g transform="translate(${x},${y})"><rect x="-16" y="-10" width="22" height="16" rx="4" fill="${P.amarillo}" stroke="${P.neumatico}" stroke-width="2"/>
+      <rect x="6" y="-6" width="11" height="12" rx="2" fill="${P.plata}" stroke="${P.neumatico}" stroke-width="2"/>
+      <circle cx="-9" cy="8" r="3.5" fill="${P.neumatico}" stroke="${P.plata}"/><circle cx="10" cy="8" r="3.5" fill="${P.neumatico}" stroke="${P.plata}"/></g>`;
   }
   s += `</svg>`;
   document.getElementById("mapa").innerHTML = s;
 }
 function mostrar(d) {
   const cartel = document.getElementById("cartel");
-  cartel.style.background = P.amarilloSuave; cartel.style.border = `2px solid ${P.amarillo}`;
-  cartel.innerHTML = `<b>🚚 Se ha pedido el camión de ${esc(d.producto)} a ${esc(d.origen)}</b><br>` +
+  cartel.style.background = P.amarilloSuave; cartel.style.border = `1px solid ${P.amarillo}`;
+  cartel.innerHTML = `<b><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:${P.amarillo}"><path d="M3 7h11v9H3zM14 10h4l3 3v3h-7"/><circle cx="7" cy="17.5" r="1.8"/><circle cx="17" cy="17.5" r="1.8"/></svg>Se ha pedido el camión de ${esc(d.producto)} a ${esc(d.origen)}</b><br>` +
     `${miles(d.litros)} L · pedido el ${esc(d.fechaPedido)} con el tanque al ${d.pct} % · llega el ${esc(d.fechaLlega)}` +
     ` · ${miles(C.km[d.nodo] || 0)} km por ${esc((C.rutas[d.nodo] || []).map((n) => C.nombres[n]).join(" → "))}` +
     (d.redirigido ? "<br>El origen habitual no podía cumplirlo: el pedido se redirigió." : "");

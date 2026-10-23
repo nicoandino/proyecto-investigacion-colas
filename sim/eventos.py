@@ -46,7 +46,7 @@ CATALOGO: tuple[TipoEvento, ...] = (
     TipoEvento("EVT-04", "Licencia sin reemplazo", "Personal",
                "ese turno queda con un playero menos todos los días de la licencia"),
     TipoEvento("EVT-05", "Falla de un surtidor", "Equipos",
-               "una cara fuera de servicio hasta que llega el técnico"),
+               "un surtidor fuera de servicio (sus dos caras) hasta que llega el técnico"),
     TipoEvento("EVT-06", "Falla de un compresor de GNC", "Equipos",
                "un compresor menos"),
     TipoEvento("EVT-07", "Corte de luz", "Equipos",
@@ -222,7 +222,8 @@ def _eventos_del_dia(id_: str, az: Aleatorio, stream: str, p: ParametrosSimulaci
         t = t0 + az.uniforme(stream) * MINUTOS_POR_DIA
         horas = _entre(az, stream, h_min, h_max)
         return [Evento(id_, t, t + horas * 60.0, zona, horas,
-                       f"una cara de la zona {zona} ({nombre}) queda fuera de servicio a las {_hora(t)} "
+                       f"se rompe un surtidor de la zona {zona} ({nombre}): sus dos caras quedan fuera de servicio "
+                       f"a las {_hora(t)} "
                        f"durante {_dec(horas)} h")]
     if id_ == "EVT-06":
         _, h_min, h_max = valor("EVT-06")

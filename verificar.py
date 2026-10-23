@@ -57,6 +57,7 @@ Los controles cubren las dos partes del modelo:
   REDISEÑO v3 (ORQUESTADOR.md)
    47. Etapa 6: el desglose de Economía (cantidad de la simulación × precio del Registro) suma los
        ingresos y costos del mes.
+   48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
    46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
        barata de las 14 candidatas en el año completo con datos reales.
    45. §24, G1: la tabla de camiones tiene un camión por pedido y la ruta recorrida se reconstruye
@@ -2483,6 +2484,22 @@ def main() -> int:
         "Cada importe = cantidad de la simulación × precio del Registro, y suman los ingresos y costos del mes",
         f"enero: {len(renglones47)} renglones · ingresos ${ingresos47:,.0f} = {e47.ingreso_total:,.0f} · "
         f"costos ${costos47:,.0f} = {e47.costo_total:,.0f}",
+    )
+
+    # ------------------------------------------------------------------ 48
+    separador("48. EVT-05: la falla es de un surtidor de doble cara (sus dos caras quedan tachadas)")
+    from sim.config import ParametrosEventos as _PE48
+
+    p48 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1)), animar_todo=True,
+                              eventos=_PE48(activos=("EVT-05",), semilla=1, frecuencia=5.0))
+    r48, tr48 = correr_replica(p48, semilla=1, con_traza=True)
+    tachados48 = [[k for k, v in enumerate(g[1]) if v == -2] for c in tr48.cuadros for g in c.grupos]
+    tachados48 = [x for x in tachados48 if x]
+    controlar(
+        len(r48.eventos) > 0 and len(tachados48) > 0
+        and all(len(x) == 2 and x[0] % 2 == 0 and x[1] == x[0] + 1 for x in tachados48),
+        "Cada falla de surtidor tacha las dos caras del mismo surtidor (2k y 2k+1), nunca una sola",
+        f"enero ×5: {len(r48.eventos)} fallas · {len(tachados48)} cuadros con un surtidor tachado",
     )
 
     # ------------------------------------------------------------------

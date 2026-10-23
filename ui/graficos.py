@@ -23,7 +23,7 @@ from ui.tema import (
     INDIGO,
     NARANJA,
     ROJO,
-    TINTA_AZULADA,
+    REFERENCIA,
     VERDE_INGRESO,
     VERDE_OK,
     plantilla_plotly,
@@ -202,7 +202,7 @@ def grafico_demanda_diaria(traza: Traza) -> go.Figure:
     fig.add_trace(
         go.Scatter(
             x=numeros, y=[d.autos_sorteados for d in dias], name="Demanda sorteada",
-            mode="lines", line=dict(color=TINTA_AZULADA, width=2, dash="dot"),
+            mode="lines", line=dict(color=REFERENCIA, width=2, dash="dot"),
         )
     )
     fig.update_layout(
@@ -284,8 +284,8 @@ def grafico_tanques_real(traza: Traza, p: ParametrosSimulacion) -> go.Figure:
         fig.add_trace(
             go.Scatter(
                 x=dias, y=niveles, mode="lines", name=nombres[inv.producto],
-                line=dict(color=TINTA_AZULADA, width=1.5),
-                fill="tozeroy", fillcolor=rgba(COLOR_PRODUCTO[inv.producto], 0.45),
+                line=dict(color=COLOR_PRODUCTO[inv.producto], width=1.5),
+                fill="tozeroy", fillcolor=rgba(COLOR_PRODUCTO[inv.producto], 0.15),
                 hovertemplate="día %{x:.1f} — %{y:,.0f} L<extra></extra>",
                 showlegend=False,
             ),
@@ -355,7 +355,7 @@ def grafico_frontera_politicas(costos: list[CostoPolitica]) -> go.Figure:
             marker=dict(
                 size=13,
                 color=[VERDE if c is mejor else COLOR_CAJA for c in costos],
-                line=dict(width=1, color=TINTA_AZULADA),
+                line=dict(width=1, color=REFERENCIA),
             ),
             text=[c.etiqueta if c is mejor else "" for c in costos],
             textposition="top center",
@@ -397,7 +397,7 @@ def grafico_comparativo(
             x=nombres,
             y=valores,
             marker_color=[COLOR_ESCENARIO.get(n, GRIS_) for n in nombres],
-            error_y=dict(type="data", array=errores, color=TINTA_AZULADA, thickness=1.5, width=8),
+            error_y=dict(type="data", array=errores, color=REFERENCIA, thickness=1.5, width=8),
             text=[f"{v:,.{metrica.decimales}f}" for v in valores],
             textposition="outside",
             hovertemplate="%{x}: %{y:,.2f}<extra></extra>",
@@ -490,7 +490,7 @@ def grafico_beneficio(economia: list[ResultadoEconomico]) -> go.Figure:
             hovertemplate="%{x}: $%{y:,.0f} por mes<extra></extra>",
         )
     )
-    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
+    fig.add_hline(y=0, line_color=REFERENCIA, line_width=1)
     fig.update_layout(
         title="Beneficio neto mensual respecto del escenario Base",
         xaxis_title="Escenario",
@@ -519,12 +519,12 @@ def grafico_ingresos_costos(economia: list[ResultadoEconomico]) -> go.Figure:
         go.Scatter(
             x=nombres, y=[e.beneficio_neto for e in alternativos],
             name="Beneficio neto", mode="markers+text",
-            marker=dict(size=13, color=TINTA_AZULADA, symbol="diamond"),
+            marker=dict(size=13, color=REFERENCIA, symbol="diamond"),
             text=[f"${e.beneficio_neto:,.0f}" for e in alternativos],
             textposition="top center",
         )
     )
-    fig.add_hline(y=0, line_color=TINTA_AZULADA, line_width=1)
+    fig.add_hline(y=0, line_color=REFERENCIA, line_width=1)
     fig.update_layout(
         title="De dónde sale el beneficio: ingreso extra menos costo incremental",
         xaxis_title="Escenario",
@@ -587,7 +587,7 @@ def grafico_pronostico(analisis, meses_todos, valores_todos) -> go.Figure:
     fig.add_trace(go.Scatter(x=x_fut + x_fut[::-1], y=alto + bajo[::-1], fill="toself", fillcolor=rgba(AZUL, 0.15),
                              line=dict(width=0), hoverinfo="skip", name="intervalo 95 %"))
     fig.add_trace(go.Scatter(x=x_todos, y=list(valores_todos), mode="lines", name="ventas reales",
-                             line=dict(color=TINTA_AZULADA, width=2),
+                             line=dict(color=REFERENCIA, width=2),
                              hovertemplate="%{x}: %{y:,.0f} m³<extra>real</extra>"))
     ajustados = [v for v in elegido.ajustados]
     fig.add_trace(go.Scatter(x=x_vent[:n_ent], y=ajustados, mode="lines", name=f"{METODOS[elegido.metodo]} (ajuste)",
@@ -613,7 +613,7 @@ def grafico_indices(indices) -> go.Figure:
         text=[f"{v:.2f}".replace(".", ",") for v in indices], textposition="outside",
         hovertemplate="%{x}: %{y:.3f}<extra>índice</extra>",
     ))
-    fig.add_hline(y=1.0, line_color=TINTA_AZULADA, line_width=1, line_dash="dash")
+    fig.add_hline(y=1.0, line_color=REFERENCIA, line_width=1, line_dash="dash")
     fig.update_layout(title="Cuánto pesa cada mes (índice estacional; la línea punteada = 1, un mes promedio)",
                       yaxis_title="índice",
                       showlegend=False, **_layout(height=340, hovermode="closest"))

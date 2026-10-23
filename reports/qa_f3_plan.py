@@ -34,7 +34,7 @@ with sync_playwright() as pw:
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=120000)
 
     # --- Menú: Arroyo Seco al 40 % y despachar según el plan
-    pagina.get_by_text("🚚 Abastecimiento").first.click()
+    pagina.get_by_text("Abastecimiento: de dónde").first.click()
     esperar()
     campo = pagina.get_by_role("spinbutton", name="Arroyo Seco puede despachar (% de los camiones)")
     campo.fill("40")

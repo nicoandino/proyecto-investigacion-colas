@@ -55,6 +55,9 @@ MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "aba
 
 #: Marca de una cara fuera de servicio en los carriles (evento EVT-05): no es un auto ni está libre.
 FUERA_DE_SERVICIO = object()
+#: Un surtidor de doble cara atiende dos carriles (12 caras = 6 surtidores, ESTACION); la falla de un surtidor
+#: (EVT-05) saca de servicio sus dos caras: las caras 2k y 2k+1 de cada zona son el mismo surtidor.
+CARAS_POR_SURTIDOR = 2
 
 
 @dataclass
@@ -323,7 +326,7 @@ class EstacionDeServicio:
     def _durante(self, i: int, mecanismo: str, fin: float, ev):
         """Aplica un mecanismo hasta `fin` y lo deshace (reservas con prioridad −1, como los turnos)."""
         reservas: list[tuple] = []          # (recurso, pedido)
-        carril = None
+        tachados: list[int] = []            # carriles tachados por la falla de un surtidor (EVT-05)
         self.eventos_vigentes.add(i)
         if mecanismo == "playero":
             reservas.append((self.playeros, self.playeros.request(priority=-1)))
@@ -346,18 +349,30 @@ class EstacionDeServicio:
         elif mecanismo == "avenida":
             self.avenidas.append(i)
         elif mecanismo == "cara":
+            # Se rompe un surtidor: sus DOS caras (un surtidor de doble cara atiende un carril de cada lado).
             grupo = ev.objetivo
+            por_surtidor = min(CARAS_POR_SURTIDOR, len(self.carriles[grupo]))
             if self.cola_recurso:
                 recurso = self.cola_recurso[grupo]
+                pedidos = [recurso.request(priority=-1) for _ in range(por_surtidor)]
+                reservas += [(recurso, x) for x in pedidos]
             else:
-                recurso = min(self.caras[grupo], key=lambda c: len(c.queue) + c.count)
-            pedido = recurso.request(priority=-1)
-            reservas.append((recurso, pedido))
-            resultado = yield pedido | self.env.timeout(max(0.0, fin - self.env.now))
-            if pedido in resultado:           # la cara se liberó: queda tachada hasta que llega el técnico
-                carril = self.carriles[grupo].index(None)
-                self.carriles[grupo][carril] = FUERA_DE_SERVICIO
-                self.caras_fuera[grupo] += 1
+                caras = self.caras[grupo]
+                pares = [caras[k:k + CARAS_POR_SURTIDOR] for k in range(0, len(caras), CARAS_POR_SURTIDOR)]
+                par = min(pares, key=lambda par: sum(len(c.queue) + c.count for c in par))
+                pedidos = [c.request(priority=-1) for c in par]
+                reservas += list(zip(par, pedidos))
+            yield self.env.all_of(pedidos) | self.env.timeout(max(0.0, fin - self.env.now))
+            if all(x.triggered for x in pedidos):   # las caras se liberaron: quedan tachadas hasta el técnico
+                carriles = self.carriles[grupo]
+                libres = [k for k, ocupante in enumerate(carriles) if ocupante is None]
+                pares_libres = [k for k in range(0, len(carriles) - 1, CARAS_POR_SURTIDOR)
+                                if carriles[k] is None and carriles[k + 1] is None]
+                tachados = ([pares_libres[0] + d for d in range(por_surtidor)] if pares_libres
+                            else libres[:por_surtidor])
+                for k in tachados:
+                    carriles[k] = FUERA_DE_SERVICIO
+                self.caras_fuera[grupo] += len(tachados)
         if fin > self.env.now:
             yield self.env.timeout(fin - self.env.now)
         for recurso, pedido in reservas:
@@ -379,9 +394,10 @@ class EstacionDeServicio:
             self.cupos.remove(i)
         elif mecanismo == "avenida":
             self.avenidas.remove(i)
-        elif mecanismo == "cara" and carril is not None:
-            self.carriles[ev.objetivo][carril] = None
-            self.caras_fuera[ev.objetivo] -= 1
+        elif mecanismo == "cara" and tachados:
+            for k in tachados:
+                self.carriles[ev.objetivo][k] = None
+            self.caras_fuera[ev.objetivo] -= len(tachados)
         self.eventos_vigentes.discard(i)
 
     # =========================================================================

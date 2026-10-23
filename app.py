@@ -10,6 +10,7 @@ Para ejecutar:
 
 from __future__ import annotations
 
+import html
 import time
 from dataclasses import replace
 from datetime import date
@@ -126,7 +127,7 @@ from ui.textos import (
 
 st.set_page_config(
     page_title="Simulador de Estación de Servicio",
-    page_icon="⛽",
+    page_icon=":material/local_gas_station:",
     layout="wide",
 )
 
@@ -183,8 +184,10 @@ def pestania_animacion(p: ParametrosSimulacion) -> None:
         f"{periodo.titulo + ' — ' + periodo.texto + '. ' if periodo else ''}"
         f"Se reproducen los {p.dias} días uno detrás de otro (por defecto, 5 segundos cada día); "
         f"la barra de abajo permite saltar a cualquier día. Cada auto tiene el color de su producto; "
-        f"cada cara tiene 3 lugares de cola. Un cuadro cada {dt:g} minutos simulados. Cuando se pide un camión o "
-        f"se corta el GNC, la reproducción se detiene y aparece un aviso (se puede apagar abajo)."
+        f"cada cara tiene 3 lugares de cola. Un cuadro cada {dt:g} minutos simulados. Cuando se pide un camión, "
+        f"se corta el GNC u ocurre un evento, la reproducción se detiene y aparece un aviso: el botón **Alertas** "
+        f"(abajo) elige cuáles. **Colas ilustrativas** (abajo, prendido) suma autos a la cola sólo para ver cómo se "
+        f"forman: con la demanda real casi nunca hay cola, y esos autos no salen de la simulación."
     )
     componentes.html(
         animacion.reproductor_html(
@@ -204,14 +207,12 @@ def tarjeta(columna, metrica: Metrica, resultado: ResultadoEscenario) -> None:
     valor = metrica.valor_mostrado(resumen.promedio)
     semi = metrica.valor_mostrado(resumen.semiamplitud)
 
-    columna.metric(
+    columna.markdown(vistas.cifra_html(
         metrica.etiqueta,
         f"{valor:,.{metrica.decimales}f} {metrica.unidad_mostrada}".strip(),
-        delta=f"± {semi:,.{metrica.decimales}f} (IC 95 %)",
-        delta_color="off",
-        help=metrica.ayuda,
-        border=True,
-    )
+        ayuda=metrica.ayuda,
+        debajo=f"± {semi:,.{metrica.decimales}f} (IC 95 %)",
+    ), unsafe_allow_html=True)
 
 
 # =============================================================================
@@ -246,7 +247,7 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
         f"Esta simulación fue **editada**, así que usa azar (semilla **{st.session_state.semilla_usada}**; con la "
         f"misma semilla da siempre lo mismo). Acá se explica cada cosa que se sorteó. En la simulación con "
         f"datos reales no se sortea nada y esta pestaña no existe.",
-        icon="🎲",
+        icon=":material/casino:",
     )
     st.markdown(
         "- **Cuándo llega cada cliente:** proceso de Poisson no homogéneo (tiempos exponenciales con la tasa de "
@@ -257,7 +258,7 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
         "- **Cuánto tarda cada camión:** triangular (24 · 36 · 48 h) más la demora de un corte de ruta, si hay.\n"
         "- **Las fechas de los cortes de GNC y cuántos clientes pasan a Súper.**"
         + ("\n- **Los eventos aleatorios** prendidos en el menú, con su propia semilla "
-           f"({p.eventos.semilla}): detalle en la pestaña ⚡ Eventos." if p.eventos.activos else "")
+           f"({p.eventos.semilla}): detalle en la pestaña Eventos." if p.eventos.activos else "")
     )
 
     st.markdown("##### De los litros por mes a los clientes por día")
@@ -268,14 +269,13 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
     litros_dia = p.litros_mes / dias_del_mes(mes_inicio)
     liquidos_dia = litros_dia / p.litros_medios_por_cliente
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Litros por mes", f"{p.litros_mes:,.0f} L", border=True)
-    c2.metric(f"Litros por día (mes {mes_inicio})", f"{litros_dia:,.0f} L", border=True)
-    c3.metric(
+    c1.markdown(vistas.cifra_html("Litros por mes", f"{p.litros_mes:,.0f} L"), unsafe_allow_html=True)
+    c2.markdown(vistas.cifra_html(f"Litros por día (mes {mes_inicio})", f"{litros_dia:,.0f} L"), unsafe_allow_html=True)
+    c3.markdown(vistas.cifra_html(
         "Clientes de nafta/diésel por día", f"{liquidos_dia:,.0f}",
-        help=f"÷ {p.litros_medios_por_cliente:.1f} L medios por cliente líquido (§14.2).",
-        border=True,
-    )
-    c4.metric("Con GNC (llegadas totales)", f"{p.autos_por_dia:,.0f}", border=True)
+        ayuda=f"÷ {p.litros_medios_por_cliente:.1f} L medios por cliente líquido (§14.2).",
+    ), unsafe_allow_html=True)
+    c4.markdown(vistas.cifra_html("Con GNC (llegadas totales)", f"{p.autos_por_dia:,.0f}"), unsafe_allow_html=True)
 
     pesos_llegada = p.pesos_llegada()
     st.markdown("##### Monte Carlo 1: ¿qué producto carga cada cliente?")
@@ -429,7 +429,7 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
         st.warning(
             f"En {', '.join(riesgosos)} el punto de pedido es menor que lo que se vende mientras viaja el "
             f"camión: ahí el quiebre es esperable con esta política.",
-            icon="⚠️",
+            icon=":material/warning:",
         )
 
     vistas.bloque_stock_seguridad(p)
@@ -452,7 +452,7 @@ def etiquetas_grilla() -> list[str]:
     """Nombre de cada punto de la grilla, en el orden de `grilla_politicas_real`."""
     return ["La cargada en esta corrida (INV-07 o la elegida en el menú)"] + [
         f"s = {s:g} · Q = {q:g} días de venta".replace(".", ",") for s in S_EN_DIAS for q in Q_EN_DIAS
-    ] + ["Por pronóstico: s con stock de seguridad (pestaña 📈 Pronóstico)"]
+    ] + ["Por pronóstico: s con stock de seguridad (pestaña Pronóstico)"]
 
 
 def puntos_de_busqueda(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
@@ -499,7 +499,7 @@ def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
             f"de {p.dias} días: ≈ {estimado:.0f} s. Se ve el avance, se puede detener y se corta sola "
             f"a los {TOPE_BUSQUEDA_S:.0f} s mostrando lo evaluado."
         )
-        if st.button("🔎 Buscar la mejor política de cada tanque", type="primary", key="btn_buscar_pol"):
+        if st.button("Buscar la mejor política de cada tanque", icon=":material/search:", type="primary", key="btn_buscar_pol"):
             st.session_state.busqueda = {
                 "p": p, "replicas": replicas, "semilla": st.session_state.semilla_usada,
                 "puntos": puntos_de_busqueda(p), "hechos": [], "inicio": time.time(),
@@ -510,7 +510,7 @@ def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         if busqueda is not None:
             _resultados_busqueda(p, busqueda)
         else:
-            st.info("Todavía no se buscó la mejor política.", icon="ℹ️")
+            st.info("Todavía no se buscó la mejor política.", icon=":material/info:")
         return
 
     # --- Corriendo: la barra y el botón Detener primero (quedan a la vista mientras se evalúa),
@@ -521,7 +521,7 @@ def _buscador_de_politicas(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
         text=f"Evaluando políticas: {len(hechos)} de {total} listas · {time.time() - busqueda['inicio']:.0f} s "
              f"(tope {TOPE_BUSQUEDA_S:.0f} s)",
     )
-    if st.button("⏹ Detener la búsqueda", key="btn_detener_pol"):
+    if st.button("Detener la búsqueda", icon=":material/stop_circle:", key="btn_detener_pol"):
         _cerrar_busqueda(p, eco, busqueda, "detenida")
     if len(hechos) < total:
         politicas = busqueda["puntos"][len(hechos)]
@@ -554,17 +554,17 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
     total = len(busqueda["puntos"])
     hechas = len(busqueda["hechos"])
     if not costos:
-        st.info("La búsqueda se detuvo antes de evaluar alguna política.", icon="⏹")
+        st.info("La búsqueda se detuvo antes de evaluar alguna política.", icon=":material/stop_circle:")
         return
     if busqueda["estado"] != "terminada":
         motivo = "la detuviste" if busqueda["estado"] == "detenida" else f"llegó al tope de {TOPE_BUSQUEDA_S:.0f} s"
         st.warning(
             f"Búsqueda **incompleta** ({motivo}): se evaluaron {hechas} de {total} políticas. "
             f"La ganadora es la mejor **entre esas**.",
-            icon="⏱",
+            icon=":material/timer:",
         )
     else:
-        st.success(f"Se evaluaron las {total} políticas en {busqueda['segundos']:.0f} s.", icon="✅")
+        st.success(f"Se evaluaron las {total} políticas en {busqueda['segundos']:.0f} s.", icon=":material/check_circle:")
 
     nombres = {pr.id: pr.nombre for pr in p.productos}
     etiquetas = etiquetas_grilla()
@@ -573,7 +573,7 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
     filas = []
     for k in range(hechas):
         filas.append({
-            "": "🏆 ganadora" if k == ganadora else "",
+            "": "ganadora" if k == ganadora else "",
             "N°": k + 1,
             "Política (igual en los 4 tanques)": etiquetas[k],
             "Camiones por mes": vistas.dec(sum(lista[k].pedidos_mes for lista in costos.values()), 1),
@@ -592,13 +592,12 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
 
     ahorros = ahorro_por_producto(costos)
     ahorro_total = sum(ahorros.values())
-    st.metric(
+    st.markdown(vistas.cifra_html(
         "Ahorro mensual de reponer mejor (los 4 tanques)",
         f"{pesos(ahorro_total)} /mes",
-        help="Costo de la política cargada − costo de la mejor de cada tanque, con los "
-             "márgenes y el flete de ECO-* (placeholders heredados).",
-        border=True,
-    )
+        ayuda="Costo de la política cargada − costo de la mejor de cada tanque, con los "
+              "márgenes y el flete de ECO-* (placeholders heredados).",
+    ), unsafe_allow_html=True)
     resumen = []
     mejores = {}
     for producto, lista in costos.items():
@@ -673,17 +672,17 @@ def pestania_sensibilidad(p: ParametrosSimulacion, eco: ParametrosEconomicos) ->
         f"episodios de GNC forzados adentro."
     )
     semilla = st.session_state.semilla_usada
-    if st.button("🌪️ Correr el tornado", type="primary", key="btn_tornado"):
+    if st.button("Correr el tornado", icon=":material/cyclone:", type="primary", key="btn_tornado"):
         with st.spinner(f"Simulando {n_sim} configuraciones × {replicas} réplicas…"):
             resultado = correr_sensibilidad_cacheado(p, eco, mes, replicas, semilla)
         st.session_state.sensibilidad = (p, eco, resultado)
     guardado = st.session_state.get("sensibilidad")
     if not guardado:
-        st.info("Apretá **Correr el tornado** para medirlo.", icon="▶")
+        st.info("Apretá **Correr el tornado** para medirlo.", icon=":material/play_arrow:")
     else:
         p_usado, eco_usado, res = guardado
         if p_usado != p or eco_usado != eco:
-            st.info("Cambiaste parámetros: lo que se ve es el último tornado.", icon="🔄")
+            st.info("Cambiaste parámetros: lo que se ve es el último tornado.", icon=":material/history:")
         etiquetas = {"Margen operativo ($/mes)": "margen", "Espera en la hora pico (min)": "espera",
                      "Nivel de servicio (puntos %)": "servicio"}
         elegida = st.radio("Métrica", list(etiquetas), horizontal=True, key="sen_metrica")
@@ -742,7 +741,7 @@ def pestania_sensibilidad(p: ParametrosSimulacion, eco: ParametrosEconomicos) ->
 def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
     st.subheader("Economía de la estación real")
     for aviso in avisos_economia(p, eco):
-        st.warning(escapar_pesos(aviso), icon="💰")
+        st.warning(escapar_pesos(aviso), icon=":material/payments:")
 
     base = st.session_state.resultados[0]
     lista = economia_de(base, eco)
@@ -750,14 +749,14 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     dias = lista[0].dias_mes
     st.markdown(f"##### Ingresos y costos de un mes de {dias} días")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Ingresos", escapar_pesos(pesos(res["ingreso_total"].promedio)))
-    c2.metric("Costos", escapar_pesos(pesos(res["costo_total"].promedio)))
+    c1.markdown(vistas.cifra_html("Ingresos", pesos(res["ingreso_total"].promedio)), unsafe_allow_html=True)
+    c2.markdown(vistas.cifra_html("Costos", pesos(res["costo_total"].promedio)), unsafe_allow_html=True)
     margen = res["margen_operativo"]
-    c3.metric("Margen operativo", escapar_pesos(pesos(margen.promedio)))
+    c3.markdown(vistas.cifra_html("Margen operativo", pesos(margen.promedio)), unsafe_allow_html=True)
     if len(lista) > 1:
         c3.caption(escapar_pesos(f"± {pesos(margen.semiamplitud)} (IC 95 %)"))
     equilibrio = margen_de_equilibrio_por_litro(lista[0], eco)
-    c4.metric("Margen por litro de equilibrio", escapar_pesos(f"${equilibrio:,.0f}/L"))
+    c4.markdown(vistas.cifra_html("Margen por litro de equilibrio", f"${equilibrio:,.0f} /L"), unsafe_allow_html=True)
     liquidos = [pr.id for pr in p.productos if not pr.es_gnc]
     usados = sorted({eco.margen_de(x) for x in liquidos})
     c4.caption(escapar_pesos(
@@ -773,7 +772,7 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
                 f"fuente). O el margen real es mayor, o la demanda real es mayor que los "
                 f"{p.litros_mes:,.0f} L/mes (C2): es lo primero que cierra el relevamiento."
             ),
-            icon="⚖️",
+            icon=":material/balance:",
         )
 
     ingresos = [(n, v) for n, v in (
@@ -832,7 +831,7 @@ def seccion_decision(eco: ParametrosEconomicos) -> None:
     comparacion = st.session_state.get("comparacion")
     if not comparacion:
         st.info("Corré los escenarios arriba y acá aparece lo que cada uno suma o resta al margen mensual.",
-                icon="🧪")
+                icon=":material/science:")
     else:
         _, mes_usado, resultados_cmp = comparacion
         conc = conclusiones_economia(resultados_cmp, eco)
@@ -907,12 +906,12 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
     if perdidos <= 0.005 * llegadas:
         st.success(
             f"La estación atiende **casi toda** la demanda del período: se perdieron {vistas.ent(perdidos)} de "
-            f"{vistas.ent(llegadas)} clientes ({vistas.pct(perdidos, llegadas)}).", icon="✅",
+            f"{vistas.ent(llegadas)} clientes ({vistas.pct(perdidos, llegadas)}).", icon=":material/check_circle:",
         )
     else:
         st.warning(
             f"Se perdieron **{vistas.ent(perdidos)} clientes** ({vistas.pct(perdidos, llegadas)}); la causa principal es "
-            f"**{principal[1]}** ({vistas.ent(principal[0])} clientes).", icon="🧭",
+            f"**{principal[1]}** ({vistas.ent(principal[0])} clientes).", icon=":material/explore:",
         )
 
     lineas = [
@@ -997,15 +996,15 @@ def pestania_modelo_real(p: ParametrosSimulacion) -> None:
         columnas = st.columns(3)
         for columna, n in zip(columnas, (1, 2, 3)):
             rho = p.rho_pico * max(p.playeros_por_turno) / n
-            columna.metric(
-                f"{n} playero{'s' if n > 1 else ''}", f"{rho:.2f}", border=True,
-                help="Misma demanda y mismo servicio; sólo cambia la dotación del pico.",
-            )
+            columna.markdown(vistas.cifra_html(
+                f"{n} playero{'s' if n > 1 else ''}", f"{rho:.2f}",
+                ayuda="Misma demanda y mismo servicio; sólo cambia la dotación del pico.",
+            ), unsafe_allow_html=True)
         if p.rho_pico >= 1:
             st.warning(
                 "Con la dotación actual ρ supera 1 en la hora pico: la zona se satura y "
                 "sólo la frena el abandono de clientes.",
-                icon="⚠️",
+                icon=":material/warning:",
             )
 
     st.divider()
@@ -1101,13 +1100,13 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     )
     st.markdown(f"**Ruta óptima:** {descripcion_ruta(red).split(' · ')[0]}")
     c2, c3 = st.columns(2)
-    c2.metric("Distancia", f"{optimo.km:,.1f} km".replace(",", "X").replace(".", ",").replace("X", "."), border=True)
-    c3.metric(
+    c2.markdown(vistas.cifra_html(
+        "Distancia", f"{optimo.km:,.1f} km".replace(",", "X").replace(".", ",").replace("X", ".")), unsafe_allow_html=True)
+    c3.markdown(vistas.cifra_html(
         f"Tiempo de viaje a {red.velocidad_kmh:.0f} km/h", f"{optimo.minutos / 60:.1f} h".replace(".", ","),
-        help="Es sólo el viaje: el plazo de entrega (24–48 h) incluye además el pedido, "
-             "la carga y la descarga.",
-        border=True,
-    )
+        ayuda="Es sólo el viaje: el plazo de entrega (24–48 h) incluye además el pedido, "
+              "la carga y la descarga.",
+    ), unsafe_allow_html=True)
 
     plazo_medio = p.inventario[0].plazo_entrega.media
     st.markdown("##### Las otras rutas posibles, de mejor a peor")
@@ -1197,7 +1196,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             st.success(
                 f"El corte {corte_activo.id} **no está en la ruta** desde "
                 f"{NOMBRE_NODO[red.origen]}: el viaje no se entera.",
-                icon="✅",
+                icon=":material/check_circle:",
             )
         else:
             alternativo = camino_mas_corto(red, cerrados=corte_activo.arcos)
@@ -1205,7 +1204,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
                 f"El corte {corte_activo.id} está en la ruta: el camión se demora "
                 f"{demora / 60:.1f} h (camino alternativo: {alternativo.km:,.1f} km, "
                 f"{alternativo.minutos / 60:.1f} h de viaje).",
-                icon="🚧",
+                icon=":material/construction:",
             )
 
     vistas.seccion_red_por_producto(p, st.session_state.resultados[0].replicas[0])
@@ -1218,7 +1217,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
         st.caption(
             "Esta corrida usa los datos reales: no hubo cortes de ruta ni camiones de otros orígenes, así que lo que le "
             "hace cada corte a cada origen no se muestra acá. Aparece si se edita la simulación o se prenden los "
-            "eventos de abastecimiento en el menú 🚚; el efecto de un corte sobre el plan del período se prueba abajo."
+            "eventos de abastecimiento en el menú Abastecimiento; el efecto de un corte sobre el plan del período se prueba abajo."
         )
         vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
         return
@@ -1244,7 +1243,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     st.markdown("##### Plazo de entrega con y sin cortes")
     if red.escenario_corte == "ninguno":
         st.info("Esta corrida no tiene un escenario de cortes de ruta: el efecto de cada corte sobre el plazo se ve en "
-                "la tabla de arriba y en el plan del período (abajo).", icon="🚧")
+                "la tabla de arriba y en el plan del período (abajo).", icon=":material/construction:")
     else:
         mes = 7
         sin_corte, con_corte = muestrear_plazos(
@@ -1274,10 +1273,10 @@ def pestania_red(p: ParametrosSimulacion) -> None:
         st.warning(
             "El horizonte de esta corrida no incluye jun–ago: no hay cortes sorteados y la "
             "comparación va a dar igual. Elegí el invierno en el menú principal.",
-            icon="📅",
+            icon=":material/calendar_month:",
         )
     replicas_red = st.slider("Réplicas", 1, 4, 2, 1, key="rep_red")
-    if st.button("🚧 Simular el efecto de los cortes", disabled=red.escenario_corte == "ninguno"):
+    if st.button("Simular el efecto de los cortes", icon=":material/construction:", disabled=red.escenario_corte == "ninguno"):
         with st.spinner("Simulando con y sin cortes…"):
             sin = correr_estacion_real_cacheado(
                 replace(p, red=replace(red, escenario_corte="ninguno")),
@@ -1337,7 +1336,7 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
         f"({caras_gnc / caras_total:.0%}) son de GNC y los clientes GNC son ≈ {p.pct_gnc:.0%} de las "
         f"llegadas, así que los {g.compresores} compresores están ocupados sólo el "
         f"{base.prom('util_compresores') * 100:.1f} % del tiempo: la capacidad de GNC sobra para esa demanda.",
-        icon="⚖️",
+        icon=":material/balance:",
     )
 
     # Calendario de episodios de la réplica 1
@@ -1346,13 +1345,13 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
     visibles = episodios_con_fechas(episodios, fecha0, p.dias)
     st.markdown("##### Episodios de corte de esta corrida")
     if g.contrato == "firme" or g.episodios == 0:
-        st.info("No hay cortes: contrato firme o 0 episodios.", icon="✅")
+        st.info("No hay cortes: contrato firme o 0 episodios.", icon=":material/check_circle:")
     elif not visibles:
         st.warning(
             "**No hay datos de cortes de GNC en este período:** no se realizaron cortes porque "
             "el período no incluye invierno (los cortes caen entre el 1/jun y el 31/ago). "
             "Para verlos, elegí un período que lo incluya (por ejemplo *Invierno* o el año completo).",
-            icon="📅",
+            icon=":material/calendar_month:",
         )
     else:
         for desde, hasta in visibles:
@@ -1387,7 +1386,7 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
     st.caption("Corre la estación con y sin cortes (contrato firme), con las mismas semillas.")
     replicas_gnc = st.slider("Réplicas", 1, 4, 2, 1, key="rep_gnc")
     deshabilitado = g.contrato == "firme" or g.episodios == 0
-    if st.button("🔥 Simular el efecto del corte de GNC", disabled=deshabilitado):
+    if st.button("Simular el efecto del corte de GNC", icon=":material/propane_tank:", disabled=deshabilitado):
         with st.spinner("Simulando con y sin cortes…"):
             sin = correr_estacion_real_cacheado(
                 replace(p, gnc=replace(g, contrato="firme")), replicas_gnc,
@@ -1500,17 +1499,17 @@ def pestania_comparar(p: ParametrosSimulacion) -> None:
                f"({n_corridas} escenarios × {replicas} réplicas). Queda en caché.")
 
     semilla = st.session_state.semilla_usada
-    if st.button("🧪 Correr los escenarios", type="primary", key="btn_comparar"):
+    if st.button("Correr los escenarios", icon=":material/science:", type="primary", key="btn_comparar"):
         with st.spinner(f"Simulando {n_corridas} escenarios × {replicas} réplicas…"):
             resultados = correr_catalogo_cacheado(p, mes, replicas, semilla, tuple(elegidos))
         st.session_state.comparacion = (p, mes, resultados)
     guardado = st.session_state.get("comparacion")
     if not guardado:
-        st.info("Elegí el mes y apretá **Correr los escenarios**.", icon="▶")
+        st.info("Elegí el mes y apretá **Correr los escenarios**.", icon=":material/play_arrow:")
         return
     p_usado, mes_usado, resultados = guardado
     if p_usado != p:
-        st.info("Cambiaste parámetros: lo que se ve es la última corrida.", icon="🔄")
+        st.info("Cambiaste parámetros: lo que se ve es la última corrida.", icon=":material/history:")
 
     st.markdown(f"##### Resultados en {MESES[mes_usado - 1]} (promedio ± IC 95 % de las réplicas)")
     st.dataframe(tabla_comparacion_catalogo(resultados), hide_index=True,
@@ -1572,7 +1571,7 @@ def pestania_estacion() -> None:
         "La pestaña **Animación** lo muestra funcionando."
     )
 
-    st.info(AVISO_FUENTES, icon="ℹ️")
+    st.info(AVISO_FUENTES, icon=":material/info:")
     st.caption(
         "Cuando dos fuentes no coincidían se eligió una con un criterio único (oficial antes que secundaria, "
         "más reciente, más local y, ante empate, la más conservadora). El valor elegido, su fuente y el "
@@ -1594,12 +1593,13 @@ def pestania_datos_fuentes() -> None:
     tabla = tabla_registro(con_alternativas=False)
     filtro_tipo = st.multiselect(
         "Filtrar por tipo", ["dato", "estimacion", "observacion", "supuesto", "heredado"],
+        placeholder="Todos los tipos",
     )
     vista = tabla if not filtro_tipo else tabla[tabla["Tipo"].isin(filtro_tipo)]
     st.dataframe(vista, hide_index=True, height=420)
 
     st.download_button(
-        "⬇️ Descargar el Registro completo (CSV)",
+        "Descargar el Registro completo (CSV)", icon=":material/download:",
         data=csv_registro(),
         file_name="registro_datos_shell_san_rafael.csv",
         mime="text/csv",
@@ -1675,7 +1675,7 @@ def menu_de_periodo() -> Periodo | None:
         hasta = c2.selectbox("Hasta", list(range(1, 13)), index=0, key="menu_hasta",
                              format_func=lambda m: MESES_PERIODO[m - 1].capitalize())
         if hasta < desde:
-            st.error("El mes final tiene que ser igual o posterior al inicial.", icon="📅")
+            st.error("El mes final tiene que ser igual o posterior al inicial.", icon=":material/calendar_month:")
         else:
             periodo = por_meses(int(desde), int(hasta))
     elif tipo == "Por estaciones":
@@ -1724,7 +1724,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
     previo = ajustes_actuales()
     margenes_previos = dict(previo.margenes)
 
-    with st.expander("💰 Economía: márgenes, flete, almacenamiento y sueldos"):
+    with st.expander("Economía: márgenes, flete, almacenamiento y sueldos", icon=":material/payments:"):
         st.caption(
             "Los márgenes, el flete y el almacenamiento son **heredados sin fuente** (del proyecto hipotético): "
             "muestran cómo se calcula, no son cifras del negocio. Los sueldos son la escala de FECRA de enero-2026 "
@@ -1767,7 +1767,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
                  f"estación). El básico sin adicionales es ${sueldos.alternativas[0][1][0]:,.0f}.".replace(",", "."),
         ))
 
-    with st.expander("🔥 GNC: cortes de invierno y clientes"):
+    with st.expander("GNC: cortes de invierno y clientes", icon=":material/propane_tank:"):
         opciones = {
             "habituales": "Sólo los cortes habituales (2 cortes de 6 días entre junio y agosto)",
             "todo_invierno": "Pueden ocurrir más cortes en todo el invierno (y un invierno más frío los alarga)",
@@ -1789,10 +1789,10 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
                  "como alternativas de sensibilidad.",
         ) / 100.0
 
-    with st.expander("📅 Calendario de demanda: verano, vacaciones de invierno y resto del invierno"):
+    with st.expander("Calendario de demanda: verano, vacaciones de invierno y resto del invierno", icon=":material/calendar_month:"):
         formas = {
             "calendario": "Calendario de temporadas (supuesto del grupo, DEM-14)",
-            "real": "Índices de la serie real de Shell Mendoza (pestaña 📈 Pronóstico, PRO-01)",
+            "real": "Índices de la serie real de Shell Mendoza (pestaña Pronóstico, PRO-01)",
             "neutra": "Neutra: todos los meses iguales",
         }
         actual = "real" if previo.indices_reales else ("calendario" if previo.calendario else "neutra")
@@ -1823,7 +1823,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             )
             factores.append((clave, round(1 + cambio / 100.0, 4)))
 
-    with st.expander("🚚 Abastecimiento: de dónde sale el camión"):
+    with st.expander("Abastecimiento: de dónde sale el camión", icon=":material/local_shipping:"):
         eventos = st.toggle(
             "Eventos aleatorios de abastecimiento", value=previo.eventos_abastecimiento, key="aj_eventos",
             help="Apagado: el camión sale siempre de Dock Sud por la ruta óptima.",
@@ -1842,7 +1842,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
             help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
         )
-        st.markdown("**Plan de abastecimiento (flujo de costo mínimo, pestaña 🗺️ Red y rutas)**")
+        st.markdown("**Plan de abastecimiento (flujo de costo mínimo, pestaña Red y rutas)**")
         topes_previos = dict(previo.topes_origen)
         t1, t2 = st.columns(2)
         tope_arroyo = t1.number_input(
@@ -1860,7 +1860,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         )
         politicas = {
             "conveniente": "La más conveniente: s = 2 días y Q = 4,5 días de venta (INV-13, por defecto)",
-            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña 📈 Pronóstico)",
+            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña Pronóstico)",
             "cargada": "La de INV-07: s = 1,5 días de venta",
         }
         politica = st.radio(
@@ -1872,7 +1872,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         )
         if len(no_disponibles) == len(opciones_origen):
             st.warning("Si ninguno está disponible, el pedido sale igual de Dock Sud con la demora de redirección.",
-                       icon="⚠️")
+                       icon=":material/warning:")
 
     elegidos, semilla_ev, frecuencia_ev = menu_de_eventos(previo, periodo)
 
@@ -1905,7 +1905,7 @@ def _marcar_eventos(prender: bool) -> None:
 
 def menu_de_eventos(previo: Ajustes, periodo: Periodo | None) -> tuple[tuple[str, ...], int, float]:
     """El desplegable de los eventos aleatorios (parte 4): casillas por grupo, frecuencia y semilla."""
-    with st.expander("⚡ Eventos aleatorios: cosas que le pueden pasar a la estación"):
+    with st.expander("Eventos aleatorios: cosas que le pueden pasar a la estación", icon=":material/bolt:"):
         st.caption(
             "Apagados por defecto. Los que prendas **se sortean con su propia semilla** (siempre los mismos con la "
             "misma semilla); el resto de la simulación sigue con los datos reales, sin azar. Frecuencias y "
@@ -1986,13 +1986,13 @@ def simular_escenario_unico(eu: EscenarioUnico) -> None:
 def pantalla_escenario_unico() -> None:
     """Sólo los datos del escenario elegido, en su franja, y una conclusión armada con esos resultados."""
     eu, periodo, p, eco, r, traza = st.session_state.escenario_unico
-    c1, c2 = st.columns([5, 1])
-    c1.title("🎯 Escenario único")
-    if c2.button("← Volver al menú", key="btn_volver_eu"):
+    c1, c2 = st.container(key="portada").columns([5, 1])
+    c1.title("Escenario único")
+    if c2.button("Volver al menú", icon=":material/arrow_back:", key="btn_volver_eu"):
         st.session_state.vista = "inicio"
         st.rerun()
     st.info(f"**{eu.titulo}** · {periodo.texto}. Datos del Registro, sin azar; se muestra sólo la franja elegida.",
-            icon="🎯")
+            icon=":material/filter_center_focus:")
 
     horas = eu.horas()
     dias = p.dias
@@ -2012,7 +2012,7 @@ def pantalla_escenario_unico() -> None:
         ("Espera promedio", f"{vistas_dec(espera)} min", "de los atendidos en la franja"),
         ("Clientes perdidos", vistas_ent(perdidos / dias), f"por día en la franja ({vistas_ent(perdidos)} en la semana)"),
     )):
-        col.metric(titulo, valor_, border=True)
+        col.markdown(vistas.cifra_html(titulo, valor_), unsafe_allow_html=True)
         col.caption(nota)
 
     st.markdown("##### Hora por hora (promedio de los 7 días)")
@@ -2031,17 +2031,17 @@ def pantalla_escenario_unico() -> None:
     if rho >= 1.0 or perdidos > 0.05 * max(llegadas, 1):
         st.error(
             f"Con {eu.playeros} playero{'s' if eu.playeros != 1 else ''} la franja **no alcanza**: ρ = {vistas_dec(rho, 2)} "
-            f"y se va sin cargar el {vistas.pct(perdidos, llegadas)} de los que llegan en esas horas.", icon="🚗",
+            f"y se va sin cargar el {vistas.pct(perdidos, llegadas)} de los que llegan en esas horas.", icon=":material/directions_car:",
         )
     elif rho >= 0.85 or espera > 3.0:
         st.warning(
             f"La franja está **al límite**: ρ = {vistas_dec(rho, 2)} y la espera promedio es {vistas_dec(espera)} min; "
-            f"cualquier aumento de clientes la satura.", icon="⚠️",
+            f"cualquier aumento de clientes la satura.", icon=":material/warning:",
         )
     else:
         st.success(
             f"La franja **alcanza con margen**: ρ = {vistas_dec(rho, 2)}, espera de {vistas_dec(espera)} min y "
-            f"{vistas_ent(perdidos)} clientes perdidos en la semana.", icon="✅",
+            f"{vistas_ent(perdidos)} clientes perdidos en la semana.", icon=":material/check_circle:",
         )
     t = dict(r.totales)
     extras = []
@@ -2072,19 +2072,20 @@ def pantalla_informe() -> None:
     p = replace(p, animar_todo=False)
     if "semilla_usada" not in st.session_state:
         st.session_state.semilla_usada = 1
-    c1, c2 = st.columns([5, 1])
-    c1.title("📑 Caso de informe")
-    if c2.button("← Volver al menú", key="btn_volver_informe"):
+    c1, c2 = st.container(key="portada").columns([5, 1])
+    c1.title("Caso de informe")
+    if c2.button("Volver al menú", icon=":material/arrow_back:", key="btn_volver_informe"):
         st.session_state.vista = "inicio"
         st.rerun()
     st.info(
         f"Período: **{periodo.titulo}** — {periodo.texto} (el elegido en el menú). La búsqueda de la mejor política usa "
         f"los datos reales (sin azar); el catálogo y el tornado usan **azar con réplicas**, porque comparan escenarios "
-        f"con diferencias pareadas e intervalos de confianza.", icon="📑",
+        f"con diferencias pareadas e intervalos de confianza.", icon=":material/description:",
     )
     p_azar = replace(p, determinista=False)
-    t1, t2, t3 = st.tabs(["🔎 Mejor política de reposición", "⚖️ Escenarios S0–S12 y decisión en $/mes",
-                          "🌪️ Sensibilidad (tornado)"])
+    t1, t2, t3 = st.tabs([":material/search: Mejor política de reposición",
+                          ":material/balance: Escenarios S0–S12 y decisión en $/mes",
+                          ":material/cyclone: Sensibilidad (tornado)"])
     with t1:
         seccion_mejor_politica(p, eco)
     with t2:
@@ -2098,8 +2099,9 @@ def pantalla_informe() -> None:
 
 
 def pantalla_inicio() -> None:
-    st.title("⛽ Simulador de la Estación Shell — San Rafael")
-    st.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
+    portada = st.container(key="portada_menu")         # la foto de la playa, sólo en el menú
+    portada.title("Simulador de la Estación Shell — San Rafael")
+    portada.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
     st.subheader("¿Qué querés simular?")
     st.markdown(
         "Se simula con los **datos reales del Registro**: no hay azar, así que siempre da el "
@@ -2108,7 +2110,7 @@ def pantalla_inicio() -> None:
     )
     periodo = menu_de_periodo()
     if periodo is not None:
-        st.success(f"**{periodo.titulo}** — {periodo.texto}", icon="📅")
+        st.success(f"**{periodo.titulo}** — {periodo.texto}", icon=":material/calendar_month:")
 
     st.markdown("##### Ajustes (opcionales; arrancan con los valores del Registro)")
     ajustes = menu_de_ajustes(periodo)
@@ -2119,11 +2121,11 @@ def pantalla_inicio() -> None:
                 "Incluye invierno: se aplican los **cortes de GNC** (sin azar, fechas fijas): "
                 + " · ".join(f"{texto_fecha(a)} al {texto_fecha(b)} ({(b - a).days + 1} días)" for a, b in cortes)
                 + ".",
-                icon="🔥",
+                icon=":material/propane_tank:",
             )
     elif periodo is not None:
         st.caption("No incluye invierno: no hay cortes de GNC en este período.")
-    if st.button("▶ Simular con datos reales", type="primary", disabled=periodo is None):
+    if st.button("Simular con datos reales", icon=":material/play_arrow:", type="primary", disabled=periodo is None):
         st.session_state.ajustes = ajustes
         simular_periodo(periodo)
         st.rerun()
@@ -2135,7 +2137,7 @@ def pantalla_inicio() -> None:
         "qué temporada y con cuánta clientela. Usa los datos del Registro y los ajustes de arriba, sin azar."
     )
     eu = menu_escenario_unico()
-    if st.button("🎯 Simular el escenario único", key="btn_escenario_unico"):
+    if st.button("Simular el escenario único", icon=":material/filter_center_focus:", key="btn_escenario_unico"):
         st.session_state.ajustes = ajustes
         simular_escenario_unico(eu)
         st.rerun()
@@ -2146,7 +2148,7 @@ def pantalla_inicio() -> None:
         "El análisis completo para el informe, fuera del flujo normal (tarda más): la búsqueda de la mejor política de "
         "reposición, el catálogo de escenarios S0–S12 con su decisión en $/mes y el tornado de sensibilidad."
     )
-    if st.button("📑 Abrir el caso de informe", key="btn_informe"):
+    if st.button("Abrir el caso de informe", icon=":material/description:", key="btn_informe"):
         st.session_state.ajustes = ajustes
         st.session_state.periodo_informe = periodo
         st.session_state.vista = "informe"
@@ -2160,7 +2162,7 @@ def pantalla_editar() -> None:
     periodo: Periodo = st.session_state.periodo
     base = ParametrosSimulacion()
     previa: Edicion = st.session_state.get("edicion") or Edicion()
-    st.title("✏️ Editar simulación")
+    st.container(key="portada").title("Editar simulación")
     st.markdown(
         f"Período: **{periodo.titulo}** — {periodo.texto}. Lo que cambies acá **ya no son datos "
         f"reales**: la simulación usa azar (Monte Carlo) y aparece una pestaña que explica qué se "
@@ -2212,7 +2214,7 @@ def pantalla_editar() -> None:
     edicion = Edicion(playeros=playeros, nivel_demanda=nivel, doble_pico=bool(doble),
                       pct_gnc=pct_gnc, precios=precios, semilla=semilla)
     b1, b2 = st.columns([1, 1])
-    if b1.button("▶ Simular editada", type="primary"):
+    if b1.button("Simular editada", icon=":material/play_arrow:", type="primary"):
         simular_periodo(periodo, edicion)
         st.rerun()
     if b2.button("Cancelar"):
@@ -2230,9 +2232,15 @@ def valor_registro_precios() -> tuple:
 def encabezado_resultados() -> None:
     periodo: Periodo = st.session_state.periodo
     editada = st.session_state.get("modo") == "editada"
-    c1, c2 = st.columns([5, 1])
-    c1.title("⛽ Simulador de la Estación Shell — San Rafael")
-    if c2.button("← Cambiar período", key="btn_cambiar_periodo"):
+    c1, c2 = st.container(key="portada").columns([4, 1], vertical_alignment="bottom")
+    c1.title("Simulador de la Estación Shell — San Rafael")
+    c1.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
+    c2.markdown(
+        f"<div class='tot-periodo'>{html.escape(periodo.titulo)}<span>{'editada, con azar' if editada else 'datos reales, sin azar'}"
+        f"</span></div>",
+        unsafe_allow_html=True,
+    )
+    if c2.button("Cambiar período", icon=":material/arrow_back:", key="btn_cambiar_periodo", width="stretch"):
         st.session_state.vista = "inicio"
         st.rerun()
     if editada:
@@ -2240,13 +2248,13 @@ def encabezado_resultados() -> None:
             f"**Simulación EDITADA (con azar)** · {periodo.titulo} — {periodo.texto}. No son datos "
             f"reales: playeros, demanda, GNC o precios fueron cambiados y los sorteos usan la "
             f"semilla {st.session_state.semilla_usada}.",
-            icon="✏️",
+            icon=":material/edit:",
         )
     else:
         st.success(
             f"**Simulación con datos reales (sin azar)** · {periodo.titulo} — {periodo.texto}. "
             f"Siempre da el mismo resultado.",
-            icon="✅",
+            icon=":material/check_circle:",
         )
     cambios = ajustes_actuales().cambios()
     if cambios:
@@ -2256,8 +2264,8 @@ def encabezado_resultados() -> None:
         ocurridos = st.session_state.resultados[0].replicas[0].eventos
         st.info(
             f"**Con eventos aleatorios:** ocurrieron {len(ocurridos)} (semilla {p_corrida.eventos.semilla}; con la "
-            f"misma semilla, los mismos). Detalle en la pestaña **⚡ Eventos**; en la animación cada uno es un aviso.",
-            icon="⚡",
+            f"misma semilla, los mismos). Detalle en la pestaña **Eventos**; en la animación cada uno es un aviso.",
+            icon=":material/bolt:",
         )
 
 
@@ -2265,13 +2273,22 @@ def pie_de_resultados() -> None:
     st.divider()
     st.markdown("#### ¿Querés probar otra cosa?")
     c1, c2, _ = st.columns([1, 1, 2])
-    if c1.button("✏️ Editar simulación", key="btn_editar", type="primary"):
+    if c1.button("Editar simulación", icon=":material/edit:", key="btn_editar", type="primary"):
         st.session_state.vista = "editar"
         st.rerun()
-    if st.session_state.get("modo") == "editada" and c2.button("↩ Volver a los datos reales", key="btn_volver_real"):
+    if st.session_state.get("modo") == "editada" and c2.button("Volver a los datos reales", icon=":material/undo:", key="btn_volver_real"):
         simular_periodo(st.session_state.periodo)
         st.rerun()
     st.caption(PIE_NO_AFILIADO)
+
+
+#: Ícono de línea (Material Symbols) de cada pestaña de resultados.
+ICONOS_PESTANIAS = {
+    "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring",
+    "Eventos": "bolt", "Demanda": "directions_car", "Pronóstico": "trending_up", "Qué se sorteó": "casino",
+    "Inventario": "oil_barrel", "Red y rutas": "route", "GNC": "propane_tank", "Economía": "payments",
+    "Conclusión": "summarize", "Modelo y método": "account_tree", "Datos y fuentes": "database",
+}
 
 
 #: La ayuda "?" de Streamlit se abre al pasar el mouse **y** mientras el botón tiene el foco. Un clic con el
@@ -2324,49 +2341,50 @@ def main() -> None:
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
-        "🏪 La estación", "🎬 Animación", "📊 Indicadores", "🎲 Demanda", "📈 Pronóstico", "🛢️ Inventario",
-        "🗺️ Red y rutas", "🔥 GNC", "💰 Economía", "📝 Conclusión",
-        "📖 Modelo y método", "📚 Datos y fuentes",
+        "La estación", "Animación", "Indicadores", "Demanda", "Pronóstico", "Inventario",
+        "Red y rutas", "GNC", "Economía", "Conclusión",
+        "Modelo y método", "Datos y fuentes",
     ]
     con_eventos = bool(p_corrida.eventos.activos)
     if con_eventos:
-        nombres_tabs.insert(3, "⚡ Eventos")            # sólo si se prendieron eventos aleatorios en el menú
+        nombres_tabs.insert(3, "Eventos")            # sólo si se prendieron eventos aleatorios en el menú
     if editada:
-        nombres_tabs.insert(nombres_tabs.index("🛢️ Inventario"), "🎲 Qué se sorteó")   # sólo si se editó
-    pestanias = dict(zip(nombres_tabs, st.tabs(nombres_tabs)))
+        nombres_tabs.insert(nombres_tabs.index("Inventario"), "Qué se sorteó")   # sólo si se editó
+    etiquetas = [f":material/{ICONOS_PESTANIAS[n]}: {n}" for n in nombres_tabs]
+    pestanias = dict(zip(nombres_tabs, st.tabs(etiquetas)))
     resultado = st.session_state.resultados[0]
-    with pestanias["🏪 La estación"]:
+    with pestanias["La estación"]:
         pestania_estacion()
-    with pestanias["🎬 Animación"]:
+    with pestanias["Animación"]:
         pestania_animacion(p_corrida)
-    with pestanias["📊 Indicadores"]:
+    with pestanias["Indicadores"]:
         vistas.pestania_indicadores(
             p_corrida, resultado, st.session_state.traza, st.session_state.periodo,
             st.session_state.modo,
         )
     if con_eventos:
-        with pestanias["⚡ Eventos"]:
+        with pestanias["Eventos"]:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)
-    with pestanias["🎲 Demanda"]:
+    with pestanias["Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
-    with pestanias["📈 Pronóstico"]:
+    with pestanias["Pronóstico"]:
         vistas.pestania_pronostico(p_corrida)
     if editada:
-        with pestanias["🎲 Qué se sorteó"]:
+        with pestanias["Qué se sorteó"]:
             pestania_sorteos(p_corrida)
-    with pestanias["🛢️ Inventario"]:
+    with pestanias["Inventario"]:
         pestania_inventario(p_corrida, st.session_state.parametros_eco)
-    with pestanias["🗺️ Red y rutas"]:
+    with pestanias["Red y rutas"]:
         pestania_red(p_corrida)
-    with pestanias["🔥 GNC"]:
+    with pestanias["GNC"]:
         pestania_gnc(p_corrida)
-    with pestanias["💰 Economía"]:
+    with pestanias["Economía"]:
         pestania_economia_real(p_corrida, st.session_state.parametros_eco)
-    with pestanias["📝 Conclusión"]:
+    with pestanias["Conclusión"]:
         pestania_conclusion()
-    with pestanias["📖 Modelo y método"]:
+    with pestanias["Modelo y método"]:
         pestania_modelo(p_corrida)
-    with pestanias["📚 Datos y fuentes"]:
+    with pestanias["Datos y fuentes"]:
         pestania_datos_fuentes()
 
     pie_de_resultados()

@@ -92,6 +92,7 @@ from sim.runner import (
     PuntoBarrido,
     ResultadoBarridoReal,
     ResultadoEscenario,
+    ResultadoReplica,
     buscar,
     con_politicas,
     correr_estacion_real,
@@ -159,6 +160,20 @@ def correr_sensibilidad_cacheado(
 @st.cache_data(show_spinner=False, max_entries=8)
 def correr_traza_cacheada(p: ParametrosSimulacion, semilla: int):
     return correr_replica(p, semilla=semilla, con_traza=True)[1]
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def correr_anio_cacheado(p: ParametrosSimulacion, semilla: int) -> ResultadoReplica:
+    """El año completo con los mismos parámetros (pestaña Pronóstico), sin traza: ≈ 5 s."""
+    return correr_replica(con_periodo(p, anio_completo()), semilla=semilla)[0]
+
+
+def resultado_del_anio(p: ParametrosSimulacion, resultado: ResultadoEscenario) -> ResultadoReplica:
+    """La réplica del año: la de esta corrida si ya era el año completo; si no, se simula aparte (con caché)."""
+    if st.session_state.periodo.tipo == "anio":
+        return resultado.replicas[0]
+    with st.spinner("Simulando el año completo para el pronóstico (≈ 5 s)…"):
+        return correr_anio_cacheado(p, st.session_state.get("semilla_usada", 1))
 
 
 # =============================================================================
@@ -452,7 +467,7 @@ def etiquetas_grilla() -> list[str]:
     """Nombre de cada punto de la grilla, en el orden de `grilla_politicas_real`."""
     return ["La cargada en esta corrida (INV-07 o la elegida en el menú)"] + [
         f"s = {s:g} · Q = {q:g} días de venta".replace(".", ",") for s in S_EN_DIAS for q in Q_EN_DIAS
-    ] + ["Por pronóstico: s con stock de seguridad (pestaña Pronóstico)"]
+    ] + ["Por pronóstico: s con stock de seguridad (pestaña Inventario)"]
 
 
 def puntos_de_busqueda(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
@@ -798,6 +813,8 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
             f"{km_por_viaje(p):,.0f} km de ida y vuelta desde el origen elegido."
         )
     )
+
+    vistas.seccion_precio_futuro(eco)
 
     vistas.tabla_verificable_supuesto(p, base.replicas[0], eco)
 
@@ -1841,7 +1858,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         )
         politicas = {
             "conveniente": "La más conveniente: s = 2 días y Q = 4,5 días de venta (INV-13, por defecto)",
-            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña Pronóstico)",
+            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña Inventario)",
             "cargada": "La de INV-07: s = 1,5 días de venta",
         }
         politica = st.radio(
@@ -2347,7 +2364,7 @@ def main() -> None:
     with pestanias["Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
     with pestanias["Pronóstico"]:
-        vistas.pestania_pronostico(p_corrida)
+        vistas.pestania_pronostico(p_corrida, resultado_del_anio(p_corrida, resultado), st.session_state.parametros_eco)
     if editada:
         with pestanias["Qué se sorteó"]:
             pestania_sorteos(p_corrida)

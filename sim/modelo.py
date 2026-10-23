@@ -38,7 +38,7 @@ homogéneo.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import date, timedelta
 
 import simpy
 
@@ -513,9 +513,15 @@ class EstacionDeServicio:
 
             antes = _foto(self.ind.c_total)
             antes_gnc = self._conteo_gnc()
+            antes_vendido = self._vendido_por_producto()
             yield self.env.timeout(MINUTOS_POR_DIA)
             despues = _foto(self.ind.c_total)
             despues_gnc = self._conteo_gnc()
+            despues_vendido = self._vendido_por_producto()
+            self.ind.registrar_dia_del_mes(
+                date(ANO_REFERENCIA, *self.p.fecha_inicio) + timedelta(days=dia - 1), self.autos_llegados_hoy,
+                {pr: despues_vendido[pr] - antes_vendido[pr] for pr in despues_vendido},
+            )
             minutos_corte = (
                 minutos_de_corte_en_dia(self.intervalos_gnc, dia - 1) if self.es_real else 0.0
             )
@@ -582,6 +588,10 @@ class EstacionDeServicio:
         for i in self.avenidas:
             self.extra_evento[i] += 1
         return True
+
+    def _vendido_por_producto(self) -> dict[str, float]:
+        """Litros (m³ el GNC) vendidos de cada producto, acumulados desde el inicio."""
+        return {pr: c.litros_vendidos for pr, c in self.ind.c_producto_total.items()}
 
     def _conteo_gnc(self) -> tuple[int, int, int]:
         """(atendidos GNC, migrados a nafta, perdidos por el corte), acumulados."""

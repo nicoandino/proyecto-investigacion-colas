@@ -324,6 +324,8 @@ class Indicadores:
         self.c_producto_total = {pr: ContadoresProducto() for pr in ids_productos}
 
         self.por_hora = PorHora()
+        # Por mes de calendario, calentamiento incluido (pestaña Pronóstico): (año, mes) → [llegadas, {producto: vendido}]
+        self.por_mes: dict[tuple[int, int], list] = {}
         # Sin días de calentamiento no hay transitorio que descartar: se mide desde el inicio.
         self.calentamiento_terminado = p.dias_calentamiento == 0
 
@@ -354,6 +356,13 @@ class Indicadores:
         """Incrementa un contador de grupo, en el medido y en el total."""
         for contadores in (self.c_grupo[grupo], self.c_grupo_total[grupo]):
             setattr(contadores, nombre, getattr(contadores, nombre) + cantidad)
+
+    def registrar_dia_del_mes(self, fecha, llegadas: int, vendido: dict[str, float]) -> None:
+        """Suma un día cerrado a su mes de calendario (no se reinicia con el calentamiento)."""
+        fila = self.por_mes.setdefault((fecha.year, fecha.month), [0, {}])
+        fila[0] += llegadas
+        for producto, cantidad in vendido.items():
+            fila[1][producto] = fila[1].get(producto, 0.0) + cantidad
 
     def contar_producto(self, producto: str, nombre: str, cantidad: float = 1) -> None:
         """Incrementa un contador de producto, en el medido y en el total."""

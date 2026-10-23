@@ -57,6 +57,8 @@ Los controles cubren las dos partes del modelo:
   REDISEÑO v3 (ORQUESTADOR.md)
    47. Etapa 6: el desglose de Economía (cantidad de la simulación × precio del Registro) suma los
        ingresos y costos del mes.
+   49. Fórmulas de colas (M/M/1, M/M/s, costos) y la tabla de errores del pronóstico contra la cátedra;
+       la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
    46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
        barata de las 14 candidatas en el año completo con datos reales.
@@ -2381,6 +2383,42 @@ def main() -> int:
         and all(len(x) == 2 and x[0] % 2 == 0 and x[1] == x[0] + 1 for x in tachados48),
         "Cada falla de surtidor tacha las dos caras del mismo surtidor (2k y 2k+1), nunca una sola",
         f"enero ×5: {len(r48.eventos)} fallas · {len(tachados48)} cuadros con un surtidor tachado",
+    )
+
+    # ------------------------------------------------------------------ 49
+    separador("49. Fórmulas de colas y la tabla de errores del pronóstico, contra la cátedra (23/10/2026)")
+    from sim.colas import costo_total, mms
+    from sim import pronostico as pr49
+
+    banco = mms(8, 10)
+    nacion3, nacion4 = mms(30, 12, 3), mms(30, 12, 4)
+    taxi = {s: costo_total(s, 24, 100 / 24, mms(1 / 12, 1 / 21, s).l) for s in (2, 3)}
+    controlar(
+        abs(banco.wq - 0.4) < 1e-9 and abs(banco.l - 4) < 1e-9 and abs(banco.lq - 3.2) < 1e-9
+        and abs(60 * nacion3.wq - 7.02) < 0.01 and abs(60 * nacion4.wq - 1.07) < 0.01
+        and round(taxi[2], 2) == 79.11 and round(taxi[3], 2) == 81.24,
+        "M/M/1 y M/M/s como en la práctica: banco (Wq = 0,4 h, L = 4), Banco Nación (≈ 7 min con 3 cajeros, ≈ 1 con 4) "
+        "y NY Taxi (2 mecánicos $79,11/h < 3 mecánicos $81,24/h)",
+        f"Banco Nación: Wq {60 * nacion3.wq:.2f} / {60 * nacion4.wq:.2f} min · NY Taxi {taxi[2]:.2f} vs {taxi[3]:.2f}",
+    )
+    reales49 = [1704, 1712, 1752, 1764, 1805, 1835, 1831, 1866, 1884, 1930, 1919, 1951]
+    pron49 = [1702, 1725, 1749, 1772, 1795, 1818, 1841, 1864, 1887, 1910, 1933, 1956]
+    comp49 = pr49.comparar([(2025, m) for m in range(1, 13)], pron49, reales49)
+    infl49 = pr49.inflacion_real()
+    minimo49, maximo49, _ = _valor("PRO-05")
+    anio49, _ = correr_replica(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 3)), semilla=1)
+    controlar(
+        abs(comp49.mae - 8.92) < 0.01 and abs(comp49.rmse - 10.68) < 0.01
+        and abs(comp49.mae - pr49.errores(reales49, pron49).mae) < 1e-9
+        and pr49.inflacion_real() == infl49 and all(minimo49 <= i <= maximo49 for i in infl49)
+        and abs(pr49.factores_de_precio([0.02, 0.03])[-1] - 1.02 * 1.03) < 1e-12
+        and [m for _, m, _, _ in anio49.por_mes] == [1, 2, 3]
+        and sum(n for _, _, n, _ in anio49.por_mes) == sum(x.autos_llegados for x in correr_replica(
+            con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 3)), semilla=1, con_traza=True)[1].dias),
+        "Ejercicio 1 del parcial (Cable Televisora): MAE = 8,92 y RMSE = 10,68; la inflación sorteada queda en el rango "
+        "de PRO-05 y siempre es la misma; los clientes por mes suman los del día a día",
+        f"MAE {comp49.mae:.2f} · MAPE {100 * comp49.mape:.2f} % · RMSE {comp49.rmse:.2f} · inflación "
+        + " ".join(f"{100 * i:.1f}" for i in infl49),
     )
 
     # ------------------------------------------------------------------

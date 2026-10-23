@@ -1054,6 +1054,13 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "E", "supuesto", "sin_dato", "grupo (14/10/2026): valores típicos de la cátedra", "grupo", "", (),
                     "promedio móvil de 3 meses; suavizado exponencial simple con α = 0,3", None, None),
           (3, 0.3)),
+        ("PRO-05", ("Inflación mensual de los precios: mínimo, máximo y semilla del sorteo", "fracción por mes · semilla",
+                    "E", "supuesto", "sin_dato", "grupo (23/10/2026, pedido de Nico): la inflación de cada mes varía entre "
+                    "1,9 % y 2,9 %", "grupo", "", (),
+                    "pestaña Pronóstico y Economía: el precio 'real' de cada mes sube con una inflación sorteada entre "
+                    "el mínimo y el máximo (redondeada a 0,1 %); el pronóstico usa el punto medio (2,4 %) todos los "
+                    "meses. El margen en $/L sube en la misma proporción que el precio", None, None),
+          (0.019, 0.029, 2026)),
     ]
 )
 

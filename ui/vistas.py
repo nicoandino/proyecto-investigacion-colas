@@ -347,6 +347,7 @@ def pestania_indicadores(
             "Espera = minutos entre que el auto llega y empieza a ser atendido, promediada sobre todos los clientes.",
             "La hora pico es la hora del día con mayor espera promedio; las barras son los clientes por hora.",
         ])
+        seccion_formulas_colas(p, r, traza, modo)
 
     elif seccion == "Clientes":
         st.markdown("##### Qué pasó con los clientes")
@@ -663,7 +664,6 @@ def pestania_demanda(
     if not p.calendario_demanda:
         tabla = tabla.drop(columns=["Temporada"])
     st.dataframe(tabla, hide_index=True, height=min(36 * len(filas) + 3, 420))
-    st.plotly_chart(graficos.grafico_demanda_diaria(SimpleNamespace(dias=dias_vista)), key="g_dem_dias")
     st.caption(
         f"Verificación: la suma de 'Llegaron' en los días elegidos es {ent(sum(x.autos_llegados for x in dias_vista))}; "
         f"en todo el período, {ent(sum(x.autos_llegados for x in traza.dias))} = los {ent(t['llegadas'])} de los "
@@ -782,80 +782,301 @@ def _valor_registro(id_: str):
 # =============================================================================
 # Pronóstico (parte 3): la serie real de Shell en Mendoza y los métodos de la cátedra
 # =============================================================================
-def pestania_pronostico(p: ParametrosSimulacion) -> None:
-    """La pestaña Pronóstico: la serie real, los métodos, el elegido y cómo entra al simulador."""
-    from sim.datos import valor
-    from sim.pronostico import METODOS, analizar, serie_registro
+def _mes_corto(mes: tuple[int, int]) -> str:
+    return MESES_ES[mes[1] - 1].capitalize()
 
-    analisis = analizar()
-    meses_todos, valores_todos = serie_registro()
-    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
-    st.subheader("Pronóstico de la demanda con la serie real")
-    st.info(
-        "La serie es **real y oficial**: las ventas mensuales **al público de Shell en Mendoza** (Súper, V-Power, "
-        "gasoil G2 y G3), declaradas a la Secretaría de Energía (datos abiertos, PRO-01). **No hay datos por "
-        "estación**: es la suma de todas las Shell de la provincia, así que el simulador usa su **forma** (cuánto "
-        "pesa cada mes) y la escala a los litros de esta estación (DEM-01).",
-        icon=":material/trending_up:",
-    )
-    primero, n_prueba = valor("PRO-02")
+
+def _tabla_de_errores(comp, fmt, unidad: str) -> None:
+    """La tabla del parcial: Mes | Pronóstico | Real | Error | Error ÷ real | Error², con Σ y el promedio abajo."""
+    filas = [{
+        "Mes": _mes_corto(x.mes),
+        "Pronóstico": fmt(x.pronostico),
+        "Real": fmt(x.real),
+        "Error |P − R|": fmt(x.error),
+        "Error ÷ real": f"{dec(100 * x.error_relativo, 2)} %",
+        "Error²": _num(x.error_cuadrado),
+    } for x in comp.filas]
+    n = len(comp.filas)
+    filas.append({"Mes": "Suma", "Pronóstico": "", "Real": "", "Error |P − R|": fmt(comp.mae * n),
+                  "Error ÷ real": f"{dec(100 * comp.mape * n, 2)} %", "Error²": _num(comp.mse * n)})
+    filas.append({"Mes": f"Suma ÷ {n}", "Pronóstico": "", "Real": "", "Error |P − R|": f"MAE = {fmt(comp.mae)}",
+                  "Error ÷ real": f"MAPE = {dec(100 * comp.mape, 2)} %", "Error²": f"MSE = {_num(comp.mse)}"})
+    st.dataframe(pd.DataFrame(filas), hide_index=True, height=36 * (len(filas) + 1) + 3)
     _tarjetas([
-        ("Método elegido", METODOS[analisis.elegido].split(" (")[0], "el de menor RMSE en los meses de prueba"),
-        ("Error en la prueba (MAPE)", f"{dec(100 * elegido.errores.mape)} %", f"RMSE {ent(elegido.errores.rmse)} m³"),
-        ("Tendencia", f"{dec(100 * analisis.tendencia_mensual, 2)} % por mes",
-         "la recta de la serie desestacionalizada ÷ el nivel medio"),
+        ("MAE", f"{fmt(comp.mae)} {unidad}".strip(), "error absoluto medio: Σ|P − R| ÷ n"),
+        ("MAPE", f"{dec(100 * comp.mape, 2)} %", "error porcentual medio: Σ(|P − R| ÷ R) ÷ n × 100"),
+        ("RMSE", f"{fmt(comp.rmse)} {unidad}".strip(), f"√MSE = √{_num(comp.mse)}"),
     ])
-    st.plotly_chart(graficos.grafico_pronostico(analisis, meses_todos, valores_todos), key="g_pronostico")
-    st.caption(
-        f"Se ajusta con {MESES_ES[primero[1] - 1]} de {primero[0]} a {MESES_ES[analisis.meses[-n_prueba - 1][1] - 1]} de "
-        f"{analisis.meses[-n_prueba - 1][0]} y se prueba en los {n_prueba} meses siguientes (zona gris), que el método "
-        "no vio. La pandemia (2020) y el rebote de 2021 quedan afuera del ajuste. La banda es ± z·RMSE (95 %)."
+
+
+def _num(x: float) -> str:
+    """Con decimales si es chico (precios), entero si es grande."""
+    return dec(x, 2) if abs(x) < 100 else ent(x)
+
+
+def _calidad(mape: float) -> str:
+    """Escala habitual para leer el MAPE (Lewis): < 10 % muy preciso, 10–20 % bueno, 20–50 % razonable."""
+    if mape < 0.10:
+        return "muy preciso (menos del 10 %)"
+    if mape < 0.20:
+        return "bueno (entre 10 % y 20 %)"
+    if mape < 0.50:
+        return "razonable (entre 20 % y 50 %)"
+    return "poco confiable (más del 50 %)"
+
+
+def _explicacion(comp, fmt, que: str, unidad: str, por_que: str) -> None:
+    """Debajo de cada tabla: qué quiere decir el MAE, el MAPE y el RMSE que dieron."""
+    peor = max(comp.filas, key=lambda x: x.error)
+    cociente = comp.rmse / comp.mae if comp.mae else 1.0
+
+    def u(x: float) -> str:
+        return fmt(x) + (f" {unidad}" if unidad else "")
+
+    st.markdown(_md(
+        f"- **MAE = {u(comp.mae)}**: en promedio, el pronóstico de {que} se equivoca en {u(comp.mae)} por mes, "
+        "para arriba o para abajo.\n"
+        f"- **MAPE = {dec(100 * comp.mape, 2)} %**: ese error es, en promedio, el {dec(100 * comp.mape, 2)} % del valor "
+        f"real. Es un pronóstico {_calidad(comp.mape)}.\n"
+        f"- **RMSE = {u(comp.rmse)}**: eleva cada error al cuadrado, así que castiga más los meses con "
+        f"errores grandes. Es {dec(cociente, 2)} veces el MAE: "
+        + ("los errores son parejos, ningún mes se escapa mucho." if cociente < 1.15 else
+           f"hay meses que se escapan más que el resto (el mayor es {_mes_corto(peor.mes).lower()}, con "
+           f"{u(peor.error)}).")
+        + f"\n- **Por qué hay error**: {por_que}"
+    ))
+
+
+def pestania_pronostico(p: ParametrosSimulacion, anio: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """La pestaña Pronóstico: tres tablas como el ejercicio 1 del parcial (clientes, precio y ganancias por mes)."""
+    from sim.datos import valor
+    from sim.pronostico import (
+        clientes_pronosticados, comparar, escala_a_la_estacion, factores_de_precio, ganancias_por_mes,
+        inflacion_esperada, inflacion_real, recta_de_la_serie,
     )
 
-    st.markdown("##### Los cinco métodos en los meses de prueba")
-    filas = [{
-        "Método": METODOS[a.metodo] + (" · elegido" if a.metodo == analisis.elegido else ""),
-        "Parámetros": a.detalle,
-        "MAE (m³)": ent(a.errores.mae),
-        "MAPE": f"{dec(100 * a.errores.mape)} %",
-        "RMSE (m³)": ent(a.errores.rmse),
-        "Sesgo (m³)": f"{a.errores.sesgo:+,.0f}".replace(",", "."),
-    } for a in analisis.ajustes]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    st.caption("Sesgo = promedio de (real − pronóstico): negativo quiere decir que el método esperaba más de lo que se "
-               "vendió (la serie bajó más de lo previsto).")
+    meses = [(a, m) for a, m, _, _ in anio.por_mes]
+    st.subheader("Pronóstico contra simulación")
+    st.markdown(
+        "Como el **ejercicio 1 del parcial**: un modelo da un pronóstico para cada mes, se lo compara con el valor "
+        "**real** (acá, lo que dio la **simulación del año**) y se mide qué tan bueno es con tres errores."
+    )
+    st.latex(r"\text{MAE} = \frac{\sum |P - R|}{n} \qquad \text{MAPE} = \frac{\sum |P - R| / R}{n} \times 100"
+             r" \qquad \text{RMSE} = \sqrt{\frac{\sum (P - R)^2}{n}}")
+    st.caption(f"P = pronóstico · R = real · n = {len(meses)} meses. Error = |P − R| (valor absoluto). El año simulado "
+               "usa los mismos ajustes que esta corrida (si la corrida no era el año completo, se simuló aparte).")
 
-    st.markdown("##### Cuánto pesa cada mes")
-    st.plotly_chart(graficos.grafico_indices(analisis.indices), key="g_indices")
-    verano = sum(analisis.indices[m - 1] for m in (12, 1, 2)) / 3
-    st.caption(
-        f"En la serie real el verano (dic–feb) pesa {dec(verano, 2)} — casi un mes promedio —, mientras que el "
-        f"calendario de temporadas del menú (DEM-14, supuesto) lo sube 6 %. Para simular con la forma real, elegí "
-        f"**'Índices de la serie real'** en el desplegable Calendario del menú principal."
+    # --- 1. Clientes ------------------------------------------------------------------------------------------
+    a, b, (anio0, mes0) = recta_de_la_serie()
+    st.markdown("##### 1. Clientes por mes")
+    st.caption(_md(
+        f"**Pronóstico:** la recta de tendencia **F = A + B·t** (A = {ent(a)} m³, B = {dec(b)} m³ por mes, t = 0 en "
+        f"{MESES_ES[mes0 - 1]} de {anio0}) ajustada a las ventas reales de Shell en Mendoza (PRO-01), llevada a esta "
+        f"estación (× {dec(escala_a_la_estacion())} L por m³) y a clientes (÷ {dec(p.litros_medios_por_cliente)} L por "
+        f"cliente ÷ (1 − {dec(p.pct_gnc, 2)}) por el GNC). **Real:** los clientes que llegaron en la simulación."
+    ))
+    reales = [n for _, _, n, _ in anio.por_mes]
+    comp = comparar(meses, clientes_pronosticados(p, meses), reales)
+    _tabla_de_errores(comp, ent, "clientes")
+    _explicacion(
+        comp, ent, "clientes", "clientes",
+        f"la recta sólo ve la tendencia (baja {dec(-b)} m³ por mes en la provincia); la simulación además reparte la "
+        "demanda según cuánto pesa cada mes (índices de la serie real) y según los días que tiene cada mes, así que "
+        "los meses más fuertes o más cortos se le escapan a la recta.",
     )
 
-    st.markdown("##### Los próximos meses (y la estación escalada)")
-    ultimos = analisis.reales[-12:]
-    escala = float(valor("DEM-01")) / (sum(ultimos) / len(ultimos) * 1000.0)
-    filas = [{
-        "Mes": f"{MESES_ES[m - 1]} {a}",
-        "Shell Mendoza (m³)": ent(f),
-        "Intervalo 95 % (m³)": f"{ent(lo)} – {ent(hi)}",
-        "La estación (L)": ent(f * 1000 * escala),
-    } for (a, m), f, (lo, hi) in zip(analisis.futuros, analisis.pronostico, analisis.intervalo)]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    _comprobacion([
-        "Errores en los meses de prueba, con e = real − pronóstico: MAE = Σ|e| ÷ n · MAPE = Σ|e ÷ real| ÷ n · "
-        "RMSE = √(Σe² ÷ n) · sesgo = Σe ÷ n. Se elige el de menor RMSE.",
-        "Validación con el práctico de la cátedra (control 39 de `verificar.py`): Cable Televisora da MAE = 8,92 y "
-        "RMSE = 10,68, y la recta de mínimos cuadrados de sus datos reproduce los pronósticos del práctico.",
-        "Índices: cociente de cada mes al promedio móvil centrado de 12 meses, promediados por mes y normalizados "
-        "para que promedien 1.",
-        f"Escala a la estación: {ent(float(valor('DEM-01')))} L por mes (DEM-01) ÷ el promedio de los últimos 12 meses "
-        f"de Shell Mendoza ({ent(sum(ultimos) / len(ultimos))} m³) = {dec(100 * escala, 2)} % de la provincia. Supuesto: "
-        "la estación sigue la misma forma que el conjunto de las Shell de Mendoza.",
-        "Fuente: Secretaría de Energía, datos abiertos (nota 12 en research_notes; PRO-01 a PRO-04 en Datos y fuentes).",
+    # --- 2. Precio ------------------------------------------------------------------------------------------
+    minimo, maximo, _ = valor("PRO-05")
+    esperada = inflacion_esperada()
+    real_i = inflacion_real(len(meses))
+    f_pron = factores_de_precio([esperada] * len(meses))
+    f_real = factores_de_precio(real_i)
+    st.markdown("##### 2. Precio por mes")
+    productos = {"super": "Nafta Súper ($/L)", "diesel_g2": "Gasoil G2 ($/L)", "gnc": "GNC ($/m³)"}
+    elegido = st.radio("Producto", list(productos), format_func=productos.get, horizontal=True, key="pron_precio")
+    precio0 = float(dict(eco.precios)[elegido])
+    st.caption(_md(
+        f"Se parte del precio de referencia (ECO-08: ${ent(precio0)}) y cada mes sube por la inflación. "
+        f"**Pronóstico:** {dec(100 * esperada)} % todos los meses (el punto medio). **Real:** la inflación de cada mes "
+        f"varía entre {dec(100 * minimo)} % y {dec(100 * maximo)} % (PRO-05, supuesto; sorteada con semilla fija, "
+        "así que siempre da lo mismo). Precio del mes = precio del mes anterior × (1 + inflación)."
+    ))
+    comp_p = comparar(meses, [precio0 * f for f in f_pron], [precio0 * f for f in f_real])
+    st.dataframe(pd.DataFrame({
+        "Mes": [_mes_corto(m) for m in meses],
+        "Inflación del pronóstico": [f"{dec(100 * esperada)} %"] * len(meses),
+        "Inflación real": [f"{dec(100 * i)} %" for i in real_i],
+    }).set_index("Mes").T)
+    _tabla_de_errores(comp_p, lambda x: f"$ {dec(x, 2)}", "")
+    _explicacion(
+        comp_p, lambda x: f"${dec(x, 2)}", f"precio ({productos[elegido].split(' (')[0]})", 
+        "por m³" if elegido == "gnc" else "por litro",
+        "el pronóstico supone la misma inflación todos los meses y la real sube unos meses más y otros menos; como "
+        "el precio de cada mes arrastra la inflación de todos los anteriores, el error de un mes se acumula en los "
+        "siguientes. Los tres productos suben con la misma inflación: el MAPE es el mismo para los tres.",
+    )
+
+    # --- 3. Ganancias ----------------------------------------------------------------------------------------
+    st.markdown("##### 3. Ganancias por mes")
+    margenes = {pr.id: eco.margen_de(pr.id) for pr in p.productos}
+    st.caption(_md(
+        "**Ganancia bruta del combustible** = litros (m³ el GNC) × margen por litro, y el margen sube con el precio "
+        "(misma inflación). **Pronóstico:** los litros de la recta (punto 1) repartidos por producto (DEM-04) con la "
+        f"inflación de {dec(100 * esperada)} %. **Real:** lo que vendió la simulación en cada mes con la inflación "
+        "real. Márgenes de hoy: " + " · ".join(f"{pr.nombre} ${ent(margenes[pr.id])}" for pr in p.productos)
+        + " (ECO-01/03, heredados sin fuente: los pesos muestran cómo se calcula, no cifras del negocio)."
+    ))
+    g_pron, g_real = ganancias_por_mes(p, margenes, meses, [v for *_, v in anio.por_mes], f_pron, f_real)
+    comp_g = comparar(meses, g_pron, g_real)
+    _tabla_de_errores(comp_g, _pesos, "")
+    _explicacion(
+        comp_g, _pesos, "ganancia", "",
+        "junta los dos errores anteriores: los litros del mes (la recta no ve la estacionalidad) y el precio (la "
+        "inflación real no es pareja). Además la simulación cuenta lo que se **vendió**, que puede ser menos que lo "
+        "pedido si faltó combustible o hubo cortes de GNC.",
+    )
+
+    with st.expander("De dónde salen los índices mensuales de la demanda"):
+        from sim.pronostico import analizar
+
+        st.plotly_chart(graficos.grafico_indices(analizar().indices), key="g_indices")
+        st.caption("Cuánto pesa cada mes en la serie real de Shell Mendoza (promedio 1). Con la opción 'Índices de la "
+                   "serie real' del menú (la de siempre), la simulación reparte los litros del año con estos índices.")
+
+
+# =============================================================================
+# Economía: cuánto va a valer el litro (la inflación de PRO-05)
+# =============================================================================
+def seccion_precio_futuro(eco: ParametrosEconomicos) -> None:
+    """El precio de nafta, gasoil y GNC mes a mes, con la inflación de cada mes (la 'real' de la pestaña Pronóstico)."""
+    from sim.datos import valor
+    from sim.pronostico import factores_de_precio, inflacion_real
+
+    minimo, maximo, _ = valor("PRO-05")
+    inflacion = inflacion_real(12)
+    factores = factores_de_precio(inflacion)
+    precios = dict(eco.precios)
+    nombres = {"super": "Nafta Súper", "premium": "Nafta V-Power", "diesel_g2": "Gasoil G2", "diesel_g3": "Gasoil G3",
+               "gnc": "GNC"}
+    st.markdown("##### Cuánto va a valer el litro")
+    st.caption(_md(
+        f"Desde el precio de hoy (ECO-08), cada mes sube por la inflación de ese mes, que varía entre "
+        f"{dec(100 * minimo)} % y {dec(100 * maximo)} % (PRO-05, supuesto; la misma que usa la pestaña Pronóstico). "
+        "Precio del mes = precio del mes anterior × (1 + inflación). El GNC va por m³."
+    ))
+    mes = st.select_slider("¿Para qué mes?", options=list(range(1, 13)), value=12,
+                           format_func=lambda m: MESES_ES[m - 1].capitalize(), key="eco_mes_precio")
+    _tarjetas([
+        (f"{nombres[k]} en {MESES_ES[mes - 1]}", f"$ {ent(precios[k] * factores[mes - 1])}",
+         f"hoy $ {ent(precios[k])} (+{dec(100 * (factores[mes - 1] - 1))} %)")
+        for k in ("super", "premium", "diesel_g2", "diesel_g3")
     ])
+    st.dataframe(pd.DataFrame([{
+        "Mes": MESES_ES[k].capitalize(),
+        "Inflación del mes": f"{dec(100 * inflacion[k])} %",
+        **{f"{nombres[x]} ($/{'m³' if x == 'gnc' else 'L'})": f"$ {dec(precios[x] * factores[k], 2)}" for x in nombres},
+    } for k in range(12)]), hide_index=True, height=36 * 13 + 3)
+
+
+# =============================================================================
+# Indicadores · Colas: las fórmulas de la cátedra con los números de la simulación
+# =============================================================================
+def _playeros_a_la_hora(p: ParametrosSimulacion, hora: int) -> int:
+    """Playeros en turno a esa hora (el último tramo de `turnos` que empezó antes)."""
+    return [n for inicio, n in sorted(p.turnos) if inicio <= hora][-1]
+
+
+def seccion_formulas_colas(p: ParametrosSimulacion, r: ResultadoReplica, traza: Traza, modo: str) -> None:
+    """M/M/1 o M/M/s con λ, μ y s de la simulación, y las leyes de Little con lo que midió la simulación."""
+    from sim.colas import mms
+
+    st.markdown("##### Las fórmulas de la cátedra con los números de la simulación")
+    st.caption(
+        "La estación como un sistema de colas: los **servidores son los playeros** (cada cliente necesita uno, también "
+        "el de GNC: PER-04). Notación de la cátedra: λ = clientes que llegan por hora · μ = clientes que atiende un "
+        "playero por hora · s = playeros · ρ = λ ÷ (s·μ) = utilización."
+    )
+    st.latex(r"L = \lambda W \qquad L_q = \lambda W_q \qquad W = W_q + \frac{1}{\mu} \qquad L = L_q + \frac{\lambda}{\mu}")
+    dias = max(len(traza.llegadas_dia_hora), 1)
+    llegadas_h = [sum(d[h] for d in traza.llegadas_dia_hora) / dias for h in range(24)]
+    pico = max(range(24), key=lambda h: llegadas_h[h])
+    hora = st.selectbox(
+        "Hora del día", list(range(24)), index=pico, key="colas_hora",
+        format_func=lambda h: f"{h:02d}–{(h + 1) % 24:02d} h" + (" (la de más llegadas)" if h == pico else ""),
+    )
+    lam = llegadas_h[hora]
+    servicio = p.media_servicio_playero()
+    mu = 60.0 / servicio
+    s = _playeros_a_la_hora(p, hora)
+    suma = sum(d[hora][0] for d in traza.espera_dia_hora)
+    cant = sum(d[hora][1] for d in traza.espera_dia_hora)
+    wq_sim = (suma / cant if cant else 0.0) / 60.0          # horas
+
+    st.markdown(
+        f"**1. Datos (en horas).** λ = {dec(lam, 2)} clientes/h (promedio de los {dias} días en esa hora) · "
+        f"1/μ = {dec(servicio, 2)} min de atención (TIE-02 y TIE-04 ponderados por producto) ⇒ "
+        f"μ = 60 ÷ {dec(servicio, 2)} = {dec(mu, 2)} clientes/h por playero · s = {s} "
+        f"playero{'s' if s != 1 else ''} en turno · ρ = λ ÷ (s·μ) = {dec(lam, 2)} ÷ ({s} × {dec(mu, 2)}) = "
+        f"**{dec(lam / (s * mu), 3)}**."
+    )
+    if lam <= 0:
+        st.info("A esa hora no llega nadie: no hay cola que calcular.", icon=":material/info:")
+        return
+    try:
+        f = mms(lam, mu, s)
+    except ValueError:
+        st.warning("ρ ≥ 1: con estas tasas la cola crecería sin límite y las fórmulas no tienen solución.",
+                   icon=":material/warning:")
+        return
+    a = lam / mu
+    sup = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
+    if s == 1:
+        st.latex(r"\text{M/M/1:}\quad P_0 = 1 - \rho \qquad L_q = \frac{\rho^2}{1-\rho} \qquad "
+                 r"W_q = \frac{L_q}{\lambda} \qquad W = W_q + \frac{1}{\mu} \qquad L = \lambda W")
+        cuenta_p0 = f"P0 = 1 − {dec(f.rho, 3)} = {dec(f.p0, 4)}"
+        cuenta_lq = f"Lq = {dec(f.rho, 3)}² ÷ (1 − {dec(f.rho, 3)}) = {dec(f.lq, 4)} clientes"
+    else:
+        st.latex(r"\text{M/M/s:}\quad P_0 = \left[\sum_{n=0}^{s-1}\frac{(\lambda/\mu)^n}{n!} + "
+                 r"\frac{(\lambda/\mu)^s}{s!\,(1-\rho)}\right]^{-1} \qquad "
+                 r"L_q = \frac{P_0\,(\lambda/\mu)^s\,\rho}{s!\,(1-\rho)^2}")
+        st.latex(r"W_q = \frac{L_q}{\lambda} \qquad W = W_q + \frac{1}{\mu} \qquad L = \lambda W")
+        cuenta_p0 = (f"λ/μ = {dec(a, 3)} ⇒ P0 = 1 ÷ [" + " + ".join(
+            f"{dec(a, 3)}{str(n).translate(sup)} ÷ {n}!" for n in range(s)) + f" + {dec(a, 3)}{str(s).translate(sup)} ÷ ({s}! × (1 − {dec(f.rho, 3)}))] = "
+            f"{dec(f.p0, 4)}")
+        cuenta_lq = (f"Lq = {dec(f.p0, 4)} × {dec(a, 3)}{str(s).translate(sup)} × {dec(f.rho, 3)} ÷ ({s}! × (1 − {dec(f.rho, 3)})²) = "
+                     f"{dec(f.lq, 4)} clientes")
+    st.markdown(
+        f"**2. Las fórmulas.** {cuenta_p0} · {cuenta_lq} · Wq = Lq ÷ λ = {dec(f.lq, 4)} ÷ {dec(lam, 2)} = "
+        f"{dec(f.wq, 4)} h = **{dec(60 * f.wq, 2)} min** · W = Wq + 1/μ = {dec(60 * f.wq, 2)} + {dec(servicio, 2)} = "
+        f"**{dec(60 * f.w, 2)} min** · L = λ·W = {dec(lam, 2)} × {dec(f.w, 4)} = **{dec(f.l, 3)} clientes**."
+    )
+    w_sim = wq_sim + 1.0 / mu
+    st.markdown(
+        f"**3. La simulación en esa hora, con Little.** Wq medida = {dec(60 * wq_sim, 2)} min ⇒ Lq = λ·Wq = "
+        f"{dec(lam, 2)} × {dec(wq_sim, 4)} = {dec(lam * wq_sim, 4)} · W = Wq + 1/μ = {dec(60 * w_sim, 2)} min · "
+        f"L = λ·W = {dec(lam * w_sim, 3)}."
+    )
+    st.dataframe(pd.DataFrame({
+        "": ["ρ (utilización)", "Wq (min en la cola)", "W (min en el sistema)", "Lq (clientes en la cola)",
+             "L (clientes en el sistema)"],
+        "Fórmula M/M/" + ("1" if s == 1 else "s"): [dec(f.rho, 3), dec(60 * f.wq, 2), dec(60 * f.w, 2),
+                                                    dec(f.lq, 4), dec(f.l, 3)],
+        "Simulación (+ Little)": [dec(lam / (s * mu), 3), dec(60 * wq_sim, 2), dec(60 * w_sim, 2),
+                                  dec(lam * wq_sim, 4), dec(lam * w_sim, 3)],
+    }), hide_index=True)
+    lam_min = sum(llegadas_h) / (24 * 60)
+    st.caption(
+        "**Por qué no dan igual:** la fórmula supone llegadas al azar (Poisson) y atención exponencial con una sola "
+        "cola. En la simulación la atención es triangular (menos variable), cada zona tiene su propia cola, hace falta "
+        "una cara libre además del playero y la cola tiene un tope"
+        + (", y **sin azar los clientes llegan parejos** (cuotas exactas), así que casi no se forma cola."
+           if modo != "editada" else ".")
+        + f" Little vale siempre: en todo el período, λ = {dec(60 * lam_min, 2)} clientes/h y Wq = "
+        f"{dec(r.espera_surtidor, 2)} min ⇒ Lq = λ·Wq = {dec(lam_min * r.espera_surtidor, 4)} clientes esperando en "
+        f"promedio. La cola que se ve frente a los surtidores es más chica ({dec(r.cola_surtidor, 4)} autos) porque "
+        "parte de esa espera es ya en la cara, esperando que se libere un playero; Little con la espera hasta la "
+        "cara da exactamente esa cola (control 3 de `verificar.py`)."
+    )
 
 
 
@@ -869,7 +1090,7 @@ def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
     st.markdown("##### 4. El punto de pedido con el pronóstico (stock de seguridad)")
     st.caption(
         "**s = D · L + z · σ_día · √L**: lo que se vende mientras viaja el camión (D·L) más un colchón por el error del "
-        "pronóstico. El error sale de la **serie real** (pestaña Pronóstico): el RMSE del método elegido en los meses "
+        "pronóstico. El error sale de la **serie real** de Shell Mendoza (PRO-01): el RMSE del método elegido en los meses "
         f"de prueba es el **{dec(100 * filas_calc[0].error_relativo)} %** de lo que se vende en un mes; se lleva a cada "
         "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
         "z = 1,96 (95 %). La Q no cambia. "

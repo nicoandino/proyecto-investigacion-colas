@@ -633,3 +633,19 @@ MODI; transbordo; flujo de costo mínimo; flujo máximo), el plan del período d
 origen y "Despachar según el plan" del menú Abastecimiento, el reparto por cuotas del motor (`ParametrosRed.cuotas_origen`),
 FLU-01/02 del Registro, `reports/qa_f3_plan.py` y los controles 42–44 (los demás conservan su número). Queda la red de
 rutas con Dijkstra, los cortes y los orígenes alternativos (tanda 8). Las secciones §15–19 quedan como historia.
+
+## 32. Pedidos de Nico: precio, colas, demanda y un pronóstico más simple (23/10/2026)
+
+- **Economía:** "Cuánto va a valer el litro": precio de Súper, V-Power, G2, G3 y GNC mes a mes desde ECO-08 con la
+  inflación de cada mes (PRO-05: entre 1,9 % y 2,9 %, sorteada con semilla fija, redondeada a 0,1 %).
+- **Indicadores → Colas y esperas:** las fórmulas de la cátedra (Little, M/M/1, M/M/s; `sim/colas.py`) con λ de la hora
+  elegida, μ = 60 ÷ el tiempo medio de atención de un playero y s = playeros en turno, comparadas con la espera que midió
+  la simulación. Validadas con la práctica (banco, Banco Nación, NY Taxi): control 49. `verificar.py`: 143/143.
+- **Demanda:** se sacó el gráfico "Cada día del mes" (la tabla del día a día queda).
+- **Pronóstico:** se reemplazó por tres tablas como el ejercicio 1 del parcial B (sin el intervalo de confianza):
+  Pronóstico | Real | error |P − R| | error ÷ real | error² con MAE, MAPE y RMSE y una explicación debajo. Clientes
+  por mes (recta A + B·t de la serie real llevada a la estación contra los clientes del año simulado), precio (2,4 %
+  fijo contra la inflación sorteada) y ganancia bruta del combustible (litros × margen que sube con el precio). Si la
+  corrida no es el año completo, el año se simula aparte (≈ 5 s, con caché). El motor ahora guarda clientes y litros
+  vendidos por mes de calendario (`ResultadoReplica.por_mes`). Los cinco métodos y el stock de seguridad siguen en
+  `sim/pronostico.py` (índices de la demanda y política por pronóstico).

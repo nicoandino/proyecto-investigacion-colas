@@ -29,13 +29,13 @@ def main() -> None:
         print("insignias en la página:", insignias)
 
         # Pestaña Animación
-        pagina.click("text=🎬 Animación")
+        pagina.click("text=Animación")
         pagina.wait_for_selector("text=Animación del día", timeout=30_000)
         time.sleep(2)
         pagina.screenshot(path="reports/qa/fase1_animacion.jpg", type="jpeg", quality=80)
 
         # Pestaña Datos y fuentes
-        pagina.click("text=📚 Datos y fuentes")
+        pagina.click("text=Datos y fuentes")
         pagina.wait_for_selector("text=Registro de datos", timeout=15_000)
         time.sleep(1)
         pagina.screenshot(path="reports/qa/fase1_datos.jpg", type="jpeg", quality=80)

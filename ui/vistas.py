@@ -91,7 +91,7 @@ def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametro
         "cliente** (en el peor caso, está vacío). Ese cliente se va sin cargar y el producto no se vende hasta "
         "que llega el camión; los otros productos siguen vendiéndose. El GNC no tiene tanque: no tiene "
         "quiebres, tiene cortes (pestaña GNC).",
-        icon="🛢️",
+        icon=":material/oil_barrel:",
     )
     venta_falta = sum(causas[pr][0] * eco.margen_de(pr) for pr in capacidad)
     _tarjetas([
@@ -199,11 +199,40 @@ def _diagnostico(r: ResultadoReplica, p: ParametrosSimulacion, modo: str) -> lis
     return lista
 
 
+def cifra_html(titulo: str, valor: str, ayuda: str = "", debajo: str = "") -> str:
+    """Una cifra del tótem: rótulo chico, dígitos grandes condensados y la unidad chica al lado.
+
+    La unidad es lo que sigue al último número ("8.511 L" → "8.511" + "L"); un valor sin número (el nombre de un
+    método) se muestra entero, en un tamaño menor. Los `$` se escriben como entidad (dos se leerían como LaTeX).
+    """
+    import html as _html
+    import re
+
+    m = re.match(r"^(.*\d)\s+([^\d]+)$", valor.strip())
+    numero, unidad = (m.group(1), m.group(2)) if m else (valor, "")
+    def esc(t: str) -> str:
+        return _html.escape(t).replace("$", "&#36;")
+    clase = "tot-cifra-valor" + ("" if any(c.isdigit() for c in numero) else " tot-texto")
+    cola = f"<span>{esc(unidad)}</span>" if unidad else ""
+    # La ayuda va en el rótulo (subrayado de puntos, se lee al pasar el mouse o con el lector de pantalla).
+    # tabindex: también se abre con el teclado (Tab) y con un toque, no sólo con el mouse.
+    rotulo = (f"<abbr tabindex='0' data-ayuda='{esc(ayuda)}' aria-label='{esc(titulo)}: {esc(ayuda)}'>"
+              f"{esc(titulo)}</abbr>" if ayuda else esc(titulo))
+    extra = f"<div class='tot-cifra-debajo'>{esc(debajo)}</div>" if debajo else ""
+    return (f"<div class='tot-cifra'><div class='tot-cifra-rotulo'>{rotulo}</div>"
+            f"<div class='{clase}'>{esc(numero)}{cola}</div>{extra}</div>")
+
+
+def _nota(nota: str) -> str:
+    """Una nota debajo de una cifra: un "+ " o "- " al principio no tiene que leerse como lista de Markdown."""
+    return "\\" + nota if nota[:2] in ("+ ", "- ", "* ") else nota
+
+
 def _tarjetas(filas: list[tuple[str, str, str]]) -> None:
     columnas = st.columns(len(filas))
     for col, (titulo, valor, nota) in zip(columnas, filas):
-        col.metric(titulo, valor, border=True)
-        col.caption(nota)
+        col.markdown(cifra_html(titulo, valor), unsafe_allow_html=True)
+        col.caption(_nota(nota))
 
 
 def _comprobacion(lineas: list[str]) -> None:
@@ -554,7 +583,7 @@ def pestania_demanda(
     elif len(set(p.estacionalidad.indices)) > 1:
         st.caption("Forma de la demanda: los **índices mensuales de la serie real** de Shell Mendoza (elegido en el "
                    "menú): cada mes × su índice, que promedian 1, así que el total del año no cambia. Están en la pestaña "
-                   "📈 Pronóstico.")
+                   "Pronóstico.")
     else:
         st.caption("Calendario de temporadas apagado en el menú: todos los meses pesan igual.")
 
@@ -668,7 +697,7 @@ def _duracion(e) -> str:
 
 
 def pestania_eventos(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
-    """La pestaña ⚡ Eventos: cómo se sortearon, la tabla de los que ocurrieron y lo que costaron."""
+    """La pestaña Eventos: cómo se sortearon, la tabla de los que ocurrieron y lo que costaron."""
     from sim.eventos import CATALOGO, POR_ID, costo_de_eventos, horas_extra, texto_frecuencia
 
     ev = p.eventos
@@ -681,7 +710,7 @@ def pestania_eventos(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametr
         "supuestos del grupo). **Con la misma semilla salen siempre los mismos eventos.** "
         + ("El resto de la simulación sigue con los datos reales, sin azar." if p.determinista else
            "El resto es la simulación editada, con su propia semilla."),
-        icon="⚡",
+        icon=":material/bolt:",
     )
     ocurridos = r.eventos
     costo = costo_de_eventos(ocurridos, p, eco.sueldo_playero_mensual)
@@ -754,7 +783,7 @@ def _valor_registro(id_: str):
 # Pronóstico (parte 3): la serie real de Shell en Mendoza y los métodos de la cátedra
 # =============================================================================
 def pestania_pronostico(p: ParametrosSimulacion) -> None:
-    """La pestaña 📈 Pronóstico: la serie real, los métodos, el elegido y cómo entra al simulador."""
+    """La pestaña Pronóstico: la serie real, los métodos, el elegido y cómo entra al simulador."""
     from sim.datos import valor
     from sim.pronostico import METODOS, analizar, serie_registro
 
@@ -767,7 +796,7 @@ def pestania_pronostico(p: ParametrosSimulacion) -> None:
         "gasoil G2 y G3), declaradas a la Secretaría de Energía (datos abiertos, PRO-01). **No hay datos por "
         "estación**: es la suma de todas las Shell de la provincia, así que el simulador usa su **forma** (cuánto "
         "pesa cada mes) y la escala a los litros de esta estación (DEM-01).",
-        icon="📈",
+        icon=":material/trending_up:",
     )
     primero, n_prueba = valor("PRO-02")
     _tarjetas([
@@ -785,7 +814,7 @@ def pestania_pronostico(p: ParametrosSimulacion) -> None:
 
     st.markdown("##### Los cinco métodos en los meses de prueba")
     filas = [{
-        "Método": METODOS[a.metodo] + ("  ✅" if a.metodo == analisis.elegido else ""),
+        "Método": METODOS[a.metodo] + (" · elegido" if a.metodo == analisis.elegido else ""),
         "Parámetros": a.detalle,
         "MAE (m³)": ent(a.errores.mae),
         "MAPE": f"{dec(100 * a.errores.mape)} %",
@@ -802,7 +831,7 @@ def pestania_pronostico(p: ParametrosSimulacion) -> None:
     st.caption(
         f"En la serie real el verano (dic–feb) pesa {dec(verano, 2)} — casi un mes promedio —, mientras que el "
         f"calendario de temporadas del menú (DEM-14, supuesto) lo sube 6 %. Para simular con la forma real, elegí "
-        f"**'Índices de la serie real'** en el desplegable 📅 del menú principal."
+        f"**'Índices de la serie real'** en el desplegable Calendario del menú principal."
     )
 
     st.markdown("##### Los próximos meses (y la estación escalada)")
@@ -840,12 +869,12 @@ def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
     st.markdown("##### 4. El punto de pedido con el pronóstico (stock de seguridad)")
     st.caption(
         "**s = D · L + z · σ_día · √L**: lo que se vende mientras viaja el camión (D·L) más un colchón por el error del "
-        "pronóstico. El error sale de la **serie real** (pestaña 📈 Pronóstico): el RMSE del método elegido en los meses "
+        "pronóstico. El error sale de la **serie real** (pestaña Pronóstico): el RMSE del método elegido en los meses "
         f"de prueba es el **{dec(100 * filas_calc[0].error_relativo)} %** de lo que se vende en un mes; se lleva a cada "
         "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
         "z = 1,96 (95 %). La Q no cambia. "
-        + ("**Esta corrida usa esta política** (elegida en el menú 🚚)." if en_uso else
-           "Esta corrida **no** la usa: se elige en el menú 🚚 Abastecimiento, y en el Caso de informe compite con las "
+        + ("**Esta corrida usa esta política** (elegida en el menú Abastecimiento)." if en_uso else
+           "Esta corrida **no** la usa: se elige en el menú Abastecimiento, y en el Caso de informe compite con las "
            "otras 13 políticas.")
     )
     filas = [{
@@ -882,12 +911,12 @@ def seccion_plan_red(p: ParametrosSimulacion, r: ResultadoReplica, topes_menu: d
         "conviene traer de cada origen y por qué tramos, con el **flujo de costo mínimo** (transbordo) en camión-km. Lo "
         "que limita es **cuánto puede despachar cada origen** (FLU-02: hoy todo sale de Dock Sud; Arroyo Seco y Luján "
         "son supuestos) y los **cortes**. Probá topes y cortes acá; para que la simulación despache así, prendé "
-        "**'Despachar según el plan'** en el menú 🚚 Abastecimiento."
+        "**'Despachar según el plan'** en el menú Abastecimiento."
     )
     camiones_por = {pr: n for pr, n in r.pedidos_total if n > 0}
     camiones = float(sum(camiones_por.values()))
     if camiones <= 0:
-        st.info("En este período no se pidió ningún camión.", icon="🚚")
+        st.info("En este período no se pidió ningún camión.", icon=":material/local_shipping:")
         return
     cortes = {"ninguno": "Sin cortes"} | {c.id: f"{c.id}: {c.nombre}" for c in red.cortes if c.arcos}
     c1, c2, c3 = st.columns(3)
@@ -910,7 +939,7 @@ def seccion_plan_red(p: ParametrosSimulacion, r: ResultadoReplica, topes_menu: d
     ])
     if plan.enviados < camiones - 1e-9:
         st.error(f"Con este corte y estos topes sólo se pueden traer {ent(plan.enviados)} de {ent(camiones)} camiones: "
-                 "ningún origen habilitado llega a San Rafael.", icon="⛔")
+                 "ningún origen habilitado llega a San Rafael.", icon=":material/block:")
     filas = []
     for origen, n in plan.por_origen:
         km = camino_mas_corto(red, origen=origen, cerrados=cerrados).km
@@ -1056,7 +1085,7 @@ def seccion_red_por_producto(p: ParametrosSimulacion, r: ResultadoReplica) -> No
         "El gas de San Rafael se toma del gasoducto internacional GasAndes: el gasoducto nuevo de la ciudad (inaugurado "
         "en junio de 2026) empalma en el paraje La Tosca, pasa por una planta reguladora sobre la RN 143 y la "
         "distribuidora Ecogas lo lleva a los usuarios (GNC-11, nota 13; informativo: el modelo no simula la red de gas). "
-        "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña 🔥 GNC)."
+        "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña GNC)."
     )
 
 
@@ -1083,7 +1112,7 @@ def tabla_verificable_supuesto(p: ParametrosSimulacion, r: ResultadoReplica, eco
         datos = [por_id(i) for i in x.datos]
         filas.append({
             "Concepto": x.concepto,
-            "": "➕" if x.tipo == "ingreso" else "➖",
+            "": "ingreso" if x.tipo == "ingreso" else "costo",
             "Cantidad del mes (verificable)": f"{ent(x.cantidad)} {x.unidad}" if x.unidad != "mes" else "—",
             "Precio unitario": _pesos(x.precio) if x.unidad != "mes" else "—",
             "De dónde sale el precio": " · ".join(f"{d.id} ({etiqueta_tipo.get(d.tipo, d.tipo)})" for d in datos),
@@ -1094,5 +1123,5 @@ def tabla_verificable_supuesto(p: ParametrosSimulacion, r: ResultadoReplica, eco
     st.caption(_md(
         f"Ingresos: {_pesos(sum(x.importe for x in renglones if x.tipo == 'ingreso'))} · costos: "
         f"{_pesos(sum(x.importe for x in renglones if x.tipo == 'costo'))} (los mismos de arriba). Precios heredados sin "
-        f"fuente: {', '.join(heredados) if heredados else 'ninguno'}; se cambian en el menú 💰 Economía."
+        f"fuente: {', '.join(heredados) if heredados else 'ninguno'}; se cambian en el menú Economía."
     ))

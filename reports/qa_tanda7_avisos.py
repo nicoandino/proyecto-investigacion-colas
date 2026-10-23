@@ -71,7 +71,10 @@ with sync_playwright() as pw:
     # El camión llega y descarga en el playón
     pagina.locator("[role='tab']").filter(has_text="Animación").first.click()
     esperar(2)
-    marco.locator("#pausarAvisos").uncheck()
+    # "Pausar en los avisos" vive ahora en el panel del botón Alertas
+    marco.locator("#botonAlertas").evaluate("e => e.click()")
+    marco.locator("#pausarAvisos").evaluate("e => { if (e.checked) e.click(); }")
+    print("alertas apagadas:", marco.locator("#estadoAlertas").inner_text())
     marco.locator("#saltoDescarga").click()
     esperar(1)
     texto_svg = marco.locator("#lienzo").inner_text()

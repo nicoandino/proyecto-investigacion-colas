@@ -36,7 +36,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **145 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **146 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -53,7 +53,8 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 3. **Ningún número fuera del Registro**; todo campo de los parámetros tiene su `Dato` (control N14).
 4. **Litros ≠ m³ ≠ clientes.** Los clientes por día se derivan de litros/mes; el GNC va en m³.
 5. `sim/` **nunca** importa `streamlit` ni `ui/`; **sin `print()` en `sim/`**.
-6. **Ningún hex de color fuera de `ui/tema.py`** (control N15). Sin logo de Shell.
+6. **Ningún hex de color fuera de `ui/tema.py`** (control N15). El logo de Shell sólo aparece dentro de la foto de
+   portada al 30 % (decisión de Nico, 14/10/2026), nunca como marca de la app; el aviso de "no afiliado" se mantiene.
 7. Si cambia la **firma** de un módulo, **reiniciar Streamlit**; `fileWatcherType = "poll"` no se quita.
 8. `Escenario` guarda cambios declarativos (`((campo, valor), …)`), no lambdas.
 9. Un commit por etapa, en castellano, en la rama `claude/simulator-graphic-orchestrator-wu2xh4`. **Sin Pull Request.**
@@ -64,10 +65,11 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      145 controles
+verificar.py      146 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
-ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos
+ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos · vistas
+static/fonts/     Archivo (woff2, SIL OFL) servida por Streamlit en app/static/
 reports/          QA con Playwright (usa el Chrome instalado) y generar_datos_reales.py
 research_notes/   notas de investigación verificadas
 ```
@@ -76,7 +78,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 145 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 146 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·
@@ -93,9 +95,17 @@ Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo
 
 ## Estado (14/10/2026)
 
-Todo el plan de `ORQUESTADOR.md` está hecho **menos la etapa 7 (Frontend)**, que arranca cuando Nico inicie la skill de
-diseño ("impeccable"; contexto del producto para el diseño en **`PRODUCT.md`**). Economía muestra cada importe como **cantidad de la simulación (verificable) × precio del
-Registro (supuesto o heredado)**.
+Todo el plan de `ORQUESTADOR.md` está hecho, incluida la **etapa 7 (Frontend, §29)**: tema oscuro "tótem de precios
+nocturno" hecho con la skill impeccable (contexto en **`PRODUCT.md`**, sistema en **`DESIGN.md`**). Economía muestra cada
+importe como **cantidad de la simulación (verificable) × precio del Registro (supuesto o heredado)**.
+
+## Diseño (etapa 7)
+
+- **Un solo tema, oscuro:** los colores viven en `ui/tema.py` (y se repiten en el `[theme]` de `.streamlit/config.toml`).
+  Amarillo Shell = luz (franja, acción principal, pestaña activa); rojo Shell = sólo alerta (como texto, `ROJO_TEXTO`).
+- **Tipografía Archivo** guardada en `static/fonts/` (`enableStaticServing = true` no se quita); cifras tabulares.
+- **Sin emojis:** íconos `:material/…:` en Streamlit y SVG de trazo fino en los tableros en JavaScript.
+- QA visual: `reports/qa_frontend.py` (capturas en `.impeccable/review/`).
 
 ## Rediseño y pulido
 

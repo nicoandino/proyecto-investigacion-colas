@@ -1,4 +1,4 @@
-"""QA de la etapa E3 (parte 4): eventos aleatorios desde el menú, pestaña ⚡ Eventos, avisos del tablero, economía.
+"""QA de la etapa E3 (parte 4): eventos aleatorios desde el menú, pestaña Eventos, avisos del tablero, economía.
 
     .venv/Scripts/python reports/qa_e3_eventos.py http://localhost:8502 reports/qa/e3
 """
@@ -42,7 +42,7 @@ with sync_playwright() as pw:
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=120000)
 
     # --- Menú: prender todos los eventos, frecuencia × 5
-    pagina.get_by_text("⚡ Eventos aleatorios").first.click()
+    pagina.get_by_text("Eventos aleatorios: cosas").first.click()
     esperar()
     pagina.get_by_role("button", name="Prender todos").click()
     esperar(2)
@@ -80,7 +80,7 @@ with sync_playwright() as pw:
     pagina.screenshot(path=str(SALIDA / "aviso_evento.png"))
     marco.evaluate("cerrarAviso(false)")
 
-    texto = pestania("⚡ Eventos")
+    texto = pestania("Eventos")
     print("Pestaña Eventos | tarjetas:", "Eventos que ocurrieron" in texto and "Costo de los eventos" in texto,
           "| tabla:", pagina.locator("[role='tabpanel']:visible [data-testid='stDataFrame']").count())
     pagina.screenshot(path=str(SALIDA / "pestania_eventos.png"), full_page=True)
@@ -95,7 +95,7 @@ with sync_playwright() as pw:
     pagina.get_by_role("button", name="Cambiar período").click()
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=60000)
     esperar()
-    pagina.get_by_text("⚡ Eventos aleatorios").first.click()
+    pagina.get_by_text("Eventos aleatorios: cosas").first.click()
     esperar()
     pagina.get_by_role("button", name="Apagar todos").click()
     esperar(2)
@@ -103,7 +103,7 @@ with sync_playwright() as pw:
     pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)
     esperar(4)
     tabs = [t.strip() for t in pagina.locator("[role='tab']").all_inner_texts()]
-    print("Sin eventos | pestaña ⚡ Eventos:", any("Eventos" in t for t in tabs),
+    print("Sin eventos | pestaña Eventos:", any("Eventos" in t for t in tabs),
           "| aviso:", "Con eventos aleatorios" in pagina.locator("body").inner_text())
     print("excepciones (sin eventos):", pagina.locator("[data-testid='stException']").count())
     navegador.close()

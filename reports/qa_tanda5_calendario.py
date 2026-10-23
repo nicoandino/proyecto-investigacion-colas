@@ -37,7 +37,7 @@ with sync_playwright() as pw:
             campo.press("Enter")
             esperar()
         # Desde el 14/10/2026 la app usa por defecto los índices reales: el calendario se elige en el menú.
-        pagina.get_by_text("📅 Calendario de demanda").first.click()
+        pagina.get_by_text("Calendario de demanda").first.click()
         esperar()
         pagina.get_by_text("Calendario de temporadas (supuesto del grupo, DEM-14)").first.click()
         esperar(2)
@@ -50,9 +50,9 @@ with sync_playwright() as pw:
     # Menú: el desplegable del calendario
     pagina.goto(URL, wait_until="networkidle")
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=120000)
-    pagina.get_by_text("📅 Calendario de demanda").click()
+    pagina.get_by_text("Calendario de demanda").click()
     esperar()
-    pagina.get_by_text("📅 Calendario de demanda").scroll_into_view_if_needed()
+    pagina.get_by_text("Calendario de demanda").scroll_into_view_if_needed()
     pagina.screenshot(path=str(SALIDA / "menu_calendario.png"))
 
     # Año completo: rango por temporada y filtro de período

@@ -75,7 +75,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 | **4 · Indicadores y Demanda ✅** | Menú "qué querés saber", enteros, sin lo que no se entiende; Demanda verificable; pestaña "Qué se sorteó" sólo si se editó | cada indicador se puede comprobar contra los datos |
 | **5 · Inventario, Red y GNC ✅** | Tanques desde el día 0 con pedidos, rutas, km y costo; red por producto; GNC con cartel si no hay cortes | Hecho en las tandas 3, 7, 8 y 9 (§14) y en G1–G2 (§26): tabla de camiones con ruta, km y flete; red de nafta, diésel y GNC; cortes sólo si se editó |
 | **6 · Escenarios, Economía, Conclusión ✅** | Escenario elegido antes de simular y explicado; economía separando verificable y supuesto; conclusión según el período; réplicas y efecto de cortes en pestaña aparte; tornado fuera | Tanda 6 (escenario único, conclusión armada con la corrida, Caso de informe con el catálogo explicado, réplicas y tornado) y §28 (Economía: cantidad verificable × precio supuesto) |
-| **7 · Frontend** (pendiente) | Ajustes en un menú (no en la barra lateral), nuevo diseño con una skill de diseño | QA visual en escritorio y celular. **Nico inicia la skill "impeccable".** La barra lateral ya no existe (G3) y los ajustes están en el menú inicial; falta el diseño |
+| **7 · Frontend** (hecha, §29) | Ajustes en un menú (no en la barra lateral), nuevo diseño con una skill de diseño | Tema oscuro "tótem de precios nocturno" con la skill impeccable: Archivo guardada en el proyecto, íconos de línea en lugar de emojis, pestañas arriba rediseñadas; QA de escritorio y celular (`reports/qa_frontend.py`) |
 | **8 · Cierre ✅** | `verificar.py` completo, QA visual, `CLAUDE.md` y `DATOS_REALES.md` al día | §28 |
 
 ## 4. Decisiones tomadas (6/10/2026)
@@ -92,7 +92,7 @@ No le gusta el frontend actual. Usar una skill de diseño (la que mencionó, "im
 
 ## 5. Pendientes
 - ~~La imagen del diseño de la animación~~ (llegó; etapa 3) · ~~el OK para la etapa 1~~ (dado).
-- Al 14/10/2026 sólo queda la **etapa 7 (Frontend)**, que arranca cuando Nico inicie la skill de diseño (ver §28).
+- ~~Etapa 7 (Frontend)~~: hecha el 14/10/2026 (§29). No queda nada del plan.
 
 ## 6. Etapa 1 cerrada (6/10/2026)
 
@@ -568,3 +568,60 @@ camión tiene que decir el origen realmente usado: hacerlas al revés obliga a r
   por defecto. `CLAUDE.md` y `DATOS_REALES.md` (148 datos) al día; la tabla de §3 marca cada etapa con dónde se hizo.
 - **Queda sólo la etapa 7 (Frontend):** el tema oscuro en toda la app y la navegación como la imagen de Nico. Arranca
   cuando Nico inicie la skill de diseño ("impeccable"); la barra lateral ya no existe y los ajustes ya están en el menú.
+
+## 29. Etapa 7: Frontend (14/10/2026)
+
+Nico pidió con la skill **impeccable**: *"colores de Shell pero en modo oscuro y más elegante, tanto las tipografías como
+todo en sí; quitá o mejorá los íconos o emojis, que la hacen ver cutre"*. Respuestas: pestañas arriba rediseñadas, íconos
+de línea finos, tipografía guardada en el proyecto. Dirección elegida en la página de decisión: **"Tótem de precios
+nocturno"** (la app se lee como el cartel de precios de la estación de noche: pocas cifras grandes iluminadas sobre negro
+y todo lo demás callado). Contexto del producto en `PRODUCT.md`; el sistema que quedó, en **`DESIGN.md`**.
+
+- **Tema** (`ui/tema.py`, `.streamlit/config.toml`): asfalto casi negro cálido (`NOCHE`), paneles apenas más claros con
+  filetes de 1 px; el amarillo Shell es la luz (la franja de la marquesina arriba, la acción principal, la pestaña
+  activa, el filete de las cifras) y el rojo Shell sólo alerta (con `ROJO_TEXTO` cuando es texto, porque el rojo de marca
+  no llega a 4,5:1 sobre la noche). Plantilla de Plotly sobre fondo transparente; los tableros en JavaScript reciben la
+  misma paleta (`paleta_json`). Los colores de las series pasaron el validador de paletas (luminosidad, croma y
+  daltonismo); el diésel G2 pasó de gris a violeta.
+- **Tipografía:** Archivo (variable de peso y ancho, SIL OFL) en `static/fonts/` con `enableStaticServing`: anda sin
+  internet. Títulos y cifras condensados (eje de ancho 72 %) y en mayúsculas; cifras tabulares en toda la app.
+- **Íconos:** ningún emoji. Pestañas, botones, desplegables y avisos usan Material Symbols de línea (los trae
+  Streamlit); el tablero animado y el seguimiento del camión, íconos SVG de trazo fino. Los textos que nombraban una
+  pestaña o un menú con su emoji ("pestaña ⚡ Eventos") ahora usan el nombre.
+- **Encabezado:** título en mayúsculas condensadas, el período a la derecha con "Cambiar período"; sin el botón Deploy.
+- **Código muerto:** `datos_ui.esquema_estacion_html` (no lo usaba nadie) se borró.
+- **QA:** `reports/qa_frontend.py` captura escritorio (1440×900) y celular (390×844) en `.impeccable/review/` y cuenta
+  errores de consola, emojis (también como ícono) y la fuente cargada. Los scripts de QA que buscaban textos con emoji
+  se actualizaron.
+- **Revisión final** (un revisor aparte, sin la conversación, con las capturas): pidió volver a capturar (había capturas
+  tomadas a mitad de una corrida) y dos tandas de correcciones: cifras del tótem más grandes que el título y con la
+  unidad chica (`vistas.cifra_html`; ya no queda ningún `st.metric`, la ayuda va en el rótulo y se abre con el mouse o
+  el teclado), la pestaña activa como una ranura amarilla (las pestañas de Streamlit 1.63 son `div[data-testid="stTab"]`)
+  y las 12 en una fila a 1366 px, avisos de precaución sin amarillo, medida de lectura (72–75 caracteres), los tanques con
+  relleno suave, el rótulo de Monte Comán, "Todos los tipos" en el filtro de Datos y fuentes y un "+ 52 m³" que se leía
+  como lista. Quedaba sólo dónde abre la app al simular: **Nico eligió seguir abriendo en "La estación"**.
+- **Verificación:** `verificar.py` 145/145; los 15 scripts de QA del puerto 8502 sin excepciones ni errores de consola (tres
+  tenían selectores que dependían del emoji o un tiempo de espera fijo y se corrigieron).
+
+## 30. Pedidos de Nico sobre el tablero y las fotos (14/10/2026)
+
+- **"Nunca se forman colas":** no es un error. Con la demanda real (≈ 252 clientes/día en 12 caras) y sin azar, en enero
+  la zona A tiene algún auto en el 52 % de los cuadros pero cola en el 0,1 %; la B y la C, nunca (con azar: 1,5 % y 1 %).
+  Nico pidió verlas igual "para la perspectiva": **Colas ilustrativas** (prendido por defecto, se apaga abajo del
+  tablero) suma autos a la cola según lo ocupada que está la zona y la hora, sólo si alguien está cargando. Mientras
+  está prendido, un rótulo sobre la marquesina dice que esos autos no salen de la simulación; los números (panel
+  "Colas actuales", "cola n / cap", indicadores) siguen siendo los de la corrida.
+- **Falla de un surtidor (EVT-05):** ahora saca de servicio **las dos caras del mismo surtidor** (las caras 2k y 2k+1 de
+  cada zona; `CARAS_POR_SURTIDOR` en `sim/modelo.py`), no una sola. El diésel es un solo surtidor (S3): si se rompe, no
+  hay diésel hasta que llega el técnico. Control nuevo (48). Los eventos están apagados por defecto: la corrida con datos
+  reales no cambia.
+- **Tablero:** cada surtidor de doble cara es una isla S1…S6 con sus caras numeradas 1…12 (antes cada cara decía S1…S6
+  por zona); los autos entran desde la avenida y salen por ella (a lo sumo 8 moviéndose a la vez; velocidad nueva
+  "60 s por día" para verlos); tránsito gris decorativo en la avenida; ya no se corta a la derecha en pantallas más
+  angostas (columnas que se achican y la cabecera en dos filas por debajo de 1.180 px); botón **Alertas** con un
+  interruptor general, uno por tipo (camión, corte de GNC, eventos) y uno por cada evento que ocurrió.
+- **Fotos:** la marquesina de Shell (con el logo, decisión de Nico) al 30 % detrás del encabezado del simulador, y la
+  foto de la playa de GNC sólo en el menú (`static/img/`). La regla "sin logo" pasó a "el logo sólo dentro de la foto".
+- QA: `reports/qa_tablero_movimiento.py` (1.180 y 1.440 px). `qa_tanda7_avisos` abre el panel de Alertas. `verificar.py`
+  146/146.
+

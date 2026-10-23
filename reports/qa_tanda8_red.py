@@ -27,7 +27,7 @@ with sync_playwright() as pw:
 
     pagina.goto(URL, wait_until="networkidle")
     pagina.wait_for_selector("text=¿Qué querés simular?", timeout=120000)
-    pagina.get_by_text("🚚 Abastecimiento").click()
+    pagina.get_by_text("Abastecimiento: de dónde").click()
     esperar()
     pagina.locator("[data-testid='stMultiSelect']").filter(has_text="Marcar a mano").first.click()
     esperar(1)
@@ -35,7 +35,7 @@ with sync_playwright() as pw:
     esperar(1)
     pagina.keyboard.press("Escape")
     esperar()
-    pagina.get_by_text("🚚 Abastecimiento").scroll_into_view_if_needed()
+    pagina.get_by_text("Abastecimiento: de dónde").scroll_into_view_if_needed()
     pagina.screenshot(path=str(SALIDA / "menu_abastecimiento.png"))
     pagina.get_by_role("button", name="Simular con datos reales").click()
     pagina.wait_for_selector("text=Simulación con datos reales (sin azar)", timeout=600000)

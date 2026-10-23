@@ -1,0 +1,643 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T22:39:37+00:00",
+  "title": "Design System: Simulador de la Estación Shell — San Rafael",
+  "extensions": {
+    "colorMeta": {
+      "amarillo": {
+        "role": "primary",
+        "displayName": "Amarillo marquesina",
+        "canonical": "oklch(86.5% 0.176 92.7)",
+        "tonalRamp": [
+          "#100B00",
+          "#2E2400",
+          "#504000",
+          "#755F02",
+          "#9C7F05",
+          "#C4A115",
+          "#EFC517",
+          "#FFEEB9"
+        ]
+      },
+      "rojo": {
+        "role": "secondary",
+        "displayName": "Rojo surtidor",
+        "canonical": "oklch(57.4% 0.221 27.3)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4D0003",
+          "#810008",
+          "#B80412",
+          "#E92F2D",
+          "#FE7468",
+          "#FDB4AA",
+          "#FFE9E6"
+        ]
+      },
+      "noche": {
+        "role": "neutral",
+        "displayName": "Noche",
+        "canonical": "oklch(15.9% 0.004 84.6)",
+        "tonalRamp": [
+          "#0C0B09",
+          "#262523",
+          "#43423F",
+          "#62615E",
+          "#83827F",
+          "#A6A5A2",
+          "#CAC9C6",
+          "#F0EEEB"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "oklch(20.0% 0.006 91.6)",
+        "tonalRamp": [
+          "#0C0B08",
+          "#262522",
+          "#43423E",
+          "#62615D",
+          "#83827E",
+          "#A6A5A1",
+          "#CAC9C5",
+          "#F0EEEA"
+        ]
+      },
+      "panel_2": {
+        "role": "neutral",
+        "displayName": "Panel 2",
+        "canonical": "oklch(24.0% 0.008 84.6)",
+        "tonalRamp": [
+          "#0D0B08",
+          "#272521",
+          "#44423D",
+          "#63615C",
+          "#84827D",
+          "#A7A59F",
+          "#CBC9C3",
+          "#F1EEE9"
+        ]
+      },
+      "filete": {
+        "role": "neutral",
+        "displayName": "Filete",
+        "canonical": "oklch(29.0% 0.010 80.6)",
+        "tonalRamp": [
+          "#0D0B07",
+          "#282520",
+          "#45423C",
+          "#64615B",
+          "#85827C",
+          "#A8A49E",
+          "#CCC9C2",
+          "#F2EEE7"
+        ]
+      },
+      "filete_fuerte": {
+        "role": "neutral",
+        "displayName": "Filete fuerte",
+        "canonical": "oklch(38.1% 0.015 79.7)",
+        "tonalRamp": [
+          "#0E0A05",
+          "#29241D",
+          "#464139",
+          "#666058",
+          "#878179",
+          "#AAA49B",
+          "#CEC8BF",
+          "#F4EEE4"
+        ]
+      },
+      "amarillo_suave": {
+        "role": "neutral",
+        "displayName": "Amarillo apagado",
+        "canonical": "oklch(26.1% 0.034 93.2)",
+        "tonalRamp": [
+          "#100B00",
+          "#2B2511",
+          "#48422D",
+          "#68614B",
+          "#89826B",
+          "#ACA58D",
+          "#D1C9B1",
+          "#F6EFD5"
+        ]
+      },
+      "asfalto": {
+        "role": "neutral",
+        "displayName": "Asfalto",
+        "canonical": "oklch(21.8% 0.006 91.6)",
+        "tonalRamp": [
+          "#0C0B08",
+          "#262522",
+          "#43423E",
+          "#62615D",
+          "#83827E",
+          "#A6A5A1",
+          "#CAC9C5",
+          "#F0EEEA"
+        ]
+      },
+      "asfalto_2": {
+        "role": "neutral",
+        "displayName": "Asfalto 2",
+        "canonical": "oklch(25.3% 0.008 84.6)",
+        "tonalRamp": [
+          "#0D0B08",
+          "#272521",
+          "#44423D",
+          "#63615C",
+          "#84827D",
+          "#A7A59F",
+          "#CBC9C3",
+          "#F1EEE9"
+        ]
+      },
+      "texto": {
+        "role": "neutral",
+        "displayName": "Acrílico",
+        "canonical": "oklch(93.7% 0.014 88.7)",
+        "tonalRamp": [
+          "#0E0B05",
+          "#28251D",
+          "#45423A",
+          "#646158",
+          "#868279",
+          "#A8A59B",
+          "#CDC9BF",
+          "#F2EEE4"
+        ]
+      },
+      "texto_2": {
+        "role": "neutral",
+        "displayName": "Texto 2",
+        "canonical": "oklch(75.5% 0.019 86.2)",
+        "tonalRamp": [
+          "#0F0B03",
+          "#29251A",
+          "#474136",
+          "#666155",
+          "#878275",
+          "#AAA498",
+          "#CFC9BB",
+          "#F4EEE0"
+        ]
+      },
+      "texto_3": {
+        "role": "neutral",
+        "displayName": "Texto 3",
+        "canonical": "oklch(65.1% 0.020 86.2)",
+        "tonalRamp": [
+          "#0F0B03",
+          "#29241A",
+          "#474136",
+          "#666154",
+          "#888275",
+          "#ABA497",
+          "#CFC9BB",
+          "#F4EEE0"
+        ]
+      },
+      "sobre_amarillo": {
+        "role": "neutral",
+        "displayName": "Tinta sobre luz",
+        "canonical": "oklch(18.8% 0.014 87.5)",
+        "tonalRamp": [
+          "#0E0B05",
+          "#28251D",
+          "#45423A",
+          "#656158",
+          "#868279",
+          "#A9A59B",
+          "#CDC9BF",
+          "#F2EEE4"
+        ]
+      },
+      "rojo_texto": {
+        "role": "secondary",
+        "displayName": "Rojo legible",
+        "canonical": "oklch(73.2% 0.164 27.1)",
+        "tonalRamp": [
+          "#1F0000",
+          "#4C0304",
+          "#7F080D",
+          "#AB2C28",
+          "#D35249",
+          "#FB776B",
+          "#FEB3AA",
+          "#FFE9E6"
+        ]
+      },
+      "referencia": {
+        "role": "neutral",
+        "displayName": "Referencia",
+        "canonical": "oklch(83.7% 0.020 87.5)",
+        "tonalRamp": [
+          "#0F0B03",
+          "#29251A",
+          "#474236",
+          "#666154",
+          "#878275",
+          "#AAA597",
+          "#CFC9BB",
+          "#F4EEE0"
+        ]
+      },
+      "azul": {
+        "role": "tertiary",
+        "displayName": "Azul GNC",
+        "canonical": "oklch(64.5% 0.139 255.3)",
+        "tonalRamp": [
+          "#000B1F",
+          "#00244E",
+          "#014082",
+          "#2061AE",
+          "#4483D3",
+          "#66A7FA",
+          "#A7CCFC",
+          "#E5F0FE"
+        ]
+      },
+      "turquesa": {
+        "role": "tertiary",
+        "displayName": "Turquesa",
+        "canonical": "oklch(65.8% 0.114 179.8)",
+        "tonalRamp": [
+          "#000F0B",
+          "#012C26",
+          "#024E43",
+          "#077163",
+          "#0F9784",
+          "#3EBCA7",
+          "#69E1CC",
+          "#BAFFF0"
+        ]
+      },
+      "naranja": {
+        "role": "tertiary",
+        "displayName": "Naranja",
+        "canonical": "oklch(66.8% 0.148 53.0)",
+        "tonalRamp": [
+          "#170600",
+          "#3D1A01",
+          "#673104",
+          "#944A0A",
+          "#C46413",
+          "#EB8841",
+          "#FFB789",
+          "#FFEADD"
+        ]
+      },
+      "violeta": {
+        "role": "tertiary",
+        "displayName": "Violeta",
+        "canonical": "oklch(66.9% 0.160 299.4)",
+        "tonalRamp": [
+          "#110026",
+          "#31035C",
+          "#512188",
+          "#7045AD",
+          "#9168D3",
+          "#B48BFA",
+          "#D1BCFD",
+          "#F1EBFE"
+        ]
+      },
+      "gris": {
+        "role": "tertiary",
+        "displayName": "Gris base",
+        "canonical": "oklch(63.1% 0.017 86.5)",
+        "tonalRamp": [
+          "#0E0B04",
+          "#29251C",
+          "#464238",
+          "#656156",
+          "#878277",
+          "#AAA599",
+          "#CEC9BD",
+          "#F3EEE2"
+        ]
+      },
+      "celeste": {
+        "role": "tertiary",
+        "displayName": "Celeste",
+        "canonical": "oklch(71.1% 0.111 225.3)",
+        "tonalRamp": [
+          "#000D14",
+          "#022A37",
+          "#05495E",
+          "#0D6B88",
+          "#168FB4",
+          "#49B3D9",
+          "#77D8FD",
+          "#DAF3FE"
+        ]
+      },
+      "indigo": {
+        "role": "tertiary",
+        "displayName": "Índigo",
+        "canonical": "oklch(65.8% 0.145 278.5)",
+        "tonalRamp": [
+          "#080030",
+          "#1D0C68",
+          "#35328C",
+          "#5154B1",
+          "#7076D7",
+          "#929AFE",
+          "#BDC4FF",
+          "#EAEDFF"
+        ]
+      },
+      "verde_ok": {
+        "role": "tertiary",
+        "displayName": "Verde libre",
+        "canonical": "oklch(67.0% 0.142 153.1)",
+        "tonalRamp": [
+          "#001004",
+          "#022E15",
+          "#055028",
+          "#0D743E",
+          "#259A57",
+          "#51BE79",
+          "#78E49C",
+          "#C8FED6"
+        ]
+      },
+      "verde_ingreso": {
+        "role": "tertiary",
+        "displayName": "Verde ingreso",
+        "canonical": "oklch(73.7% 0.132 155.3)",
+        "tonalRamp": [
+          "#000F05",
+          "#012E17",
+          "#02502B",
+          "#077442",
+          "#2C995F",
+          "#56BD80",
+          "#7CE3A4",
+          "#C5FFD8"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display (cifra del tótem)",
+        "purpose": "Las cifras clave: dígitos condensados al 72 %, unidad chica al lado."
+      },
+      "display-texto": {
+        "displayName": "Display texto",
+        "purpose": "Cifra del tótem cuyo valor no tiene dígitos (un nombre de método)."
+      },
+      "display-metric": {
+        "displayName": "Display metric",
+        "purpose": "st.metric de Streamlit con el mismo tratamiento de tótem."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "h1 del encabezado, en mayúsculas condensadas."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "h2/h3 de sección, caja normal, ancho 72, balance."
+      },
+      "title-sm": {
+        "displayName": "Title chico",
+        "purpose": "h4 en mayúsculas espaciadas."
+      },
+      "periodo": {
+        "displayName": "Período",
+        "purpose": "Período simulado, en amarillo y mayúsculas, a la derecha del encabezado."
+      },
+      "tab": {
+        "displayName": "Pestaña",
+        "purpose": "Rótulo de las pestañas de resultados (800 cuando está activa)."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texto de lectura, hasta 72ch; captions en texto_2 hasta 75ch."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Rótulo de las cifras, mayúsculas espaciadas en texto_2."
+      },
+      "unidad": {
+        "displayName": "Unidad",
+        "purpose": "La unidad al lado del número de una cifra, a 0,42 em."
+      }
+    },
+    "shadows": [
+      {
+        "name": "cartel-flotante",
+        "value": "0 8px 24px rgba(14,13,11,0.6)",
+        "purpose": "Cartel de ayuda sobre el rótulo de una cifra."
+      },
+      {
+        "name": "aviso-tablero",
+        "value": "0 18px 48px color-mix(in srgb, var(--fondo) 85%, transparent)",
+        "purpose": "Caja del aviso con pausa del tablero animado, sobre un velo de noche al 72 %."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-salida",
+        "value": "cubic-bezier(.16,1,.3,1)",
+        "purpose": "Curva de las transiciones de estado."
+      },
+      {
+        "name": "pestania",
+        "value": "160ms",
+        "purpose": "Color y fondo de pestañas y filetes de botones al pasar el mouse."
+      },
+      {
+        "name": "cifra-enciende",
+        "value": "520ms",
+        "purpose": "El dígito de la cifra se enciende de texto_2 a texto al aparecer."
+      },
+      {
+        "name": "aviso-entra",
+        "value": "260ms",
+        "purpose": "El aviso del tablero entra subiendo 8 px con opacidad."
+      },
+      {
+        "name": "reduced-motion",
+        "value": "none",
+        "purpose": "Con prefers-reduced-motion no hay transiciones ni animaciones."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "pestanias-una-fila",
+        "value": "760px",
+        "purpose": "Por debajo, las pestañas pasan a una fila deslizable."
+      },
+      {
+        "name": "tablero-apilado",
+        "value": "1000px",
+        "purpose": "Por debajo, el tablero animado pasa a dos columnas y a una."
+      },
+      {
+        "name": "contenido-max",
+        "value": "1440px",
+        "purpose": "Ancho máximo del contenido."
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Botón principal",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "La acción principal de una sección: la luz amarilla.",
+      "html": "<button class=\"ds-btn-primario\"><svg class=\"ds-ico\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M8 5l11 7-11 7z\"/></svg>Simular con datos reales</button>",
+      "css": ".ds-btn-primario { display:inline-flex; align-items:center; gap:8px; background:#FBCE07; color:#16130C; border:1px solid #FBCE07; border-radius:4px; padding:0.45rem 0.9rem; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-size:1rem; font-weight:700; cursor:pointer; } .ds-btn-primario:hover { filter:brightness(1.06); } .ds-btn-primario:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; } .ds-btn-primario:disabled { background:#211F1B; color:#958F82; border-color:#2E2B26; filter:none; cursor:not-allowed; } .ds-ico { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }"
+    },
+    {
+      "name": "Botón secundario",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Acciones de apoyo: un filete que se enciende al pasar el mouse.",
+      "html": "<button class=\"ds-btn-secundario\"><svg class=\"ds-ico\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M19 12H5M11 6l-6 6 6 6\"/></svg>Cambiar período</button>",
+      "css": ".ds-btn-secundario { display:inline-flex; align-items:center; gap:8px; background:#171613; color:#EEEAE0; border:1px solid #47423A; border-radius:4px; padding:0.45rem 0.9rem; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-size:1rem; cursor:pointer; transition:border-color 160ms, color 160ms; } .ds-btn-secundario:hover { border-color:#FBCE07; color:#FBCE07; } .ds-btn-secundario:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; } .ds-btn-secundario:disabled { color:#958F82; border-color:#2E2B26; } .ds-ico { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }"
+    },
+    {
+      "name": "Pestañas",
+      "kind": "nav",
+      "refersTo": "tab-active",
+      "description": "Barra de filetes; la activa se enciende como un precio.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">La estación</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">Indicadores</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Economía</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Datos y fuentes</button></div>",
+      "css": ".ds-tabs { display:flex; flex-wrap:wrap; gap:0; border-bottom:1px solid #2E2B26; background:#0E0D0B; } .ds-tab { background:transparent; border:0; border-radius:3px 3px 0 0; padding:0.5rem 0.42rem 0.55rem; color:#B5AFA2; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-size:0.9rem; font-weight:600; letter-spacing:0.01em; font-variation-settings:'wdth' 74; cursor:pointer; transition:color 160ms cubic-bezier(.16,1,.3,1), background-color 160ms cubic-bezier(.16,1,.3,1); } .ds-tab:hover { color:#EEEAE0; background:#171613; } .ds-tab:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; } .ds-tab[aria-selected=\"true\"] { background:#FBCE07; color:#16130C; font-weight:800; }"
+    },
+    {
+      "name": "Cifra del tótem",
+      "kind": "custom",
+      "refersTo": "totem-cifra",
+      "description": "La firma: dígitos condensados enormes, unidad chica, rótulo espaciado y filete amarillo; sin caja.",
+      "html": "<div class=\"ds-cifra\"><div class=\"ds-cifra-rotulo\"><abbr tabindex=\"0\" data-ayuda=\"Litros vendidos por día, promedio del período.\">Litros vendidos por día</abbr></div><div class=\"ds-cifra-valor\">8.511<span>L</span></div><div class=\"ds-cifra-debajo\">+ 52 m³ de GNC por día</div></div>",
+      "css": ".ds-cifra { border-top:1px solid rgba(251,206,7,0.55); padding:0.7rem 0 0.15rem; background:#0E0D0B; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-variant-numeric:tabular-nums; } .ds-cifra-rotulo { position:relative; font-size:0.74rem; font-weight:600; letter-spacing:0.07em; text-transform:uppercase; color:#B5AFA2; margin-bottom:0.35rem; } .ds-cifra-rotulo abbr { text-decoration:underline dotted #958F82; text-underline-offset:3px; cursor:help; } .ds-cifra-rotulo abbr:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; } .ds-cifra-rotulo abbr:hover::after, .ds-cifra-rotulo abbr:focus::after { content:attr(data-ayuda); position:absolute; left:0; top:calc(100% + 6px); z-index:20; width:max-content; max-width:32ch; background:#211F1B; color:#EEEAE0; border:1px solid #47423A; border-radius:4px; padding:0.5rem 0.65rem; font-size:0.82rem; font-weight:450; letter-spacing:0; text-transform:none; line-height:1.4; box-shadow:0 8px 24px rgba(14,13,11,0.6); } .ds-cifra-valor { font-variation-settings:'wdth' 72; font-weight:750; color:#EEEAE0; font-size:clamp(2.6rem, 4.2vw, 4rem); line-height:0.98; letter-spacing:-0.01em; white-space:nowrap; animation:ds-enciende 520ms cubic-bezier(.16,1,.3,1) both; } .ds-cifra-valor span { font-size:0.42em; font-weight:600; color:#B5AFA2; margin-left:0.18em; letter-spacing:0.02em; } .ds-cifra-debajo { font-size:0.85rem; color:#B5AFA2; margin-top:0.3rem; } @keyframes ds-enciende { from { color:#B5AFA2; } to { color:#EEEAE0; } } @media (prefers-reduced-motion: reduce) { .ds-cifra-valor { animation:none; } }"
+    },
+    {
+      "name": "Marquesina y período",
+      "kind": "custom",
+      "refersTo": "periodo",
+      "description": "Franja amarilla con la línea roja, título condensado y el período encendido a la derecha.",
+      "html": "<div class=\"ds-marquesina\"></div><div class=\"ds-encabezado\"><h1 class=\"ds-h1\">Simulador de la Estación Shell — San Rafael</h1><div class=\"ds-periodo\">30 días desde el 1 de enero<span>datos reales, sin azar</span></div></div>",
+      "css": ".ds-marquesina { height:14px; background:linear-gradient(#FBCE07 0 11px, #DD1D21 11px 14px); } .ds-encabezado { display:flex; justify-content:space-between; align-items:flex-end; gap:16px; padding:1.5rem 0 0.5rem; background:#0E0D0B; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; } .ds-h1 { margin:0; text-transform:uppercase; font-variation-settings:'wdth' 72; font-weight:800; font-size:clamp(1.8rem, 2.6vw, 2.4rem); line-height:1.02; letter-spacing:0.005em; color:#EEEAE0; text-wrap:balance; } .ds-periodo { text-align:right; font-variation-settings:'wdth' 72; font-weight:750; text-transform:uppercase; letter-spacing:0.04em; font-size:1.05rem; color:#FBCE07; line-height:1.15; } .ds-periodo span { display:block; font-weight:450; text-transform:none; letter-spacing:0; font-variation-settings:'wdth' 100; font-size:0.8rem; color:#B5AFA2; }"
+    },
+    {
+      "name": "Insignia de tipo de dato",
+      "kind": "chip",
+      "refersTo": "insignia",
+      "description": "Dice qué es dato, estimación, observación o supuesto con un punto de color y la palabra.",
+      "html": "<span class=\"ds-insignia ds-insignia-dato\">dato</span><span class=\"ds-insignia ds-insignia-estimacion\">estimación</span><span class=\"ds-insignia ds-insignia-observacion\">observación</span><span class=\"ds-insignia ds-insignia-supuesto\">supuesto</span>",
+      "css": ".ds-insignia { display:inline-flex; align-items:center; gap:6px; border:1px solid #47423A; border-radius:999px; padding:1px 9px; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-size:0.78rem; font-weight:600; margin-left:6px; color:#EEEAE0; background:#0E0D0B; } .ds-insignia::before { content:''; width:7px; height:7px; border-radius:50%; background:#8E897E; } .ds-insignia-dato::before { background:#3FAE6A; } .ds-insignia-estimacion::before { background:#FBCE07; } .ds-insignia-observacion::before { background:#4F8FE0; } .ds-insignia-supuesto::before { background:#D9772E; }"
+    },
+    {
+      "name": "Aviso",
+      "kind": "card",
+      "refersTo": "alert",
+      "description": "Panel callado con filete de 1 px; el ícono lleva el color del estado.",
+      "html": "<div class=\"ds-aviso ds-aviso-error\" role=\"alert\"><svg class=\"ds-ico\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M12 3l10 18H2z\"/><path d=\"M12 10v5M12 18v.01\"/></svg><p>Quiebre de stock de Súper: litros no vendidos por falta de combustible.</p></div>",
+      "css": ".ds-aviso { display:flex; gap:10px; align-items:flex-start; background:#171613; border:1px solid #2E2B26; border-radius:4px; padding:1rem; color:#EEEAE0; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; } .ds-aviso p { margin:0; max-width:72ch; } .ds-aviso .ds-ico { color:#4F8FE0; } .ds-aviso-error { border-color:rgba(221,29,33,0.6); } .ds-aviso-error .ds-ico { color:#FF7A6E; } .ds-ico { width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }"
+    },
+    {
+      "name": "Desplegable ¿Cómo se comprueba?",
+      "kind": "card",
+      "refersTo": "expander",
+      "description": "La cuenta que defiende cada cifra, en voz baja.",
+      "html": "<details class=\"ds-desplegable\"><summary>¿Cómo se comprueba?</summary><ul><li>Clientes por día = litros por mes ÷ días ÷ litros por cliente.</li></ul></details>",
+      "css": ".ds-desplegable { background:#171613; border:1px solid #2E2B26; border-radius:4px; color:#EEEAE0; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-variant-numeric:tabular-nums; } .ds-desplegable summary { padding:0.75rem 1rem; font-weight:600; cursor:pointer; transition:color 160ms; } .ds-desplegable summary:hover { color:#FBCE07; } .ds-desplegable summary:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; } .ds-desplegable ul { margin:0; padding:0 1rem 1rem 2rem; }"
+    },
+    {
+      "name": "Campo de selección",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Controles en el panel interior, con foco amarillo.",
+      "html": "<label class=\"ds-campo\">Mes de inicio<select><option>Enero</option><option>Febrero</option></select></label>",
+      "css": ".ds-campo { display:flex; flex-direction:column; gap:6px; font-family:Archivo, 'Segoe UI', system-ui, sans-serif; font-size:0.875rem; color:#EEEAE0; } .ds-campo select { background:#211F1B; color:#EEEAE0; border:1px solid #2E2B26; border-radius:4px; padding:0.5rem 0.75rem; font-family:inherit; font-size:1rem; accent-color:#FBCE07; transition:border-color 160ms; } .ds-campo select:hover { border-color:#47423A; } .ds-campo select:focus-visible { outline:2px solid #FBCE07; outline-offset:2px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "El tótem de precios nocturno",
+    "overview": "La app se lee como el cartel de precios de la estación de noche: pocas cifras enormes, iluminadas, sobre asfalto casi negro, y todo lo demás callado. El profesor ve primero el número grande; la cuenta que lo comprueba está debajo, en voz baja, en un desplegable \"¿Cómo se comprueba?\". Es un instrumento para presentar en vivo en una notebook: denso donde hay datos, pero con una sola jerarquía clara por pantalla.\n\nEl mundo es oscuro y cálido, nunca azul ni gris frío. La estructura se hace con filetes de 1 px y paneles apenas más claros que la noche, no con tarjetas, sombras ni degradados. El amarillo Shell es la única luz: la franja de la marquesina arriba de todo, la acción principal, la pestaña activa, el período y el filete de cada cifra. El rojo Shell no decora: alerta (quiebres, pérdidas, cortes) y subraya la marquesina. Una sola grotesca de ancho variable, Archivo, hace todo: condensada y pesada para las cifras y los títulos, normal para el texto, con cifras tabulares en toda la app.\n\nSe rechaza explícitamente el dashboard de tarjetas con borde y emojis. La única excepción es el tablero animado, que sigue la referencia de \"dashboard oscuro\" que Nico dio como vinculante: ahí sí hay paneles con filete, pero con la misma paleta, la misma tipografía y la fila de cifras con filete amarillo arriba.",
+    "keyCharacteristics": [
+      "Un solo tema, oscuro: asfalto casi negro cálido (`noche`) con paneles tonales (`panel`, `panel_2`).",
+      "Amarillo = luz y acción; rojo = alerta. Nada más compite por la atención.",
+      "Cifras de tótem: dígitos condensados enormes, unidad chica al lado, rótulo en versalitas espaciadas y un filete amarillo arriba; sin tarjeta.",
+      "La pestaña activa se enciende como un precio: ranura amarilla con letra oscura.",
+      "Íconos de línea finos (Material Symbols contorno, peso 300; SVG de trazo 1,75 en el tablero). Ningún emoji.",
+      "Los colores de producto son identidad: el mismo color en el auto animado, el surtidor, el tanque y la serie del gráfico."
+    ],
+    "rules": [
+      {
+        "name": "The Una Sola Luz Rule",
+        "body": "El amarillo es la luz y nada más se enciende: marquesina, acción principal, pestaña activa, período y el filete de las cifras. Una acción amarilla por sección: si en una misma sección hay dos botones amarillos, uno sobra.",
+        "section": "colors"
+      },
+      {
+        "name": "The Rojo Sólo Alerta Rule",
+        "body": "El rojo de marca aparece sólo cuando algo se pierde o se corta (y en la línea de la marquesina). El texto de alerta usa `rojo_texto`, nunca `rojo`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Producto Es Identidad Rule",
+        "body": "Súper = amarillo, V-Power = rojo, Diésel G2 = violeta, G3 = turquesa, GNC = azul (`COLOR_PRODUCTO`). El mismo color en gráficos, tablero y tanques; ninguna otra serie reutiliza esos colores con otro significado dentro del mismo gráfico.",
+        "section": "colors"
+      },
+      {
+        "name": "The Hex Sólo En tema.py Rule",
+        "body": "Ningún hex fuera de `ui/tema.py` (y su espejo `[theme]` en `config.toml`). Los tableros en JavaScript reciben la paleta por `paleta_json()`. `verificar.py` (control 14 / N15) lo hace cumplir, junto con los pares de `PARES_CONTRASTE` (WCAG ≥ 4,5:1) y la distancia entre colores de producto.",
+        "section": "colors"
+      },
+      {
+        "name": "The Serie Validada Rule",
+        "body": "Los colores de series se validan sobre `noche` (banda de luminosidad OKLCH 0,48–0,67, croma ≥ 0,10, daltonismo). Amarillo y rojo quedan fuera de la banda a propósito: son identidad. Todo color nuevo de serie pasa por el mismo validador y, si va como texto, entra en `PARES_CONTRASTE`.",
+        "section": "colors"
+      },
+      {
+        "name": "The Estado Con Palabra Rule",
+        "body": "Libre, ocupado y perdido llevan siempre texto además de color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Cifras Tabulares Rule",
+        "body": "`font-variant-numeric: tabular-nums` en toda la app, gráficos y tablero: los dígitos no bailan cuando cambian.",
+        "section": "typography"
+      },
+      {
+        "name": "The Una Familia Rule",
+        "body": "Archivo para todo. La jerarquía sale del eje de ancho y del peso, no de una segunda familia.",
+        "section": "typography"
+      },
+      {
+        "name": "The Unidad Chica Rule",
+        "body": "En una cifra el número manda; la unidad (\"L\", \"min\", \"m³\") va al lado, a 0,42 em, en `texto_2`. Nunca del mismo tamaño que el número.",
+        "section": "typography"
+      },
+      {
+        "name": "The Filete Es La Estructura Rule",
+        "body": "Si hay que separar algo, un filete de 1 px (`filete`) o un cambio de panel. Nunca una sombra, nunca un degradado decorativo.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** poner cada color nuevo en `ui/tema.py` (y en `[theme]` si es del tema de Streamlit) y referenciarlo por su constante; los tableros JS lo reciben por `paleta_json()`.",
+      "**Do** declarar en `PARES_CONTRASTE` todo par texto/fondo nuevo y mantenerlo ≥ 4,5:1.",
+      "**Do** mostrar las cifras clave con `cifra_html` (o `st.metric`): número condensado, unidad chica, filete amarillo, ayuda en el rótulo.",
+      "**Do** usar Material Symbols de contorno peso 300 (`:material/…:`) en Streamlit y SVG de línea de trazo 1,75 en los tableros.",
+      "**Do** pintar cada producto con su color de `COLOR_PRODUCTO` en todo lugar donde aparezca.",
+      "**Do** separar con filetes de 1 px y paneles tonales; dejar el resto en `texto_2`.",
+      "**Do** respetar `prefers-reduced-motion`: sin transiciones ni animaciones."
+    ],
+    "donts": [
+      "**Don't** escribir un hex fuera de `ui/tema.py` y `config.toml` (control 14 / N15).",
+      "**Don't** usar el logo de Shell.",
+      "**Don't** usar emojis en ningún lugar: rótulos, pestañas, avisos ni botones.",
+      "**Don't** meter las cifras clave en tarjetas con borde, sombra o fondo; el tótem no tiene caja.",
+      "**Don't** usar el rojo de marca como texto ni como decoración; el texto de alerta va en `rojo_texto`.",
+      "**Don't** poner más de una acción amarilla por sección, ni amarillo en algo que no sea luz, acción principal o el producto Súper.",
+      "**Don't** agregar una segunda familia tipográfica ni un tema claro.",
+      "**Don't** reutilizar un color de producto para otra categoría en el mismo gráfico."
+    ]
+  }
+}

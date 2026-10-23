@@ -5,15 +5,54 @@ port = 8501
 # carpeta (ruta con espacios y acentos), así que se usa sondeo: con "poll" Streamlit
 # recarga la app al guardar cualquier archivo del proyecto.
 fileWatcherType = "poll"
+# Sirve ./static en app/static/…: la tipografía Archivo va guardada en el proyecto (anda sin internet).
+enableStaticServing = true
 
 [theme]
-# Paleta Shell (ORQUESTADOR §8.1): amarillo #FBCE07 y rojo #DD1D21.
-base = "light"
-primaryColor = "#DD1D21"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#FFF6C2"
-textColor = "#1A1A1A"
-font = "sans serif"
+# Tótem de precios nocturno (DESIGN.md): asfalto casi negro, el amarillo Shell es la luz y el rojo Shell
+# sólo alerta. Los mismos valores están en ui/tema.py (NOCHE, PANEL, FILETE, TEXTO…); éste es el único
+# otro archivo con hex permitido (control 14).
+base = "dark"
+primaryColor = "#FBCE07"
+backgroundColor = "#0E0D0B"
+secondaryBackgroundColor = "#171613"
+textColor = "#EEEAE0"
+linkColor = "#FBCE07"
+borderColor = "#2E2B26"
+dataframeBorderColor = "#2E2B26"
+dataframeHeaderBackgroundColor = "#171613"
+codeBackgroundColor = "#171613"
+redColor = "#FF7A6E"
+orangeColor = "#D9772E"
+yellowColor = "#FBCE07"
+blueColor = "#4F8FE0"
+greenColor = "#3FAE6A"
+violetColor = "#A47BE8"
+grayColor = "#8E897E"
+chartCategoricalColors = ["#FBCE07", "#4F8FE0", "#1FA894", "#D9772E", "#A47BE8", "#8E897E"]
+font = "Archivo, sans-serif"
+headingFont = "Archivo, sans-serif"
+headingFontWeights = [800, 750, 700, 650, 650, 650]
+baseRadius = "4px"
+buttonRadius = "4px"
+showWidgetBorder = true
+
+# Archivo (Omnibus-Type, SIL OFL 1.1, static/fonts/OFL.txt): variable de peso 100–900 y ancho 62–125 %.
+[[theme.fontFaces]]
+family = "Archivo"
+url = "app/static/fonts/Archivo-latin.woff2"
+weight = "100 900"
+unicodeRange = "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+
+[[theme.fontFaces]]
+family = "Archivo"
+url = "app/static/fonts/Archivo-latin-ext.woff2"
+weight = "100 900"
+unicodeRange = "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF"
+
+[client]
+# Sin el botón "Deploy" en la barra de arriba: la app se presenta, no se publica.
+toolbarMode = "minimal"
 
 [browser]
 gatherUsageStats = false

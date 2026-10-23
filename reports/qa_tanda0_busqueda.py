@@ -71,7 +71,7 @@ with sync_playwright() as pw:
     pagina.screenshot(path=str(SALIDA / "busqueda_terminada.png"))
     cuerpo = pagina.locator("body").inner_text()
     print(f"duración {duracion:.0f} s · avance visto: {sorted(set(progresos))} · clics en otras pestañas: {clics}")
-    print("¿13 evaluaciones juntas?", "Las 13 evaluaciones" in cuerpo, "| ¿ganadora marcada?", "🏆 ganadora" in cuerpo)
+    print("¿13 evaluaciones juntas?", "Las 13 evaluaciones" in cuerpo, "| ¿ganadora marcada?", "ganadora" in cuerpo)
     print("¿avance monótono (no se reinició)?", progresos == sorted(progresos))
     print("excepciones:", pagina.locator("[data-testid='stException']").count())
     navegador.close()

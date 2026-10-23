@@ -15,7 +15,7 @@ from ui.tema import (
     FONDO,
     GRIS,
     ROJO,
-    TINTA_AZULADA,
+    REFERENCIA,
     plantilla_plotly,
     rgba,
 )
@@ -91,7 +91,7 @@ def grafico_red(
             # Contorno oscuro bajo el amarillo: solo no se ve sobre fondo blanco.
             fig.add_trace(
                 go.Scatter(x=x, y=y, mode="lines", hoverinfo="skip", showlegend=False,
-                           line=dict(color=TINTA_AZULADA, width=ancho + 4))
+                           line=dict(color=REFERENCIA, width=ancho + 4))
             )
         fig.add_trace(
             go.Scatter(
@@ -103,8 +103,8 @@ def grafico_red(
         )
         fig.add_annotation(
             x=sum(x) / 2, y=sum(y) / 2,
-            text=("✕ CORTADO<br>" if cortado else "") + f"{arco.ruta} · {_km(arco.km)} km",
-            showarrow=False, font=dict(size=11, color=ROJO if cortado else TINTA_AZULADA),
+            text=("CORTADO<br>" if cortado else "") + f"{arco.ruta} · {_km(arco.km)} km",
+            showarrow=False, font=dict(size=11, color=ROJO if cortado else REFERENCIA),
             bgcolor=rgba(FONDO, 0.85),
         )
     for nodo, (x, y) in POSICION_NODO.items():
@@ -113,11 +113,11 @@ def grafico_red(
             go.Scatter(
                 x=[x], y=[y], mode="markers+text", showlegend=False, hoverinfo="skip",
                 text=[NOMBRE_NODO[nodo]], textposition=_POSICION_TEXTO[nodo],
-                textfont=dict(size=12, color=TINTA_AZULADA),
+                textfont=dict(size=12, color=REFERENCIA),
                 marker=dict(
                     size=17 if (es_origen or es_destino) else 11,
-                    color=ROJO if es_destino else (TINTA_AZULADA if es_origen else GRIS),
-                    line=dict(width=2, color=TINTA_AZULADA),
+                    color=ROJO if es_destino else (REFERENCIA if es_origen else GRIS),
+                    line=dict(width=2, color=REFERENCIA),
                 ),
             )
         )
@@ -176,10 +176,10 @@ def grafico_red_mapa(red: ParametrosRed, cerrados: tuple[tuple[str, str], ...] =
         elif clave in en_ruta and not afecta:
             color, ancho = AMARILLO, 8
         else:
-            color, ancho = TINTA_AZULADA, 3
+            color, ancho = REFERENCIA, 3
         if color in (AMARILLO, AZUL):
             fig.add_trace(go.Scattermap(lon=lon, lat=lat, mode="lines", hoverinfo="skip", showlegend=False,
-                                        line=dict(color=TINTA_AZULADA, width=ancho + 4)))
+                                        line=dict(color=REFERENCIA, width=ancho + 4)))
         fig.add_trace(go.Scattermap(
             lon=lon, lat=lat, mode="lines", showlegend=False, hoverinfo="text",
             text=f"{NOMBRE_NODO[arco.a]} – {NOMBRE_NODO[arco.b]} · {arco.ruta} · {_km(arco.km)} km"
@@ -194,7 +194,7 @@ def grafico_red_mapa(red: ParametrosRed, cerrados: tuple[tuple[str, str], ...] =
         mode="markers", text=[NOMBRE_NODO[n] for n in nodos], hoverinfo="text", showlegend=False,
         marker=dict(
             size=[18 if n in (red.origen, red.destino) else 11 for n in nodos],
-            color=[ROJO if n == red.destino else (TINTA_AZULADA if n == red.origen else GRIS) for n in nodos],
+            color=[ROJO if n == red.destino else (REFERENCIA if n == red.origen else GRIS) for n in nodos],
         ),
     ))
     fig.update_layout(

@@ -1210,16 +1210,15 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     vistas.seccion_red_por_producto(p, st.session_state.resultados[0].replicas[0])
 
     # "Qué le hace cada corte a cada origen" y su efecto van sólo si se editó (pedido del grupo): con datos reales no
-    # hay cortes de ruta ni orígenes alternativos. El plan del período (abajo) deja probar cortes igual.
+    # hay cortes de ruta ni orígenes alternativos.
     editada = (st.session_state.get("modo") == "editada" or red.escenario_corte != "ninguno"
-               or bool(red.origenes_alternativos or red.origenes_no_disponibles or red.cuotas_origen))
+               or bool(red.origenes_alternativos or red.origenes_no_disponibles))
     if not editada:
         st.caption(
             "Esta corrida usa los datos reales: no hubo cortes de ruta ni camiones de otros orígenes, así que lo que le "
             "hace cada corte a cada origen no se muestra acá. Aparece si se edita la simulación o se prenden los "
-            "eventos de abastecimiento en el menú Abastecimiento; el efecto de un corte sobre el plan del período se prueba abajo."
+            "eventos de abastecimiento en el menú Abastecimiento."
         )
-        vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
         return
 
     st.markdown("##### Qué le hace cada corte a cada origen")
@@ -1243,7 +1242,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     st.markdown("##### Plazo de entrega con y sin cortes")
     if red.escenario_corte == "ninguno":
         st.info("Esta corrida no tiene un escenario de cortes de ruta: el efecto de cada corte sobre el plazo se ve en "
-                "la tabla de arriba y en el plan del período (abajo).", icon=":material/construction:")
+                "la tabla de arriba.", icon=":material/construction:")
     else:
         mes = 7
         sin_corte, con_corte = muestrear_plazos(
@@ -1308,8 +1307,6 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             "volvé a apretar el botón. Un camión demorado deja el tanque más tiempo sin "
             "reposición: el quiebre sube, y el óptimo de (s, Q) también cambia."
         )
-
-    vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
 
 
 # =============================================================================
@@ -1842,22 +1839,6 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
             help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
         )
-        st.markdown("**Plan de abastecimiento (flujo de costo mínimo, pestaña Red y rutas)**")
-        topes_previos = dict(previo.topes_origen)
-        t1, t2 = st.columns(2)
-        tope_arroyo = t1.number_input(
-            "Arroyo Seco puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("ARROYO", 0))), 5,
-            key="aj_tope_arroyo", help="FLU-02, supuesto: hoy 0 % (todo sale de Dock Sud).",
-        ) / 100
-        tope_lujan = t2.number_input(
-            "Luján de Cuyo puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("LUJAN", 0))), 5,
-            key="aj_tope_lujan", help="FLU-02, supuesto: hoy 0 % (YPF, sólo emergencia).",
-        ) / 100
-        despachar = st.toggle(
-            "Despachar según el plan", value=previo.despachar_plan, key="aj_despachar_plan",
-            help="Prendido: cada camión sale del origen que indica el plan de costo mínimo (cuotas exactas). Con los "
-                 "topes de hoy el plan es todo desde Dock Sud y la corrida no cambia.",
-        )
         politicas = {
             "conveniente": "La más conveniente: s = 2 días y Q = 4,5 días de venta (INV-13, por defecto)",
             "pronostico": "Por pronóstico: s con stock de seguridad (pestaña Pronóstico)",
@@ -1880,8 +1861,6 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
         indices_reales=bool(indices_reales), politica=str(politica),
-        topes_origen=(("DOCK", 1.0), ("ARROYO", float(tope_arroyo)), ("LUJAN", float(tope_lujan))),
-        despachar_plan=bool(despachar),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,

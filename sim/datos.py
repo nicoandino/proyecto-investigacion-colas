@@ -1054,20 +1054,6 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "E", "supuesto", "sin_dato", "grupo (14/10/2026): valores típicos de la cátedra", "grupo", "", (),
                     "promedio móvil de 3 meses; suavizado exponencial simple con α = 0,3", None, None),
           (3, 0.3)),
-
-        # ------------------------------------------- L. Flujos en la red (parte 3, §15–19)
-        ("FLU-01", ("Capacidad de cada tramo en el análisis de rutas independientes", "rutas", "C", "dato", "alta",
-                    "método (teorema de Menger): flujo máximo con capacidad 1 por tramo = cantidad de rutas que no "
-                    "comparten ningún tramo", "grupo", "", (),
-                    "no es tránsito: cuenta cuántas rutas independientes llegan a San Rafael y qué tramos hay que "
-                    "cortar para aislarla (corte mínimo)", None, None),
-          1.0),
-        ("FLU-02", ("Cuánto puede despachar cada origen para esta estación (fracción de los camiones del período)",
-                    "fracción", "C", "supuesto", "sin_dato",
-                    "INV-05 (hoy todo sale de Dock Sud) y nota 09 (Arroyo Seco, Luján de Cuyo)", "grupo", "", (),
-                    "hoy: Dock Sud 100 %, Arroyo Seco 0 %, Luján 0 % (otra empresa: emergencia). El menú deja "
-                    "probar otros topes; el plan de costo mínimo reparte los camiones entre los orígenes", None, None),
-          (("DOCK", 1.0), ("ARROYO", 0.0), ("LUJAN", 0.0))),
     ]
 )
 
@@ -1144,7 +1130,6 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosRed.prob_origen_no_disponible": "RED-20",
     "ParametrosRed.origenes_no_disponibles": "RED-19",
     "ParametrosRed.demora_redireccion_h": "RED-21",
-    "ParametrosRed.cuotas_origen": "FLU-02",
     # ParametrosEventos (parte 4)
     "ParametrosSimulacion.eventos": "EVT-00",
     "ParametrosEventos.activos": "EVT-00",

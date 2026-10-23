@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 148 datos · 🟢 dato 42 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 74
+**Resumen:** 146 datos · 🟢 dato 41 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 73
 
 ## La estación
 
@@ -236,13 +236,6 @@
 | PRO-02 | Ventana de ajuste del pronóstico: primer mes y meses de prueba | ((2022, 1), 12) | mes · meses | 🟠 supuesto | Mendoza | media | grupo (14/10/2026): se excluyen la pandemia (2020) y el rebote de 2021 (nota 12) | — |
 | PRO-03 | Nivel de confianza del intervalo del pronóstico (z) | 1.96 | — | 🟢 dato | Argentina / otro | alta | estadística: z de la normal estándar para 95 % | — |
 | PRO-04 | Parámetros de los métodos: meses del promedio móvil y α del suavizado exponencial | (3, 0.3) | meses · α | 🟠 supuesto | Argentina / otro | sin_dato | grupo (14/10/2026): valores típicos de la cátedra | — |
-
-## Flujos en la red
-
-| ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
-|---|---|---|---|---|---|---|---|---|
-| FLU-01 | Capacidad de cada tramo en el análisis de rutas independientes | 1.0 | rutas | 🟢 dato | Mendoza | alta | método (teorema de Menger): flujo máximo con capacidad 1 por tramo = cantidad de rutas que no comparten ningún tramo | — |
-| FLU-02 | Cuánto puede despachar cada origen para esta estación (fracción de los camiones del período) | (('DOCK', 1.0), ('ARROYO', 0.0), ('LUJAN', 0.0)) | fracción | 🟠 supuesto | Mendoza | sin_dato | INV-05 (hoy todo sale de Dock Sud) y nota 09 (Arroyo Seco, Luján de Cuyo) | — |
 
 ## Contradicciones entre fuentes: qué se eligió y por qué
 

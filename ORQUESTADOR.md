@@ -625,3 +625,11 @@ y todo lo demás callado). Contexto del producto en `PRODUCT.md`; el sistema que
 - QA: `reports/qa_tablero_movimiento.py` (1.180 y 1.440 px). `qa_tanda7_avisos` abre el panel de Alertas. `verificar.py`
   146/146.
 
+
+## 31. Se saca Flujos en redes (23/10/2026)
+
+Nico pidió quitar todo lo que sea flujo de redes. Se borró `sim/flujos.py` (transporte con rincón noroeste, costo mínimo y
+MODI; transbordo; flujo de costo mínimo; flujo máximo), el plan del período de la pestaña Red y rutas, los topes por
+origen y "Despachar según el plan" del menú Abastecimiento, el reparto por cuotas del motor (`ParametrosRed.cuotas_origen`),
+FLU-01/02 del Registro, `reports/qa_f3_plan.py` y los controles 42–44 (los demás conservan su número). Queda la red de
+rutas con Dijkstra, los cortes y los orígenes alternativos (tanda 8). Las secciones §15–19 quedan como historia.

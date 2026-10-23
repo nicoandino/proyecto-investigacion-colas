@@ -74,7 +74,7 @@ lanzado, por ejemplo:
 | Carpeta o archivo | Qué es |
 |---|---|
 | `app.py` | La aplicación de Streamlit (la única entrada). |
-| `sim/` | El motor, sin Streamlit: datos (el Registro), parámetros, modelo SimPy, red de rutas (Dijkstra), flujos en redes, GNC, pronóstico, eventos, escenarios y economía. |
+| `sim/` | El motor, sin Streamlit: datos (el Registro), parámetros, modelo SimPy, red de rutas (Dijkstra), GNC, pronóstico, eventos, escenarios y economía. |
 | `ui/` | La presentación: tema y colores, la animación (dibujada en el navegador), los gráficos y las vistas. |
 | `verificar.py` | Los controles del modelo. |
 | `reports/` | Los QA con Playwright, sus capturas y `generar_datos_reales.py`, que regenera `DATOS_REALES.md`. |

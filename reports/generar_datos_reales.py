@@ -32,7 +32,6 @@ SECCIONES = {
     "MOD": "Modelo",
     "EVT": "Eventos aleatorios",
     "PRO": "Pronóstico",
-    "FLU": "Flujos en la red",
 }
 ETIQUETA_TIPO = {
     "dato": "🟢 dato", "estimacion": "🟡 estimación", "observacion": "🔵 observación",

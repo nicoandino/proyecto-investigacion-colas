@@ -231,8 +231,6 @@ class Ajustes:
     calendario: bool = False                          # calendario de temporadas (DEM-14): opción del menú
     indices_reales: bool = True                       # forma mensual de la serie real (PRO-01): la de la app por defecto
     politica: str = "conveniente"                     # "conveniente" (INV-13) · "pronostico" (P4) · "cargada" (INV-07)
-    topes_origen: tuple[tuple[str, float], ...] = tuple(valor("FLU-02"))   # cuánto puede despachar cada origen (F3)
-    despachar_plan: bool = False                      # los camiones salen según el plan de costo mínimo (F3)
     factores: tuple[tuple[str, float], ...] = tuple(valor("DEM-14"))
     eventos_abastecimiento: bool = False              # un origen puede no cumplir un pedido (RED-20)
     origenes_no_disponibles: tuple[str, ...] = ()     # marcados a mano (nodos de la red)
@@ -268,10 +266,6 @@ class Ajustes:
         if self.politica != base.politica:
             salida.append({"pronostico": "política de reposición por pronóstico (stock de seguridad)",
                            "cargada": "política de reposición INV-07 (1,5 días de venta)"}.get(self.politica, self.politica))
-        if self.topes_origen != base.topes_origen:
-            salida.append("topes de despacho de los orígenes")
-        if self.despachar_plan:
-            salida.append("camiones despachados según el plan de costo mínimo")
         if not self.indices_reales and self.calendario:
             salida.append("calendario de temporadas en vez de los índices reales"
                           + (" (con factores cambiados)" if self.factores != base.factores else ""))
@@ -313,13 +307,6 @@ def aplicar_ajustes(
 
         p = replace(p, calendario_demanda=(),
                     estacionalidad=Estacionalidad(tuple(100.0 * i for i in estacionalidad_del_pronostico())))
-    if a.despachar_plan and p.red is not None:
-        # Los camiones salen de cada origen en la proporción del plan de costo mínimo (sim/flujos.py, F3).
-        from sim.flujos import plan_de_abastecimiento
-
-        plan = plan_de_abastecimiento(p.red, 100.0, dict(a.topes_origen))
-        if plan.cuotas:
-            p = replace(p, red=replace(p.red, cuotas_origen=plan.cuotas))
     if a.politica in ("pronostico", "conveniente"):
         # P4: el punto de pedido con el stock de seguridad del pronóstico; INV-13: la más conveniente de las evaluadas.
         if a.politica == "pronostico":

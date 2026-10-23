@@ -36,15 +36,12 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **146 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **141 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
   Energía, PRO-01, ene-2019 – ago-2026); cinco métodos de la cátedra con MAE/MAPE/RMSE; índices mensuales como opción
   del calendario; punto de pedido con stock de seguridad (s = D·L + z·σ·√L) como opción y candidata de la búsqueda.
-- **Flujos en redes** (parte 3, `sim/flujos.py`): transporte (rincón noroeste, costo mínimo, MODI), transbordo, flujo
-  de costo mínimo y flujo máximo, validados con los ejercicios de la cátedra; plan del período sobre la red real,
-  rutas independientes y "Despachar según el plan".
 
 ## Reglas de oro (no romper)
 
@@ -65,9 +62,9 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      146 controles
+verificar.py      141 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
-                  red · flujos · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
+                  red · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos · vistas
 static/fonts/     Archivo (woff2, SIL OFL) servida por Streamlit en app/static/
 reports/          QA con Playwright (usa el Chrome instalado) y generar_datos_reales.py
@@ -78,7 +75,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 146 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 141 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·
@@ -114,8 +111,9 @@ tanda están en **`ORQUESTADOR.md`** (§10–14). Las contradicciones entre fuen
 (`research_notes/…/07_decisiones_fuentes.md`); la app muestra sólo el valor elegido y una frase general.
 
 **Parte 3 (14/10/2026, cerrada):** temas de la cátedra **Pronóstico** (serie real de ventas → estacionalidad y stock de
-seguridad) y **Flujos en redes** (transbordo / costo mínimo y flujo máximo sobre la red de abastecimiento). Etapas P1–P4,
-F1–F3 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como en la cátedra.
+seguridad). Etapas P1–P4 y cierre en `ORQUESTADOR.md` §15–19. Sin dependencias nuevas: los métodos se programan como
+en la cátedra. **Flujos en redes** (F1–F3: transporte, transbordo, flujo máximo, plan del período y "Despachar según
+el plan") **se sacó el 23/10/2026** a pedido de Nico (§31); la red de rutas con Dijkstra y cortes sigue.
 **Parte 4 (14/10/2026, cerrada):** 14 **eventos aleatorios** (personal, equipos, precio, abastecimiento, demanda) que
 se prenden desde el menú; antes se corrige que **el GNC lo carga un playero** (PER-04). Etapas E0–E3 en §20–23; lo que
 falta del orquestador, en §24.

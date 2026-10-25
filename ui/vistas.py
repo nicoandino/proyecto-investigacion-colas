@@ -60,7 +60,7 @@ def _md(texto: str) -> str:
 
 
 def _pesos(x: float) -> str:
-    return f"$ {ent(x)}"
+    return f"−$ {ent(-x)}" if x < -0.5 else f"$ {ent(x)}"
 
 
 # =============================================================================
@@ -105,6 +105,21 @@ def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametro
          "costo de oportunidad: no se resta del margen"),
     ])
 
+    if not quiebres or all(q[0] == 0 for q in quiebres.values()):
+        from sim.datos import valor
+
+        plazo = p.inventario[0].plazo_entrega
+        st.success(
+            f"**En esta corrida no se vació ningún tanque.** Con la política que usa la app (pedir cuando quedan "
+            f"{dec(valor('INV-13')[0], 0)} días de venta) y sin azar, el camión tarda siempre lo mismo "
+            f"({dec(plazo.media, 0)} h) y llega antes de que el tanque se vacíe. "
+            "Los tanques se vacían cuando: **se pide más tarde** (por ejemplo, la política de INV-07, con 1,5 días, "
+            "en un año deja tanques vacíos decenas de veces); **el camión tarda más** (con *Editar simulación* hay "
+            f"azar y puede tardar hasta {dec(plazo.maximo, 0)} h); o **hay eventos** (faltante de combustible con cupo, "
+            "cortes de ruta, "
+            "mucha más demanda). Por eso en otras simulaciones aparecen horas con tanques vacíos.",
+            icon=":material/check_circle:",
+        )
     st.markdown("##### Cada tanque")
     filas = []
     for pr in capacidad:
@@ -136,8 +151,8 @@ def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametro
     st.dataframe(pd.DataFrame(filas), hide_index=True)
     st.caption(
         " · ".join(f"**{c}**: {d}" for c, d in CAUSAS)
-        + ". La venta perdida = lo que no se vendió × el margen por litro (por m³ el GNC), heredado sin fuente "
-        "(ECO-01/03): es un **costo de oportunidad** y se informa aparte, no se resta del margen. El GNC va en m³ "
+        + ". La venta perdida = lo que no se vendió × el margen por litro (por m³ el GNC) "
+        "(ECO-01, supuesto; ECO-03 del GNC, heredado): es un **costo de oportunidad** y se informa aparte, no se resta del margen. El GNC va en m³ "
         "y nunca se suma con los litros."
     )
     _comprobacion([
@@ -663,7 +678,6 @@ def pestania_demanda(
     if not p.calendario_demanda:
         tabla = tabla.drop(columns=["Temporada"])
     st.dataframe(tabla, hide_index=True, height=min(36 * len(filas) + 3, 420))
-    st.plotly_chart(graficos.grafico_demanda_diaria(SimpleNamespace(dias=dias_vista)), key="g_dem_dias")
     st.caption(
         f"Verificación: la suma de 'Llegaron' en los días elegidos es {ent(sum(x.autos_llegados for x in dias_vista))}; "
         f"en todo el período, {ent(sum(x.autos_llegados for x in traza.dias))} = los {ent(t['llegadas'])} de los "
@@ -782,219 +796,309 @@ def _valor_registro(id_: str):
 # =============================================================================
 # Pronóstico (parte 3): la serie real de Shell en Mendoza y los métodos de la cátedra
 # =============================================================================
-def pestania_pronostico(p: ParametrosSimulacion) -> None:
-    """La pestaña Pronóstico: la serie real, los métodos, el elegido y cómo entra al simulador."""
+def _mes_corto(mes: tuple[int, int]) -> str:
+    return MESES_ES[mes[1] - 1].capitalize()
+
+
+def _tabla_de_errores(comp, fmt, unidad: str) -> None:
+    """La tabla del parcial: Mes | Pronóstico | Real | Error | Error ÷ real | Error², con Σ y el promedio abajo."""
+    filas = [{
+        "Mes": _mes_corto(x.mes),
+        "Pronóstico": fmt(x.pronostico),
+        "Real": fmt(x.real),
+        "Error |P − R|": fmt(x.error),
+        "Error ÷ real": f"{dec(100 * x.error_relativo, 2)} %",
+        "Error²": _num(x.error_cuadrado),
+    } for x in comp.filas]
+    n = len(comp.filas)
+    filas.append({"Mes": "Suma", "Pronóstico": "", "Real": "", "Error |P − R|": fmt(comp.mae * n),
+                  "Error ÷ real": f"{dec(100 * comp.mape * n, 2)} %", "Error²": _num(comp.mse * n)})
+    filas.append({"Mes": f"Suma ÷ {n}", "Pronóstico": "", "Real": "", "Error |P − R|": f"MAE = {fmt(comp.mae)}",
+                  "Error ÷ real": f"MAPE = {dec(100 * comp.mape, 2)} %", "Error²": f"MSE = {_num(comp.mse)}"})
+    st.dataframe(pd.DataFrame(filas), hide_index=True, height=36 * (len(filas) + 1) + 3)
+    _tarjetas([
+        ("MAE", f"{fmt(comp.mae)} {unidad}".strip(), "error absoluto medio: Σ|P − R| ÷ n"),
+        ("MAPE", f"{dec(100 * comp.mape, 2)} %", "error porcentual medio: Σ(|P − R| ÷ R) ÷ n × 100"),
+        ("RMSE", f"{fmt(comp.rmse)} {unidad}".strip(), f"√MSE = √{_num(comp.mse)}"),
+    ])
+
+
+def _num(x: float) -> str:
+    """Con decimales si es chico (precios), entero si es grande."""
+    return dec(x, 2) if abs(x) < 100 else ent(x)
+
+
+def _calidad(mape: float) -> str:
+    """Escala habitual para leer el MAPE (Lewis): < 10 % muy preciso, 10–20 % bueno, 20–50 % razonable."""
+    if mape < 0.10:
+        return "muy preciso (menos del 10 %)"
+    if mape < 0.20:
+        return "bueno (entre 10 % y 20 %)"
+    if mape < 0.50:
+        return "razonable (entre 20 % y 50 %)"
+    return "poco confiable (más del 50 %)"
+
+
+def _explicacion(comp, fmt, que: str, unidad: str, por_que: str) -> None:
+    """Debajo de cada tabla: qué quiere decir el MAE, el MAPE y el RMSE que dieron."""
+    peor = max(comp.filas, key=lambda x: x.error)
+    cociente = comp.rmse / comp.mae if comp.mae else 1.0
+
+    def u(x: float) -> str:
+        return fmt(x) + (f" {unidad}" if unidad else "")
+
+    st.markdown(_md(
+        f"- **MAE = {u(comp.mae)}**: en promedio, el pronóstico de {que} se equivoca en {u(comp.mae)} por mes, "
+        "para arriba o para abajo.\n"
+        f"- **MAPE = {dec(100 * comp.mape, 2)} %**: ese error es, en promedio, el {dec(100 * comp.mape, 2)} % del valor "
+        f"real. Es un pronóstico {_calidad(comp.mape)}.\n"
+        f"- **RMSE = {u(comp.rmse)}**: eleva cada error al cuadrado, así que castiga más los meses con "
+        f"errores grandes. Es {dec(cociente, 2)} veces el MAE: "
+        + ("los errores son parejos, ningún mes se escapa mucho." if cociente < 1.15 else
+           f"hay meses que se escapan más que el resto (el mayor es {_mes_corto(peor.mes).lower()}, con "
+           f"{u(peor.error)}).")
+        + f"\n- **Por qué hay error**: {por_que}"
+    ))
+
+
+def pestania_pronostico(p: ParametrosSimulacion, anio: ResultadoReplica, eco: ParametrosEconomicos) -> None:
+    """La pestaña Pronóstico: tres tablas como el ejercicio 1 del parcial (clientes, precio y ganancias por mes)."""
     from sim.datos import valor
-    from sim.pronostico import METODOS, analizar, serie_registro
-
-    analisis = analizar()
-    meses_todos, valores_todos = serie_registro()
-    elegido = next(a for a in analisis.ajustes if a.metodo == analisis.elegido)
-    st.subheader("Pronóstico de la demanda con la serie real")
-    st.info(
-        "La serie es **real y oficial**: las ventas mensuales **al público de Shell en Mendoza** (Súper, V-Power, "
-        "gasoil G2 y G3), declaradas a la Secretaría de Energía (datos abiertos, PRO-01). **No hay datos por "
-        "estación**: es la suma de todas las Shell de la provincia, así que el simulador usa su **forma** (cuánto "
-        "pesa cada mes) y la escala a los litros de esta estación (DEM-01).",
-        icon=":material/trending_up:",
-    )
-    primero, n_prueba = valor("PRO-02")
-    _tarjetas([
-        ("Método elegido", METODOS[analisis.elegido].split(" (")[0], "el de menor RMSE en los meses de prueba"),
-        ("Error en la prueba (MAPE)", f"{dec(100 * elegido.errores.mape)} %", f"RMSE {ent(elegido.errores.rmse)} m³"),
-        ("Tendencia", f"{dec(100 * analisis.tendencia_mensual, 2)} % por mes",
-         "la recta de la serie desestacionalizada ÷ el nivel medio"),
-    ])
-    st.plotly_chart(graficos.grafico_pronostico(analisis, meses_todos, valores_todos), key="g_pronostico")
-    st.caption(
-        f"Se ajusta con {MESES_ES[primero[1] - 1]} de {primero[0]} a {MESES_ES[analisis.meses[-n_prueba - 1][1] - 1]} de "
-        f"{analisis.meses[-n_prueba - 1][0]} y se prueba en los {n_prueba} meses siguientes (zona gris), que el método "
-        "no vio. La pandemia (2020) y el rebote de 2021 quedan afuera del ajuste. La banda es ± z·RMSE (95 %)."
+    from sim.pronostico import (
+        clientes_pronosticados, comparar, escala_a_la_estacion, factores_de_precio, ganancias_por_mes,
+        inflacion_esperada, inflacion_real, recta_de_la_serie,
     )
 
-    st.markdown("##### Los cinco métodos en los meses de prueba")
-    filas = [{
-        "Método": METODOS[a.metodo] + (" · elegido" if a.metodo == analisis.elegido else ""),
-        "Parámetros": a.detalle,
-        "MAE (m³)": ent(a.errores.mae),
-        "MAPE": f"{dec(100 * a.errores.mape)} %",
-        "RMSE (m³)": ent(a.errores.rmse),
-        "Sesgo (m³)": f"{a.errores.sesgo:+,.0f}".replace(",", "."),
-    } for a in analisis.ajustes]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    st.caption("Sesgo = promedio de (real − pronóstico): negativo quiere decir que el método esperaba más de lo que se "
-               "vendió (la serie bajó más de lo previsto).")
+    meses = [(a, m) for a, m, _, _ in anio.por_mes]
+    st.subheader("Pronóstico contra simulación")
+    st.markdown(
+        "Como el **ejercicio 1 del parcial**: un modelo da un pronóstico para cada mes, se lo compara con el valor "
+        "**real** (acá, lo que dio la **simulación del año**) y se mide qué tan bueno es con tres errores."
+    )
+    st.latex(r"\text{MAE} = \frac{\sum |P - R|}{n} \qquad \text{MAPE} = \frac{\sum |P - R| / R}{n} \times 100"
+             r" \qquad \text{RMSE} = \sqrt{\frac{\sum (P - R)^2}{n}}")
+    st.caption(f"P = pronóstico · R = real · n = {len(meses)} meses. Error = |P − R| (valor absoluto). El año simulado "
+               "usa los mismos ajustes que esta corrida (si la corrida no era el año completo, se simuló aparte).")
 
-    st.markdown("##### Cuánto pesa cada mes")
-    st.plotly_chart(graficos.grafico_indices(analisis.indices), key="g_indices")
-    verano = sum(analisis.indices[m - 1] for m in (12, 1, 2)) / 3
-    st.caption(
-        f"En la serie real el verano (dic–feb) pesa {dec(verano, 2)} — casi un mes promedio —, mientras que el "
-        f"calendario de temporadas del menú (DEM-14, supuesto) lo sube 6 %. Para simular con la forma real, elegí "
-        f"**'Índices de la serie real'** en el desplegable Calendario del menú principal."
+    # --- 1. Clientes ------------------------------------------------------------------------------------------
+    a, b, (anio0, mes0) = recta_de_la_serie()
+    st.markdown("##### 1. Clientes por mes")
+    st.caption(_md(
+        f"**Pronóstico:** la recta de tendencia **F = A + B·t** (A = {ent(a)} m³, B = {dec(b)} m³ por mes, t = 0 en "
+        f"{MESES_ES[mes0 - 1]} de {anio0}) ajustada a las ventas reales de Shell en Mendoza (PRO-01), llevada a esta "
+        f"estación (× {dec(escala_a_la_estacion())} L por m³) y a clientes (÷ {dec(p.litros_medios_por_cliente)} L por "
+        f"cliente ÷ (1 − {dec(p.pct_gnc, 2)}) por el GNC). **Real:** los clientes que llegaron en la simulación."
+    ))
+    reales = [n for _, _, n, _ in anio.por_mes]
+    comp = comparar(meses, clientes_pronosticados(p, meses), reales)
+    _tabla_de_errores(comp, ent, "clientes")
+    _explicacion(
+        comp, ent, "clientes", "clientes",
+        f"la recta sólo ve la tendencia (baja {dec(-b)} m³ por mes en la provincia); la simulación además reparte la "
+        "demanda según cuánto pesa cada mes (índices de la serie real) y según los días que tiene cada mes, así que "
+        "los meses más fuertes o más cortos se le escapan a la recta.",
     )
 
-    st.markdown("##### Los próximos meses (y la estación escalada)")
-    ultimos = analisis.reales[-12:]
-    escala = float(valor("DEM-01")) / (sum(ultimos) / len(ultimos) * 1000.0)
-    filas = [{
-        "Mes": f"{MESES_ES[m - 1]} {a}",
-        "Shell Mendoza (m³)": ent(f),
-        "Intervalo 95 % (m³)": f"{ent(lo)} – {ent(hi)}",
-        "La estación (L)": ent(f * 1000 * escala),
-    } for (a, m), f, (lo, hi) in zip(analisis.futuros, analisis.pronostico, analisis.intervalo)]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    _comprobacion([
-        "Errores en los meses de prueba, con e = real − pronóstico: MAE = Σ|e| ÷ n · MAPE = Σ|e ÷ real| ÷ n · "
-        "RMSE = √(Σe² ÷ n) · sesgo = Σe ÷ n. Se elige el de menor RMSE.",
-        "Validación con el práctico de la cátedra (control 39 de `verificar.py`): Cable Televisora da MAE = 8,92 y "
-        "RMSE = 10,68, y la recta de mínimos cuadrados de sus datos reproduce los pronósticos del práctico.",
-        "Índices: cociente de cada mes al promedio móvil centrado de 12 meses, promediados por mes y normalizados "
-        "para que promedien 1.",
-        f"Escala a la estación: {ent(float(valor('DEM-01')))} L por mes (DEM-01) ÷ el promedio de los últimos 12 meses "
-        f"de Shell Mendoza ({ent(sum(ultimos) / len(ultimos))} m³) = {dec(100 * escala, 2)} % de la provincia. Supuesto: "
-        "la estación sigue la misma forma que el conjunto de las Shell de Mendoza.",
-        "Fuente: Secretaría de Energía, datos abiertos (nota 12 en research_notes; PRO-01 a PRO-04 en Datos y fuentes).",
-    ])
-
-
-
-def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
-    """Inventario: la cuenta del punto de pedido con el stock de seguridad del pronóstico (P4)."""
-    from sim.pronostico import stock_de_seguridad
-
-    filas_calc = stock_de_seguridad(p)
-    nombres = _nombres(p)
-    en_uso = all(abs(i.punto_pedido - x.s) < 1e-6 for i, x in zip(p.inventario, filas_calc))
-    st.markdown("##### 4. El punto de pedido con el pronóstico (stock de seguridad)")
-    st.caption(
-        "**s = D · L + z · σ_día · √L**: lo que se vende mientras viaja el camión (D·L) más un colchón por el error del "
-        "pronóstico. El error sale de la **serie real** (pestaña Pronóstico): el RMSE del método elegido en los meses "
-        f"de prueba es el **{dec(100 * filas_calc[0].error_relativo)} %** de lo que se vende en un mes; se lleva a cada "
-        "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
-        "z = 1,96 (95 %). La Q no cambia. "
-        + ("**Esta corrida usa esta política** (elegida en el menú Abastecimiento)." if en_uso else
-           "Esta corrida **no** la usa: se elige en el menú Abastecimiento, y en el Caso de informe compite con las "
-           "otras 13 políticas.")
+    # --- 2. Precio ------------------------------------------------------------------------------------------
+    minimo, maximo, _ = valor("PRO-05")
+    esperada = inflacion_esperada()
+    real_i = inflacion_real(len(meses))
+    f_pron = factores_de_precio([esperada] * len(meses))
+    f_real = factores_de_precio(real_i)
+    st.markdown("##### 2. Precio por mes")
+    productos = {"super": "Súper ($/L)", "diesel_g2": "Evolux Diesel ($/L)", "gnc": "GNC ($/m³)"}
+    elegido = st.radio("Producto", list(productos), format_func=productos.get, horizontal=True, key="pron_precio")
+    precio0 = float(dict(eco.precios)[elegido])
+    st.caption(_md(
+        f"Se parte del precio de referencia (ECO-08: ${ent(precio0)}) y cada mes sube por la inflación. "
+        f"**Pronóstico:** {dec(100 * esperada)} % todos los meses (el punto medio). **Real:** la inflación de cada mes "
+        f"varía entre {dec(100 * minimo)} % y {dec(100 * maximo)} % (PRO-05, supuesto; sorteada con semilla fija, "
+        "así que siempre da lo mismo). Precio del mes = precio del mes anterior × (1 + inflación)."
+    ))
+    comp_p = comparar(meses, [precio0 * f for f in f_pron], [precio0 * f for f in f_real])
+    st.dataframe(pd.DataFrame({
+        "Mes": [_mes_corto(m) for m in meses],
+        "Inflación del pronóstico": [f"{dec(100 * esperada)} %"] * len(meses),
+        "Inflación real": [f"{dec(100 * i)} %" for i in real_i],
+    }).set_index("Mes").T)
+    _tabla_de_errores(comp_p, lambda x: f"$ {dec(x, 2)}", "")
+    _explicacion(
+        comp_p, lambda x: f"${dec(x, 2)}", f"precio ({productos[elegido].split(' (')[0]})", 
+        "por m³" if elegido == "gnc" else "por litro",
+        "el pronóstico supone la misma inflación todos los meses y la real sube unos meses más y otros menos; como "
+        "el precio de cada mes arrastra la inflación de todos los anteriores, el error de un mes se acumula en los "
+        "siguientes. Los tres productos suben con la misma inflación: el MAPE es el mismo para los tres.",
     )
-    filas = [{
-        "Tanque": nombres[x.producto],
-        "D (L por día)": ent(x.consumo_dia),
-        "L (días)": dec(x.plazo_dias, 2),
-        "D · L": f"{ent(x.consumo_dia * x.plazo_dias)} L",
-        "σ por día": f"{ent(x.sigma_dia)} L",
-        "Stock de seguridad z·σ·√L": f"{ent(x.seguridad)} L",
-        "s por pronóstico": f"{ent(x.s)} L",
-        "s cargada": f"{ent(i.punto_pedido)} L",
-    } for x, i in zip(filas_calc, p.inventario)]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
 
+    # --- 3. Ganancias ----------------------------------------------------------------------------------------
+    st.markdown("##### 3. Ganancias por mes")
+    margenes = {pr.id: eco.margen_de(pr.id) for pr in p.productos}
+    st.caption(_md(
+        "**Ganancia bruta del combustible** = litros (m³ el GNC) × margen por litro, y el margen sube con el precio "
+        "(misma inflación). **Pronóstico:** los litros de la recta (punto 1) repartidos por producto (DEM-04) con la "
+        f"inflación de {dec(100 * esperada)} %. **Real:** lo que vendió la simulación en cada mes con la inflación "
+        "real. Márgenes de hoy: " + " · ".join(f"{pr.nombre} ${ent(margenes[pr.id])}" for pr in p.productos)
+        + " (ECO-01, supuesto del grupo; ECO-03, heredado sin fuente: los pesos muestran cómo se calcula, no cifras del negocio)."
+    ))
+    g_pron, g_real = ganancias_por_mes(p, margenes, meses, [v for *_, v in anio.por_mes], f_pron, f_real)
+    comp_g = comparar(meses, g_pron, g_real)
+    _tabla_de_errores(comp_g, _pesos, "")
+    _explicacion(
+        comp_g, _pesos, "ganancia", "",
+        "junta los dos errores anteriores: los litros del mes (la recta no ve la estacionalidad) y el precio (la "
+        "inflación real no es pareja). Además la simulación cuenta lo que se **vendió**, que puede ser menos que lo "
+        "pedido si faltó combustible o hubo cortes de GNC.",
+    )
+
+    with st.expander("De dónde salen los índices mensuales de la demanda"):
+        from sim.pronostico import analizar
+
+        st.plotly_chart(graficos.grafico_indices(analizar().indices), key="g_indices")
+        st.caption("Cuánto pesa cada mes en la serie real de Shell Mendoza (promedio 1). Con la opción 'Índices de la "
+                   "serie real' del menú (la de siempre), la simulación reparte los litros del año con estos índices.")
 
 
 # =============================================================================
-# Flujos en la red (parte 3, F3): el plan del período en Red y rutas
+# Economía: cuánto va a valer el litro (la inflación de PRO-05)
 # =============================================================================
-def seccion_plan_red(p: ParametrosSimulacion, r: ResultadoReplica, topes_menu: dict[str, float]) -> None:
-    """El plan de abastecimiento del período (transbordo), la matriz de transporte y las rutas independientes."""
-    from sim.flujos import (
-        M_GRANDE, arcos_de_ruta, matriz_transbordo, plan_de_abastecimiento, resolver_transporte, rutas_independientes,
-        solucion_inicial,
-    )
-    from sim.red import NOMBRE_NODO, camino_mas_corto
+def seccion_precio_futuro(eco: ParametrosEconomicos) -> None:
+    """El precio de nafta, gasoil y GNC mes a mes, con la inflación de cada mes (la 'real' de la pestaña Pronóstico)."""
+    from sim.datos import valor
+    from sim.pronostico import factores_de_precio, inflacion_real
 
-    red = p.red
-    nombres = _nombres(p)
-    st.divider()
-    st.markdown("#### El plan del período: flujos en la red (transbordo, transporte y flujo máximo)")
-    st.caption(
-        "Dijkstra elige la ruta de **cada** camión. Esto mira **todos los camiones del período juntos**: cuántos "
-        "conviene traer de cada origen y por qué tramos, con el **flujo de costo mínimo** (transbordo) en camión-km. Lo "
-        "que limita es **cuánto puede despachar cada origen** (FLU-02: hoy todo sale de Dock Sud; Arroyo Seco y Luján "
-        "son supuestos) y los **cortes**. Probá topes y cortes acá; para que la simulación despache así, prendé "
-        "**'Despachar según el plan'** en el menú Abastecimiento."
-    )
-    camiones_por = {pr: n for pr, n in r.pedidos_total if n > 0}
-    camiones = float(sum(camiones_por.values()))
-    if camiones <= 0:
-        st.info("En este período no se pidió ningún camión.", icon=":material/local_shipping:")
-        return
-    cortes = {"ninguno": "Sin cortes"} | {c.id: f"{c.id}: {c.nombre}" for c in red.cortes if c.arcos}
-    c1, c2, c3 = st.columns(3)
-    tope_arroyo = c1.slider("Arroyo Seco puede despachar (%)", 0, 100, int(round(100 * topes_menu.get("ARROYO", 0))), 5,
-                            key="plan_arroyo", help="Terminal de Raízen/Shell (nota 09). Hoy: 0 % (FLU-02).") / 100
-    tope_lujan = c2.slider("Luján de Cuyo puede despachar (%)", 0, 100, int(round(100 * topes_menu.get("LUJAN", 0))), 5,
-                           key="plan_lujan", help="Refinería de YPF: otra empresa, sólo emergencia. Hoy: 0 %.") / 100
-    corte = c3.selectbox("Corte de ruta", list(cortes), format_func=cortes.get, key="plan_corte")
-    cerrados = next((c.arcos for c in red.cortes if c.id == corte), ())
-    topes = {"DOCK": 1.0, "ARROYO": tope_arroyo, "LUJAN": tope_lujan}
-    plan = plan_de_abastecimiento(red, camiones, topes, cerrados)
-    hoy = plan_de_abastecimiento(red, camiones, {"DOCK": 1.0})
-    rutas = rutas_independientes(red, [o for o, t in topes.items() if t > 0], cerrados)
+    minimo, maximo, _ = valor("PRO-05")
+    inflacion = inflacion_real(12)
+    factores = factores_de_precio(inflacion)
+    precios = dict(eco.precios)
+    nombres = {"super": "Súper", "premium": "V-Power Nafta", "diesel_g2": "Evolux Diesel", "diesel_g3": "V-Power Diesel",
+               "gnc": "GNC"}
+    st.markdown("##### Cuánto va a valer el litro")
+    st.caption(_md(
+        f"Desde el precio de hoy (ECO-08), cada mes sube por la inflación de ese mes, que varía entre "
+        f"{dec(100 * minimo)} % y {dec(100 * maximo)} % (PRO-05, supuesto; la misma que usa la pestaña Pronóstico). "
+        "Precio del mes = precio del mes anterior × (1 + inflación). El GNC va por m³."
+    ))
+    mes = st.select_slider("¿Para qué mes?", options=list(range(1, 13)), value=12,
+                           format_func=lambda m: MESES_ES[m - 1].capitalize(), key="eco_mes_precio")
     _tarjetas([
-        ("Camiones del período", ent(camiones), "los que pidió la simulación (los 4 tanques)"),
-        ("Camión-km del plan (ida)", ent(plan.km_total), f"hoy, todo desde Dock Sud por la ruta más corta: {ent(hoy.km_total)}"),
-        ("Diferencia contra hoy", f"{dec(100 * (plan.km_total - hoy.km_total) / hoy.km_total)} %",
-         "negativo = el plan ahorra kilómetros"),
-        ("Rutas independientes", ent(rutas.valor), "rutas que no comparten ningún tramo (flujo máximo)"),
+        (f"{nombres[k]} en {MESES_ES[mes - 1]}", f"$ {ent(precios[k] * factores[mes - 1])}",
+         f"hoy $ {ent(precios[k])} (+{dec(100 * (factores[mes - 1] - 1))} %)")
+        for k in ("super", "premium", "diesel_g2", "diesel_g3")
     ])
-    if plan.enviados < camiones - 1e-9:
-        st.error(f"Con este corte y estos topes sólo se pueden traer {ent(plan.enviados)} de {ent(camiones)} camiones: "
-                 "ningún origen habilitado llega a San Rafael.", icon=":material/block:")
-    filas = []
-    for origen, n in plan.por_origen:
-        km = camino_mas_corto(red, origen=origen, cerrados=cerrados).km
-        filas.append({"Origen": NOMBRE_NODO.get(origen, origen), "Camiones": dec(n), "% de los camiones": pct(n, camiones),
-                      "km por camión (ruta más corta)": dec(km), "Camión-km": ent(n * km)})
-    st.markdown("##### De dónde sale cada camión y por dónde viene")
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    nombre_tramo = {frozenset((a.a, a.b)): a.ruta for a in red.arcos}
     st.dataframe(pd.DataFrame([{
-        "Tramo": f"{NOMBRE_NODO.get(d, d)} → {NOMBRE_NODO.get(h, h)}", "Ruta": nombre_tramo.get(frozenset((d, h)), ""),
-        "Camiones": dec(f)} for d, h, f in plan.tramos]), hide_index=True)
-    st.caption(
-        "El plan es un flujo continuo (puede dar 8,8 camiones); al despachar según el plan, la simulación reparte los "
-        "camiones enteros con cuotas exactas en esa misma proporción. "
-        f"Para aislar San Rafael de los orígenes habilitados hay que cortar **{ent(len(rutas.corte))} tramos** (el corte "
-        "mínimo): " + " · ".join(f"{NOMBRE_NODO.get(a, a)}–{NOMBRE_NODO.get(b, b)}" for a, b in rutas.corte) + "."
+        "Mes": MESES_ES[k].capitalize(),
+        "Inflación del mes": f"{dec(100 * inflacion[k])} %",
+        **{f"{nombres[x]} ($/{'m³' if x == 'gnc' else 'L'})": f"$ {dec(precios[x] * factores[k], 2)}" for x in nombres},
+    } for k in range(12)]), hide_index=True, height=36 * 13 + 3)
+
+
+# =============================================================================
+# Pestaña Colas: como el ejercicio 2 del parcial, con los números de la simulación
+# =============================================================================
+def _playeros_a_la_hora(p: ParametrosSimulacion, hora: int) -> int:
+    """Playeros en turno a esa hora (el último tramo de `turnos` que empezó antes)."""
+    return [n for inicio, n in sorted(p.turnos) if inicio <= hora][-1]
+
+
+def _tarjeta_cola(titulo: str, formula: str, valor: str, cuenta: str, significa: str) -> None:
+    with st.container(border=True):
+        st.markdown(cifra_html(titulo, valor), unsafe_allow_html=True)
+        st.caption(f"**{formula}**")
+        st.markdown(f"**Cuenta:** {cuenta}  \n**Qué significa:** {significa}")
+
+
+def _conclusion_colas(c, hora: int) -> str:
+    """Una frase que se arma sola según la utilización y la espera."""
+    franja = f"Entre las {hora:02d} y las {(hora + 1) % 24:02d} h"
+    espera = ("casi no se espera" if c.wq < 1 else "se espera poco" if c.wq < 5 else "la espera ya es larga")
+    sobra = c.s * c.mu - c.lam
+    if c.rho < 0.5:
+        return f"{franja} la estación anda holgada: {espera} y los playeros tienen bastante tiempo libre."
+    if c.rho < 0.8:
+        return f"{franja} la estación anda bien: {espera} y los playeros están ocupados, pero con margen."
+    if c.rho < 1:
+        return (f"{franja} {espera}, pero los playeros están casi al límite: con {ent(sobra)} clientes más por hora "
+                "no darían abasto y empezaría a formarse cola.")
+    return (f"{franja} llegan más clientes de los que los playeros pueden atender: la cola crece y algunos se van "
+            "sin cargar.")
+
+
+def pestania_colas(p: ParametrosSimulacion, traza: Traza) -> None:
+    """La pestaña Colas: datos, cuatro resultados con su cuenta y qué significan, y una conclusión."""
+    from sim.colas import con_little
+
+    st.subheader("Colas: cuánto se espera y cuántos autos hay")
+    st.markdown(
+        "Una **cola** se forma cuando llegan clientes más rápido de lo que se los puede atender. Acá los que atienden "
+        "son los **playeros** (cada cliente necesita uno, también el de GNC). Con cuatro datos de la simulación se "
+        "calcula todo lo demás, como en el ejercicio de colas del parcial."
     )
+    dias = max(len(traza.llegadas_dia_hora), 1)
+    llegadas_h = [sum(d[h] for d in traza.llegadas_dia_hora) / dias for h in range(24)]
+    pico = max(range(24), key=lambda h: llegadas_h[h])
+    hora = st.selectbox(
+        "¿Qué hora del día mirar?", list(range(24)), index=pico, key="colas_hora",
+        format_func=lambda h: f"De {h:02d} a {(h + 1) % 24:02d} h" + (" (la de más clientes)" if h == pico else ""),
+    )
+    lam = llegadas_h[hora]
+    atencion = p.media_servicio_playero()
+    s = _playeros_a_la_hora(p, hora)
+    suma = sum(d[hora][0] for d in traza.espera_dia_hora)
+    cant = sum(d[hora][1] for d in traza.espera_dia_hora)
+    wq = suma / cant if cant else 0.0
+    if lam <= 0:
+        st.info("A esa hora no llega nadie: no hay cola.", icon=":material/info:")
+        return
+    c = con_little(lam, atencion, s, wq)
 
-    with st.expander("La misma cuenta como problema de transporte (orígenes × tanques), como en la cátedra"):
-        origenes = [o for o, t in topes.items() if t > 0]
-        oferta = [round(topes[o] * camiones, 6) for o in origenes]
-        productos = list(camiones_por)
-        demanda = [float(camiones_por[x]) for x in productos]
-        km_de = {o: camino_mas_corto(red, origen=o, cerrados=cerrados).km for o in origenes}
-        costos = [[km_de[o] if km_de[o] != float("inf") else M_GRANDE for _ in productos] for o in origenes]
-        no = solucion_inicial(oferta, demanda, costos, "rincon_noroeste")
-        cm = solucion_inicial(oferta, demanda, costos, "costo_minimo")
-        opt = resolver_transporte(oferta, demanda, costos)
-        st.markdown(
-            f"Oferta = tope × camiones; demanda = camiones de cada tanque; costo = km por camión. Rincón noroeste: "
-            f"**{ent(no.costo)}** camión-km · costo mínimo: **{ent(cm.costo)}** · óptimo (MODI / Stepping-Stone, "
-            f"{opt.iteraciones} mejoras): **{ent(opt.costo)}**"
-            + (" · se agregó un **destino ficticio** (sobra oferta) con costo 0." if opt.ficticio == "destino" else ".")
-        )
-        columnas = [nombres[x] for x in productos] + (["Ficticio"] if opt.ficticio == "destino" else [])
-        filas_o = [NOMBRE_NODO.get(o, o) for o in origenes] + (["Ficticio"] if opt.ficticio == "origen" else [])
-        st.dataframe(pd.DataFrame([[dec(v) for v in fila] for fila in opt.asignacion], index=filas_o, columns=columnas))
-        mt = matriz_transbordo(arcos_de_ruta(red, cerrados),
-                               {**{o: n for o, n in plan.por_origen}, red.destino: -plan.enviados})
-        tr = resolver_transporte(mt.oferta, mt.demanda, mt.costos)
-        st.caption(
-            f"Y como **transbordo** con la matriz de la cátedra ({len(mt.filas)} filas × {len(mt.columnas)} columnas, "
-            f"B = {ent(mt.b)}; nodos de paso con oferta y demanda B y costo 0 consigo mismos): {ent(tr.costo)} camión-km, "
-            f"igual que el flujo de costo mínimo ({ent(plan.km_total)})."
-        )
-    _comprobacion([
-        "Plan: flujo de costo mínimo (caminos más cortos sucesivos) desde un nodo que reparte los camiones entre los "
-        "orígenes, cada uno hasta su tope × los camiones; costo = km de cada tramo (RED-*). Control 43 de `verificar.py`.",
-        _md("Los métodos se probaron con los ejercicios de la cátedra (control 42): transporte $4.200 / $4.100 / "
-            "$3.900, transbordo $20.700 y oleoducto 205.000 gal/h."),
-        "Rutas independientes: flujo máximo con capacidad 1 en cada tramo (FLU-01, teorema de Menger); el corte mínimo son "
-        "los tramos que habría que cortar para aislar la estación.",
-        "El flete en pesos sale de ECO-06 (por km sin dato: 0), por eso el plan se mide en camión-km.",
-    ])
+    st.markdown("##### 1. Los datos")
+    st.dataframe(pd.DataFrame([
+        {"Variable": "λ (lambda)", "Qué es": "Clientes que llegan por hora", "Valor": f"{dec(c.lam)} clientes/h",
+         "De dónde sale": f"Los que llegaron a esa hora ÷ {dias} días simulados"},
+        {"Variable": "1/μ", "Qué es": "Cuánto tarda un playero en atender a un cliente", "Valor": f"{dec(atencion)} min",
+         "De dónde sale": "Tiempo medio de carga del Registro (TIE-02 y TIE-04)"},
+        {"Variable": "μ (mu)", "Qué es": "Clientes que atiende un playero por hora", "Valor": f"{dec(c.mu)} clientes/h",
+         "De dónde sale": f"60 min ÷ {dec(atencion)} min"},
+        {"Variable": "s", "Qué es": "Playeros trabajando a esa hora", "Valor": ent(s),
+         "De dónde sale": "El turno de esa hora (PER-01)"},
+        {"Variable": "Wq", "Qué es": "Cuánto espera un cliente antes de que lo atiendan", "Valor": f"{dec(c.wq)} min",
+         "De dónde sale": "Lo midió la simulación"},
+    ]), hide_index=True)
 
+    st.markdown("##### 2. Los resultados")
+    c1, c2 = st.columns(2)
+    with c1:
+        _tarjeta_cola(
+            "Ocupación de los playeros", "ρ = λ ÷ (s × μ)", f"{dec(100 * c.rho, 0)} %",
+            f"{dec(c.lam)} ÷ ({s} × {dec(c.mu)}) = {dec(c.rho, 2)}",
+            f"en esa hora los playeros están ocupados el {dec(100 * c.rho, 0)} % del tiempo"
+            + ("; casi no les queda tiempo libre." if c.rho >= 0.8 else "." if c.rho >= 0.5
+               else "; tienen bastante tiempo libre."),
+        )
+        _tarjeta_cola(
+            "Autos esperando", "Lq = λ × Wq", f"{dec(c.lq)} autos",
+            f"{dec(c.lam)} clientes/h × {dec(c.wq)} min ÷ 60 = {dec(c.lq, 2)}",
+            "en promedio " + ("casi nunca hay un auto esperando." if c.lq < 0.5 else
+                              "hay menos de un auto esperando." if c.lq < 1 else
+                              f"hay {ent(c.lq)} autos esperando que los atiendan."),
+        )
+    with c2:
+        _tarjeta_cola(
+            "Tiempo total en la estación", "W = Wq + 1/μ", f"{dec(c.w)} min",
+            f"{dec(c.wq)} min esperando + {dec(atencion)} min de atención = {dec(c.w)} min",
+            f"un cliente pasa en total {dec(c.w)} minutos: {dec(c.wq)} esperando y el resto cargando.",
+        )
+        _tarjeta_cola(
+            "Autos en la estación", "L = λ × W", f"{dec(c.l)} autos",
+            f"{dec(c.lam)} clientes/h × {dec(c.w)} min ÷ 60 = {dec(c.l, 2)}",
+            f"en promedio hay {'1 auto' if round(c.l) <= 1 else f'{ent(c.l)} autos'} en la playa, entre los que cargan "
+            "y los que esperan.",
+        )
+
+    st.markdown("##### 3. En pocas palabras")
+    st.info(_conclusion_colas(c, hora), icon=":material/lightbulb:")
+    st.caption("Las cuentas pasan los minutos a horas (÷ 60) porque λ está en clientes por hora. Probá otra hora del día "
+               "para comparar: a la madrugada hay un solo playero.")
 
 
 # =============================================================================
@@ -1040,7 +1144,7 @@ def tabla_camiones(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametros
         f"{ent(len(filas))} camiones de los tanques elegidos ({ent(len(r.camiones))} en total = los pedidos de "
         f"Indicadores) · {ent(total_km)} km de ida · flete {_pesos(total_flete)} = {ent(len(filas))} × "
         f"{_pesos(eco.costo_pedido)} fijo + {_pesos(eco.flete_por_km)}/km × km de ida y vuelta (ECO-06, heredado sin "
-        "fuente). El plazo es el de INV-01 más la diferencia de viaje si salió de otro origen y la demora de un corte."
+        "fuente). El plazo es el de INV-01 (× km del origen ÷ km de Dock Sud si salió de otro origen) más la demora de un corte."
     ))
 
 
@@ -1087,41 +1191,3 @@ def seccion_red_por_producto(p: ParametrosSimulacion, r: ResultadoReplica) -> No
         "distribuidora Ecogas lo lleva a los usuarios (GNC-11, nota 13; informativo: el modelo no simula la red de gas). "
         "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña GNC)."
     )
-
-
-
-# =============================================================================
-# Economía: lo verificable (cantidades) y lo supuesto (precios)
-# =============================================================================
-def tabla_verificable_supuesto(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
-    """Cada importe del mes = cantidad (sale de la simulación, se comprueba) × precio (del Registro, con su tipo)."""
-    from sim.datos import por_id
-    from sim.economia_real import desglose_verificable
-
-    etiqueta_tipo = {"dato": "dato", "estimacion": "estimación", "observacion": "observación", "supuesto": "supuesto",
-                     "heredado": "heredado sin fuente"}
-    renglones = desglose_verificable(r, p, eco)
-    st.markdown("##### Lo verificable y lo supuesto")
-    st.caption(
-        "Cada importe es **cantidad × precio**. La **cantidad** sale de la simulación y se comprueba en las otras "
-        "pestañas (litros y compras en Indicadores, camiones en Inventario, dotación en el Modelo). El **precio** sale "
-        "del Registro, y casi todos son **heredados sin fuente** o estimaciones: ahí está la incertidumbre de la plata."
-    )
-    filas = []
-    for x in renglones:
-        datos = [por_id(i) for i in x.datos]
-        filas.append({
-            "Concepto": x.concepto,
-            "": "ingreso" if x.tipo == "ingreso" else "costo",
-            "Cantidad del mes (verificable)": f"{ent(x.cantidad)} {x.unidad}" if x.unidad != "mes" else "—",
-            "Precio unitario": _pesos(x.precio) if x.unidad != "mes" else "—",
-            "De dónde sale el precio": " · ".join(f"{d.id} ({etiqueta_tipo.get(d.tipo, d.tipo)})" for d in datos),
-            "Importe del mes": _pesos(x.importe),
-        })
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    heredados = sorted({i for x in renglones for i in x.datos if por_id(i).tipo == "heredado"})
-    st.caption(_md(
-        f"Ingresos: {_pesos(sum(x.importe for x in renglones if x.tipo == 'ingreso'))} · costos: "
-        f"{_pesos(sum(x.importe for x in renglones if x.tipo == 'costo'))} (los mismos de arriba). Precios heredados sin "
-        f"fuente: {', '.join(heredados) if heredados else 'ninguno'}; se cambian en el menú Economía."
-    ))

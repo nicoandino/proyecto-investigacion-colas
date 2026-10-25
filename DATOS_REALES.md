@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 148 datos · 🟢 dato 42 · 🟡 estimación 19 · ⚪ heredado 13 · 🟠 supuesto 74
+**Resumen:** 146 datos · 🟢 dato 40 · 🟡 estimación 19 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 74
 
 ## La estación
 
@@ -136,7 +136,6 @@
 | RED-18 | Arco ARROYO–ALVEAR (terminal de Arroyo Seco, Santa Fe) | 806.0 | km | 🟡 estimación | Argentina / otro | media | OSRM sobre OpenStreetMap (perfil auto), consultado 13-oct-2026, cálculo propio; la terminal es de Raízen/Shell (venta a Mercuria, jun-2026, nota 09) | — |
 | RED-19 | Orígenes alternativos del camión, en orden | ('ARROYO', 'LUJAN') | — | 🟠 supuesto | Mendoza | media | nota 09: Arroyo Seco (terminal de Raízen/Shell, misma empresa) y después Luján de Cuyo (refinería YPF, último recurso). La Paz y Pareditas son cruc… | — |
 | RED-20 | Probabilidad de que un origen no pueda cumplir un pedido | 0.05 | prob. | 🟠 supuesto | Mendoza | sin_dato | grupo (13/10/2026); sin estadística: faltantes de Shell en Mendoza en jul y oct de 2023 (Los Andes, Sitio Andino) | 0 % = 0.0 · 15 % = 0.15 |
-| RED-21 | Demora de redirigir un pedido a otro origen | 12.0 | h | 🟠 supuesto | Mendoza | sin_dato | grupo (13/10/2026): volver a gestionar el pedido con otra terminal | — |
 | RED-11 | Velocidad del camión | 70.0 | km/h | 🟠 supuesto | Mendoza | sin_dato | orquestador (entre 80 km/h legales y 60 urbanos) | — |
 | RED-12 | Escenario de cortes de ruta | aleatorio | — | 🟠 supuesto | Mendoza | sin_dato | orquestador (CASO §6.1; 3 cortes documentados en jul/ago-2026) | ninguno = ninguno · E1 = E1 · E2 = E2 · E3 = E3 · E4 = E4 |
 | RED-13 | Probabilidad de que un viaje encuentre un corte (jun–ago) | 0.1 | prob. | 🟠 supuesto | Mendoza | sin_dato | orquestador (CASO §6.1: no hay estadística de cortes) | sin cortes = 0.0 · 30 % = 0.3 |
@@ -165,7 +164,7 @@
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
-| ECO-01 | Margen por litro | 100.0 | $/L | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético | prueba −50 % = 50.0 · prueba +50 % = 150.0 |
+| ECO-01 | Margen por litro | 200.0 | $/L | 🟠 supuesto | Argentina / otro | sin_dato | grupo (25/10/2026, decisión de Nico): $200 por litro; antes $100, heredado del proyecto hipotético | prueba −50 % = 100.0 · prueba +50 % = 300.0 |
 | ECO-02 | Margen por compra en minimarket | 2500.0 | $/compra | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético | prueba −50 % = 1250.0 · prueba +50 % = 3750.0 |
 | ECO-03 | Margen por m³ de GNC | 100.0 | $/m³ | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético | prueba −50 % = 50.0 · prueba +50 % = 150.0 |
 | ECO-04 | Sueldos (playero / cajero / encargado) | (1680000.0, 1800000.0, 1740000.0) | $/mes | 🟡 estimación | Argentina / otro | media | DATOS §4 (FECRA); la URL dice enero-2026 | básicos = (1545472.0, 1666391.0, 1600406.0) |
@@ -173,7 +172,7 @@
 | ECO-05 | Inversión por cara/surtidor nuevo; operativo mensual | (18000000.0, 250000.0) | $ | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético | — |
 | ECO-06 | Flete del camión | (150000.0, 0.0) | $/viaje | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético (fijo); $/km sin dato | prueba ×0,5 = 75000.0 · prueba ×10 = 1500000.0 |
 | ECO-07 | Almacenamiento | 25.0 | $/litro-mes | ⚪ heredado | Argentina / otro | sin_dato | proyecto hipotético | prueba −50 % = 12.5 · prueba +50 % = 37.5 |
-| ECO-08 | Precios (referencia, informativos) | (('super', 2141.0), ('premium', 2300.0), ('diesel_g2', 2116.0), ('diesel_g3', 2641.0), ('gnc', 699.0)) | $ | 🟢 dato | San Rafael | media | DATOS §7, sept-2026 (GNC oct-2025) | — |
+| ECO-08 | Precios del cartel de la estación | (('super', 2227.0), ('premium', 2514.0), ('diesel_g2', 2447.0), ('diesel_g3', 2729.0), ('gnc', 998.5)) | $ | 🔵 observación | la estación | alta | foto del cartel de precios de la estación (grupo, 25/10/2026) | — |
 | ECO-09 | Anualización | año = 3 × Σ de los 4 meses representativos | — | 🟠 supuesto | Argentina / otro | sin_dato | orquestador | — |
 | ECO-10 | Cobertura de francos (personas por puesto cubierto 24 h) | 1.4 | × | 🟠 supuesto | Argentina / otro | sin_dato | 7 días de operación ÷ 5 días trabajados por persona | sin francos = 1.0 · 6 de 7 días = 1.1666666666666667 |
 | ECO-11 | Puestos fijos por día que el motor no modela (encargado · tienda) | (2.0, 2.0) | puestos-turno | 🟡 estimación | Argentina / otro | baja | DATOS §4 (encargado 1 y tienda 1 en mañana y tarde) | — |
@@ -236,13 +235,7 @@
 | PRO-02 | Ventana de ajuste del pronóstico: primer mes y meses de prueba | ((2022, 1), 12) | mes · meses | 🟠 supuesto | Mendoza | media | grupo (14/10/2026): se excluyen la pandemia (2020) y el rebote de 2021 (nota 12) | — |
 | PRO-03 | Nivel de confianza del intervalo del pronóstico (z) | 1.96 | — | 🟢 dato | Argentina / otro | alta | estadística: z de la normal estándar para 95 % | — |
 | PRO-04 | Parámetros de los métodos: meses del promedio móvil y α del suavizado exponencial | (3, 0.3) | meses · α | 🟠 supuesto | Argentina / otro | sin_dato | grupo (14/10/2026): valores típicos de la cátedra | — |
-
-## Flujos en la red
-
-| ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
-|---|---|---|---|---|---|---|---|---|
-| FLU-01 | Capacidad de cada tramo en el análisis de rutas independientes | 1.0 | rutas | 🟢 dato | Mendoza | alta | método (teorema de Menger): flujo máximo con capacidad 1 por tramo = cantidad de rutas que no comparten ningún tramo | — |
-| FLU-02 | Cuánto puede despachar cada origen para esta estación (fracción de los camiones del período) | (('DOCK', 1.0), ('ARROYO', 0.0), ('LUJAN', 0.0)) | fracción | 🟠 supuesto | Mendoza | sin_dato | INV-05 (hoy todo sale de Dock Sud) y nota 09 (Arroyo Seco, Luján de Cuyo) | — |
+| PRO-05 | Inflación mensual de los precios: mínimo, máximo y semilla del sorteo | (0.019, 0.029, 2026) | fracción por mes · semilla | 🟠 supuesto | Argentina / otro | sin_dato | grupo (23/10/2026, pedido de Nico): la inflación de cada mes varía entre 1,9 % y 2,9 % | — |
 
 ## Contradicciones entre fuentes: qué se eligió y por qué
 
@@ -268,7 +261,7 @@ Criterio único (nota 07): que mida lo mismo; oficial o primaria y vigente; más
 | C16 | Perfil horario | Medio | Tabla de 24 factores de DATOS §2 (picos 07–10 y 16–18). | Más específica: el perfil heredado es del proyecto hipotético. | Perfil heredado (picos 08 y 19 con factor 2,0). |
 | C17 | Fin de semana / quincena | Bajo-medio | Fin de semana × 1,30, normalizado al mes. La quincena es un escenario aparte. | Empate → conservadora: valor central del rango de la única fuente (DATOS §2). | × 1,24 – × 1,50. |
 | C18 | Salarios | Medio | Costo con adicionales: playero $1.680.000 · cajero $1.800.000 · encargado $1.740.000 por mes (enero-2026). | Oficial del sector (FECRA); el básico subestima lo que cuesta un empleado. | Básico sin adicionales. |
-| C19 | Precios | Informativo | Súper $2.141 · Premium $2.300 · G2 $2.116 · G3 $2.641 · GNC $699/m³ (sept-2026). | Más reciente: los de la Secretaría de Energía son oficiales pero están congelados desde 2025 (no vigentes). | Nota 01 (Mendoza, 6/5/2026); precios de la propia estación en la Secretaría de Energía (2025). |
+| C19 | Precios | Informativo | Súper $2.227 · V-Power Nafta $2.514 · Evolux Diesel $2.447 · V-Power Diesel $2.729 · GNC $998,5/m³ (cartel de la estación, 25/10/2026). | Medido en la propia estación y más reciente: el cartel de precios. | DATOS §7 (sept-2026: Súper $2.141 · G2 $2.116 · G3 $2.641 · GNC $699/m³); nota 01 (Mendoza, 6/5/2026); Secretaría de Energía (2025, congelados). |
 | C20 | Otros | Nulo | Informativos: ninguno entra al modelo (Mercuria, estaciones en San Rafael, tránsito RN 143, temperatura de julio). | No hay valor que elegir. | — |
 
 ## Lo que todavía no sabemos (a relevar en la estación)

@@ -230,8 +230,7 @@ def diferencia_economia(
 def margen_de_equilibrio_por_litro(e: EconomiaMensual, eco: ParametrosEconomicos) -> float:
     """Margen por litro que haría que el margen operativo del mes sea 0 (con lo demás igual).
 
-    Es el número que más le dice al grupo: si es muy distinto de ECO-01 ($100/L, heredado), la
-    conclusión económica depende de un dato que hoy no tenemos.
+    Por debajo de este margen la estación pierde plata; ECO-01 ($200/L) es un supuesto del grupo.
     """
     # Litros vendidos = ingreso de cada producto ÷ su margen (con márgenes por producto, cada uno el suyo).
     litros = sum(v / eco.margen_de(k) for k, v in e.ingreso_por_producto if k != "gnc" and eco.margen_de(k))
@@ -343,70 +342,76 @@ def decision_s6(
 # =============================================================================
 # Avisos que la app debe mostrar
 # =============================================================================
-def avisos(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> list[str]:
-    """Advertencias de la economía (textos sin formato de pesos; la app los escapa)."""
-    lista = [
-        "Los márgenes por litro, por m³ de GNC y por compra (ECO-01/02/03) son placeholders "
-        "heredados del proyecto hipotético, sin fuente: estos pesos muestran cómo se calcula, "
-        "no son una conclusión económica con datos propios.",
-        "El costo de personal usa los sueldos de FECRA con adicionales (ECO-04, la URL dice "
-        "enero-2026) y un factor de francos supuesto (ECO-10): cubrir 24 h los 7 días "
-        "necesita más personas que puestos.",
-    ]
-    if p.red is not None and p.red.origen == "DOCK" and eco.flete_por_km == 0:
-        lista.append(
-            f"El flete es un fijo de ${eco.costo_pedido:,.0f} por viaje y $0 por km (ECO-06): con "
-            f"origen Dock Sud el camión hace ≈ {km_por_viaje(p):,.0f} km de ida y vuelta, así que "
-            "el flete está casi seguro subestimado. Consultar transportistas."
-        )
-    return lista
-
-
-
 # =============================================================================
-# Lo verificable y lo supuesto (etapa 6 del rediseño): importe = cantidad × precio
+# Estado de resultados del mes (25/10/2026, pedido de Nico): ventas, compras y cada costo
 # =============================================================================
 class RenglonEconomia(NamedTuple):
-    """Un renglón del mes: la cantidad sale de la simulación (se comprueba); el precio, del Registro."""
+    """Un renglón del mes: cantidad (de la simulación) × precio (del Registro) = importe."""
 
     concepto: str
     tipo: str                  # "ingreso" | "costo"
     cantidad: float            # del mes, de la corrida
     unidad: str
-    precio: float              # $ por unidad (para el personal: el importe ÷ los puestos)
+    precio: float              # $ por unidad
     datos: tuple[str, ...]     # ids del Registro de donde sale el precio
     importe: float
 
 
-def desglose_verificable(r: ResultadoReplica, p: ParametrosSimulacion, eco: ParametrosEconomicos) -> list[RenglonEconomia]:
-    """Cada importe del mes partido en cantidad (verificable) × precio (supuesto o heredado, con su Dato).
+def precio_de_venta(eco: ParametrosEconomicos, producto: str) -> float:
+    """Precio del cartel (ECO-08, o el editado) del producto; el V-Power Nafta es el 'premium'."""
+    return float(dict(eco.precios)["premium" if producto == "vpower" else producto])
 
-    Los importes son exactamente los de `economia_mensual` (el control 47 lo comprueba).
+
+def estado_de_resultados(r: ResultadoReplica, p: ParametrosSimulacion, eco: ParametrosEconomicos) -> list[RenglonEconomia]:
+    """Ingresos (ventas al precio del cartel) y costos (compra del combustible, fletes, sueldos…) del mes.
+
+    Ventas − compra del combustible = litros × margen, así que ingresos − costos es exactamente el margen operativo
+    de `economia_mensual` (el control 47 lo comprueba). La compra sale de precio − margen (el margen es un supuesto).
     """
     e = economia_mensual(r, p, eco)
     dias = e.dias_mes
     nombres = {pr.id: pr.nombre for pr in p.productos}
-    salida: list[RenglonEconomia] = []
+    ingresos: list[RenglonEconomia] = []
+    compras: list[RenglonEconomia] = []
     for producto, vendido in r.litros_vendidos_por_producto:
-        margen = eco.margen_de(producto)
         gnc = producto == "gnc"
-        salida.append(RenglonEconomia(
-            f"Venta de {nombres.get(producto, producto)}", "ingreso", vendido * dias, "m³" if gnc else "L", margen,
-            ("ECO-03",) if gnc else ("ECO-01",), vendido * dias * margen))
-    salida.append(RenglonEconomia("Compras en el Shell Shop", "ingreso", r.compras_dia * dias, "compras",
-                                  eco.margen_compra, ("ECO-02",), e.ingreso_minimarket))
+        unidad = "m³" if gnc else "L"
+        cantidad = vendido * dias
+        precio = precio_de_venta(eco, producto)
+        costo = precio - eco.margen_de(producto)
+        nombre = nombres.get(producto, producto)
+        ingresos.append(RenglonEconomia(f"Venta de {nombre}", "ingreso", cantidad, unidad, precio, ("ECO-08",),
+                                        cantidad * precio))
+        compras.append(RenglonEconomia(f"Compra de {nombre} (precio − margen)", "costo", cantidad, unidad, costo,
+                                       ("ECO-08", "ECO-03" if gnc else "ECO-01"), cantidad * costo))
+    ingresos.append(RenglonEconomia("Shell Shop (margen de las compras)", "ingreso", r.compras_dia * dias, "compras",
+                                    eco.margen_compra, ("ECO-02",), e.ingreso_minimarket))
+    costos = list(compras)
     camiones = sum(v for _, v in r.pedidos_por_producto) * dias
-    salida.append(RenglonEconomia("Flete de los camiones", "costo", camiones, "camiones", flete_por_pedido(p, eco),
+    costos.append(RenglonEconomia("Flete de los camiones", "costo", camiones, "camiones", flete_por_pedido(p, eco),
                                   ("ECO-06",), e.flete))
+    factor = eco.cobertura_francos
+    for concepto, personas, sueldo, importe, datos in (
+        ("Sueldos de los playeros", personas_turno_playeros(p) * factor, eco.sueldo_playero_mensual,
+         e.personal_playeros, ("ECO-04", "ECO-10")),
+        ("Sueldos de los cajeros (adentro)", p.cajas * (24.0 / HORAS_POR_TURNO) * factor, eco.sueldo_cajero_mensual,
+         e.personal_cajeros, ("ECO-04C", "ECO-10")),
+        ("Sueldos de la tienda", eco.puestos_tienda * factor, eco.sueldo_cajero_mensual, e.personal_tienda,
+         ("ECO-04C", "ECO-11")),
+        ("Sueldo del encargado", eco.puestos_encargado * factor, eco.sueldo_encargado_mensual, e.personal_encargado,
+         ("ECO-04", "ECO-11")),
+    ):
+        costos.append(RenglonEconomia(concepto, "costo", personas, "personas", sueldo, datos, importe))
     litros_tanque = sum(v for _, v in r.nivel_por_producto)
-    salida.append(RenglonEconomia("Almacenamiento", "costo", litros_tanque, "L promedio en los tanques",
+    costos.append(RenglonEconomia("Almacenamiento", "costo", litros_tanque, "L promedio en los tanques",
                                   eco.costo_almacenamiento_litro_mes, ("ECO-07",), e.almacenamiento))
-    puestos = (personas_turno_playeros(p) + p.cajas * (24.0 / HORAS_POR_TURNO) + eco.puestos_encargado
-               + eco.puestos_tienda) * eco.cobertura_francos
-    salida.append(RenglonEconomia("Personal", "costo", puestos, "personas (puestos × francos)",
-                                  e.personal_total / puestos if puestos else 0.0, ("ECO-04", "ECO-04C", "ECO-10", "ECO-11"),
-                                  e.personal_total))
     if e.costo_eventos:
-        salida.append(RenglonEconomia("Eventos aleatorios (horas extra, técnico)", "costo", 1.0, "mes", e.costo_eventos,
+        costos.append(RenglonEconomia("Eventos aleatorios (horas extra, técnico)", "costo", 1.0, "mes", e.costo_eventos,
                                       ("EVT-02", "EVT-05", "EVT-15"), e.costo_eventos))
-    return salida
+    return ingresos + costos
+
+
+def resultado_con_margen(e: EconomiaMensual, eco: ParametrosEconomicos, margen: float) -> float:
+    """Margen operativo del mes si nafta y diésel tuvieran `margen` $/L (lo demás igual)."""
+    litros = sum(v / eco.margen_de(k) for k, v in e.ingreso_por_producto if k != "gnc" and eco.margen_de(k))
+    return e.ingreso_gnc + e.ingreso_minimarket + litros * margen - e.costo_total

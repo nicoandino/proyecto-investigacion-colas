@@ -313,13 +313,31 @@ def origen_del_pedido(red: ParametrosRed, az: Aleatorio, stream: str) -> tuple[s
     return red.origen, True
 
 
-def extra_por_origen(red: ParametrosRed, origen: str, redirigido: bool) -> float:
-    """Minutos que se suman al plazo base por salir de otro origen: (viaje desde ese origen − viaje desde el
-    habitual) + la demora de redirección si se redirigió."""
-    if not redirigido:
-        return 0.0
-    diferencia = camino_mas_corto(red, origen=origen).minutos - camino_mas_corto(red).minutos
-    return diferencia + red.demora_redireccion_h * 60.0
+def cortes_que_eligen_cada_ruta(red: ParametrosRed) -> dict[tuple[str, ...], tuple[str, ...]]:
+    """{ruta: los cortes cargados (E1, E2, E4…) que, juntos, la vuelven la más corta}; la combinación más chica.
+
+    Las rutas que no aparecen no las elige ninguna combinación de cortes cargados (hace falta cortar otra cosa).
+    """
+    from itertools import combinations
+
+    con_arcos = [c for c in red.cortes if c.arcos]
+    salida: dict[tuple[str, ...], tuple[str, ...]] = {}
+    for n in range(len(con_arcos) + 1):
+        for grupo in combinations(con_arcos, n):
+            cerrados = tuple(arco for c in grupo for arco in c.arcos)
+            ruta = camino_mas_corto(red, cerrados=cerrados).ruta
+            if ruta and ruta not in salida:
+                salida[ruta] = tuple(c.id for c in grupo)
+    return salida
+
+
+def factor_por_origen(red: ParametrosRed, origen: str) -> float:
+    """Cuánto se multiplica el plazo base por salir de otro origen: km desde ese origen ÷ km desde el habitual.
+
+    Es la misma velocidad media del pedido para todos (pedido de Nico, 25/10/2026): desde Dock Sud, 991 km en el
+    plazo medio de 36 h (INV-01) ≈ 27,5 km/h, que incluye pedir, cargar, manejar con descansos y descargar.
+    """
+    return camino_mas_corto(red, origen=origen).km / camino_mas_corto(red).km
 
 
 def dias_de_mes_en_corrida(inicio: tuple[int, int], dias: int) -> set[int]:
@@ -336,6 +354,8 @@ __all__ = [
     "arcos_de_la_ruta",
     "camino_mas_corto",
     "corte_de",
+    "cortes_que_eligen_cada_ruta",
+    "factor_por_origen",
     "demora_de_viaje",
     "demora_por_corte",
     "demora_si_encuentra_el_corte",
@@ -343,6 +363,5 @@ __all__ = [
     "mes_del_dia",
     "muestrear_plazos",
     "origen_del_pedido",
-    "extra_por_origen",
     "rutas_posibles",
 ]

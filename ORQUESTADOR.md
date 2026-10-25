@@ -625,3 +625,57 @@ y todo lo demás callado). Contexto del producto en `PRODUCT.md`; el sistema que
 - QA: `reports/qa_tablero_movimiento.py` (1.180 y 1.440 px). `qa_tanda7_avisos` abre el panel de Alertas. `verificar.py`
   146/146.
 
+
+## 31. Se saca Flujos en redes (23/10/2026)
+
+Nico pidió quitar todo lo que sea flujo de redes. Se borró `sim/flujos.py` (transporte con rincón noroeste, costo mínimo y
+MODI; transbordo; flujo de costo mínimo; flujo máximo), el plan del período de la pestaña Red y rutas, los topes por
+origen y "Despachar según el plan" del menú Abastecimiento, el reparto por cuotas del motor (`ParametrosRed.cuotas_origen`),
+FLU-01/02 del Registro, `reports/qa_f3_plan.py` y los controles 42–44 (los demás conservan su número). Queda la red de
+rutas con Dijkstra, los cortes y los orígenes alternativos (tanda 8). Las secciones §15–19 quedan como historia.
+
+## 32. Pedidos de Nico: precio, colas, demanda y un pronóstico más simple (23/10/2026)
+
+- **Economía:** "Cuánto va a valer el litro": precio de Súper, V-Power, G2, G3 y GNC mes a mes desde ECO-08 con la
+  inflación de cada mes (PRO-05: entre 1,9 % y 2,9 %, sorteada con semilla fija, redondeada a 0,1 %).
+- **Indicadores → Colas y esperas:** las fórmulas de la cátedra (Little, M/M/1, M/M/s; `sim/colas.py`) con λ de la hora
+  elegida, μ = 60 ÷ el tiempo medio de atención de un playero y s = playeros en turno, comparadas con la espera que midió
+  la simulación. Validadas con la práctica (banco, Banco Nación, NY Taxi): control 49. `verificar.py`: 143/143.
+- **Demanda:** se sacó el gráfico "Cada día del mes" (la tabla del día a día queda).
+- **Pronóstico:** se reemplazó por tres tablas como el ejercicio 1 del parcial B (sin el intervalo de confianza):
+  Pronóstico | Real | error |P − R| | error ÷ real | error² con MAE, MAPE y RMSE y una explicación debajo. Clientes
+  por mes (recta A + B·t de la serie real llevada a la estación contra los clientes del año simulado), precio (2,4 %
+  fijo contra la inflación sorteada) y ganancia bruta del combustible (litros × margen que sube con el precio). Si la
+  corrida no es el año completo, el año se simula aparte (≈ 5 s, con caché). El motor ahora guarda clientes y litros
+  vendidos por mes de calendario (`ResultadoReplica.por_mes`). Los cinco métodos y el stock de seguridad siguen en
+  `sim/pronostico.py` (índices de la demanda y política por pronóstico).
+
+## 33. Pedidos de Nico: inventario, rutas, economía con estado de resultados y precios del cartel (25/10/2026)
+
+- **Inventario:** los gráficos del nivel de cada tanque van en un desplegable (abierto). Si no se vació ningún tanque,
+  un aviso explica por qué (política INV-13 + sin azar ⇒ el camión llega a tiempo) y cuándo sí pasa (INV-07, azar con
+  plazos de hasta 48 h, eventos). El punto 4 ya no tiene cuentas: dice en palabras cuándo pedir y por qué, cuál se usa,
+  cuál es la mejor (s = 2, Q = 4,5 días) y la peor (s = 1, Q = 2 días) de las 14 probadas en el año.
+- **Red y rutas:** el plazo desde otro origen es plazo base × km del origen ÷ km de Dock Sud (la misma velocidad media,
+  991 km ÷ 36 h ≈ 27,5 km/h): Arroyo Seco ≈ 32 h, Luján ≈ 8 h. Se saca la demora de redirección (RED-21). Un aviso dice
+  que Arroyo Seco y Luján son un supuesto (la estación se abastece sólo de Dock Sud; Luján es de YPF). Debajo de las 4
+  rutas, cuándo se usaría cada una según los cortes cargados (`cortes_que_eligen_cada_ruta`).
+- **GNC:** se saca "Efecto del corte en la estación".
+- **Economía:** quedan los ingresos y costos del mes, un **cuadro de ingresos** (ventas al precio del cartel y el margen
+  del Shell Shop), un **cuadro de costos** (compra del combustible = precio − margen, flete por camión, sueldos de
+  playeros, cajeros, tienda y encargado, almacenamiento), por qué da ese resultado, el **margen mínimo** (empate) con una
+  tabla de márgenes, y el precio del litro mes a mes. Se sacaron los avisos, la cascada y "Lo verificable y lo supuesto".
+- **Margen:** ECO-01 = **$200/L** (supuesto del grupo; antes $100 heredado). INV-13 sigue siendo la más barata.
+- **Precios (ECO-08):** los del cartel de la estación (foto del 25/10/2026): Súper $2.227 · V-Power Nafta $2.514 ·
+  V-Power Diesel $2.729 · Evolux Diesel $2.447 · GNC $998,5/m³. Los productos se llaman como en el cartel.
+- **Conclusión:** se sacan los supuestos del modelo. **Modelo y método** deja de ser pestaña: va en un desplegable al
+  final de Datos y fuentes.
+
+## 34. Pestaña Colas, práctica (25/10/2026)
+
+Nico pidió la parte de colas como el ejercicio 2 del parcial y entendible para alguien que nunca estudió colas. Nueva
+pestaña **Colas** (después de Indicadores): elegís la hora (por defecto, la de más clientes); una tabla con los datos
+(λ, 1/μ, μ, s, Wq: qué es, cuánto vale y de dónde sale); cuatro tarjetas (ocupación ρ, tiempo total W, autos
+esperando Lq, autos en la estación L) con la fórmula, la cuenta con los números y qué significa; y una conclusión en
+una frase. Se sacó todo lo teórico (M/M/1, M/M/s, P0, costos): `sim/colas.py` quedó con las leyes de Little
+(`con_little`), validadas con el parcial B (W = 18 min, Lq = 1,6, L = 2,4) en el control 49.

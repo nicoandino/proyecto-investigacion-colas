@@ -54,20 +54,15 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
-  REDISEÑO v3 (ORQUESTADOR.md)
-   47. Etapa 6: el desglose de Economía (cantidad de la simulación × precio del Registro) suma los
-       ingresos y costos del mes.
+   47. Economía: el estado de resultados (ventas − compras − fletes, sueldos y almacenamiento) da el margen
+       operativo, y con el margen de equilibrio el resultado es 0.
+   49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
+       la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
    46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
        barata de las 14 candidatas en el año completo con datos reales.
    45. §24, G1: la tabla de camiones tiene un camión por pedido y la ruta recorrida se reconstruye
        (desvío o espera).
-   44. Parte 3, etapa F3: el menú arma las cuotas del plan (con los topes de hoy no cambia nada) y la
-       matriz de transbordo de la red real coincide con el flujo de costo mínimo.
-   43. Parte 3, etapa F2: plan de costo mínimo sobre la red real (km a mano, con y sin corte), 3 rutas
-       independientes = el corte mínimo, y el despacho por cuotas en el motor.
-   42. Parte 3, etapa F1: transporte (rincón noroeste, costo mínimo, MODI = enumeración), transbordo
-       ($20.700 con dos métodos) y flujo máximo (205.000 = el corte mínimo) de la cátedra.
    41. Parte 3, etapa P4: el punto de pedido por pronóstico (s = D·L + z·σ·√L) a mano, con z = 0
        la demanda del plazo, y la opción del menú lo usa.
    40. Parte 3, etapa P3: con los índices de la serie real el año tiene los mismos litros, repartidos
@@ -1458,7 +1453,7 @@ def main() -> int:
     eco_eq = replace_dc(eco, margen_por_litro=eq)
     margen_eq = economia_mensual(reps_eco[0], p_eco, eco_eq).margen_operativo
     controlar(
-        abs(margen_eq) < 1.0 and eq > eco.margen_por_litro,
+        abs(margen_eq) < 1.0 and eq > 0,
         "El margen por litro de equilibrio hace el margen operativo igual a 0",
         f"equilibrio ${eq:,.0f}/L (hoy ${eco.margen_por_litro:,.0f}/L) → margen {margen_eq:,.2f} $",
     )
@@ -1976,7 +1971,7 @@ def main() -> int:
         corrida33[etiqueta] = (ind33, correr_replica(p33, 1)[0])
     base33 = correr_replica(dataclasses.replace(p30, fecha_inicio=(1, 1), dias=365), 1)[0]
     plazos_arroyo = {round((x.t_llegada - x.t_pedido) / 60.0, 1) for x in corrida33["sin Dock Sud"][0].pedidos}
-    esperado_arroyo = round(36.0 + (_cmc(p30.red, origen="ARROYO").minutos - _cmc(p30.red).minutos) / 60.0 + 12.0, 1)
+    esperado_arroyo = round(36.0 * _cmc(p30.red, origen="ARROYO").km / _cmc(p30.red).km, 1)   # misma velocidad media
     ev = corrida33["eventos"][1].pedidos_por_origen
     controlar(
         corrida33["apagado"][1] == base33
@@ -2300,138 +2295,25 @@ def main() -> int:
         f"{sum(dict(r_carg.pedidos_total).values())} → {sum(dict(r_pron.pedidos_total).values())}",
     )
 
-    # ------------------------------------------------------------------ 42
-    separador("42. Parte 3, etapa F1: transporte, transbordo y flujo máximo contra la cátedra")
-    import itertools
-    from sim import flujos as fl
-
-    of42, de42, c42 = [100, 300, 300], [300, 200, 200], [[5, 4, 3], [8, 4, 3], [9, 7, 5]]
-    no42 = fl.solucion_inicial(of42, de42, c42, "rincon_noroeste")
-    cm42 = fl.solucion_inicial(of42, de42, c42, "costo_minimo")
-    op_no = fl.resolver_transporte(of42, de42, c42, "rincon_noroeste")
-    op_cm = fl.resolver_transporte(of42, de42, c42)
-    # Enumeración: todas las asignaciones enteras en múltiplos de 100 que cumplen oferta y demanda
-    mejor_enum = min(
-        sum(x * c for fila_x, fila_c in zip(asig, c42) for x, c in zip(fila_x, fila_c))
-        for asig in (
-            ((a, b, 100 - a - b), (d, e, 300 - d - e), (300 - a - d, 200 - b - e, 200 - (100 - a - b) - (300 - d - e)))
-            for a, b, d, e in itertools.product(range(0, 301, 100), repeat=4)
-        )
-        if all(v >= 0 for fila in asig for v in fila)
-    )
-    controlar(
-        no42.costo == 4200 and cm42.costo == 4100 and op_no.costo == op_cm.costo == mejor_enum == 3900
-        and all(abs(sum(f) - o) < 1e-9 for f, o in zip(op_cm.asignacion, of42))
-        and all(abs(sum(f[j] for f in op_cm.asignacion) - d) < 1e-9 for j, d in enumerate(de42)),
-        "Transporte de las diapositivas: rincón noroeste $4.200, costo mínimo $4.100 y óptimo $3.900 (= enumeración)",
-        f"MODI desde el rincón noroeste: {op_no.iteraciones} mejoras · desde el costo mínimo: {op_cm.iteraciones} · "
-        f"óptimo {op_cm.asignacion}",
-    )
-    arcos42 = [fl.ArcoRed(a, b, c) for a, b, c in (
-        ("P1", "T1", 3), ("P1", "T2", 4), ("P2", "T1", 2), ("P2", "T2", 5), ("T1", "T2", 7), ("T1", "D1", 8),
-        ("T1", "D2", 6), ("T2", "D2", 4), ("T2", "D3", 9), ("D1", "D2", 5), ("D2", "D3", 3))]
-    ofertas42 = {"P1": 1000, "P2": 1200, "D1": -800, "D2": -900, "D3": -500}
-    trans42 = fl.flujo_costo_minimo(arcos42, ofertas42)
-    mt42 = fl.matriz_transbordo(arcos42, ofertas42)
-    tr_mat = fl.resolver_transporte(mt42.oferta, mt42.demanda, mt42.costos)
-    k = 1000.0
-    ol42 = [fl.ArcoRed(a, b, 0.0, c * k) for a, b, c in (
-        ("N", "PN", 160), ("PN", "G", 130), ("G", "BA", 125), ("N", "PT", 70), ("PN", "PT", 65), ("PT", "P", 110),
-        ("P", "RN", 80), ("P", "G", 55), ("RN", "BA", 95))]
-    fm42 = fl.flujo_maximo(ol42, "N", "BA")
-    capacidad_corte = sum(a.capacidad for a in ol42 if (a.desde, a.hasta) in fm42.corte)
-    neto = {}
-    for d, h, f in fm42.flujos:
-        neto[d] = neto.get(d, 0.0) - f
-        neto[h] = neto.get(h, 0.0) + f
-    controlar(
-        trans42.costo == tr_mat.costo == 20700 and trans42.valor == 2200 and mt42.b == 2200
-        and mt42.demanda[mt42.columnas.index("D1")] == 3000 and mt42.demanda[mt42.columnas.index("D2")] == 3100
-        and fm42.valor == 205 * k == capacidad_corte
-        and all(abs(v) < 1e-9 for n, v in neto.items() if n not in ("N", "BA"))
-        and all(f <= a.capacidad + 1e-9 for d, h, f in fm42.flujos for a in ol42 if (a.desde, a.hasta) == (d, h)),
-        "Transbordo P1/P2 → T1/T2 → D1/D2/D3 = $20.700 (flujo y matriz B = 2.200); oleoducto = 205.000 gal/h = el corte",
-        f"corte mínimo {fm42.corte} ({capacidad_corte:,.0f}) · conservación en los nodos intermedios",
-    )
-
-    # ------------------------------------------------------------------ 43
-    separador("43. Parte 3, etapa F2: la red real como flujo (plan del período, rutas independientes, cuotas)")
-    from sim.red import camino_mas_corto as _cmc
-
-    def fl_camino(red_, origen, cerrados):
-        return _cmc(red_, origen=origen, cerrados=cerrados).km
-    from sim.config import ParametrosRed
-
-    red43 = ParametrosRed()
-    km_dock = sum(a.km for a in red43.arcos if {a.a, a.b} in ({"DOCK", "ALVEAR"}, {"ALVEAR", "SANRAFAEL"}))
-    km_arroyo = sum(a.km for a in red43.arcos if {a.a, a.b} in ({"ARROYO", "ALVEAR"}, {"ALVEAR", "SANRAFAEL"}))
-    plan_hoy = fl.plan_de_abastecimiento(red43, 100, dict(_valor("FLU-02")))
-    plan_mitad = fl.plan_de_abastecimiento(red43, 100, {"DOCK": 1.0, "ARROYO": 0.5})
-    plan_e4 = fl.plan_de_abastecimiento(red43, 100, {"DOCK": 1.0, "ARROYO": 0.5}, (("ALVEAR", "SANRAFAEL"),))
-    rutas43 = fl.rutas_independientes(red43, ["DOCK", "ARROYO", "LUJAN"])
-    controlar(
-        red43.cuotas_origen == () and plan_hoy.por_origen == (("DOCK", 100.0),)
-        and abs(plan_hoy.km_total - 100 * km_dock) < 1e-6
-        and abs(plan_mitad.km_total - (50 * km_arroyo + 50 * km_dock)) < 1e-6
-        and dict(plan_e4.por_origen) == {"DOCK": 100.0}
-        and abs(plan_e4.km_total - 100 * fl_camino(red43, "DOCK", (("ALVEAR", "SANRAFAEL"),))) < 1e-6
-        and rutas43.valor == 3 == len(rutas43.corte),
-        "Plan de costo mínimo: hoy todo desde Dock Sud; con Arroyo Seco al 50 % los km bajan; con el corte E4 se rehace",
-        f"100 camiones: Dock Sud {plan_hoy.km_total:,.0f} km · Dock + Arroyo {plan_mitad.km_total:,.0f} km · con E4 "
-        f"{plan_e4.km_total:,.0f} km por Luján · {rutas43.valor:.0f} rutas independientes, corte {rutas43.corte}",
-    )
-    base43 = con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1))
-    solo_dock = dataclasses.replace(base43, red=dataclasses.replace(base43.red, cuotas_origen=(("DOCK", 1.0),)))
-    mitad = dataclasses.replace(base43, red=dataclasses.replace(base43.red, cuotas_origen=(("DOCK", 0.5), ("ARROYO", 0.5))))
-    r_dock, _ = correr_replica(solo_dock, semilla=1)
-    ind_mitad, _ = simular(mitad, semilla=1)
-    arroyo = [x for x in ind_mitad.pedidos if x.origen == "ARROYO"]
-    dock = [x for x in ind_mitad.pedidos if x.origen == "DOCK"]
-    plazo_arroyo = 36.0 - (km_dock - km_arroyo) / red43.velocidad_kmh
-    controlar(
-        tuple(r_dock.totales) == tuple(r_base.totales) and abs(len(arroyo) - len(dock)) <= 4 and arroyo
-        and all(abs((x.t_llegada - x.t_pedido) / 60 - plazo_arroyo) < 1e-6 for x in arroyo),
-        "Despachar según el plan: cuotas exactas por origen y el plazo cambia por la diferencia de viaje",
-        f"enero con 50/50: {len(dock)} camiones de Dock Sud y {len(arroyo)} de Arroyo Seco, que tardan "
-        f"{plazo_arroyo:.2f} h (36 h − {km_dock - km_arroyo:.1f} km ÷ {red43.velocidad_kmh:g} km/h) · con 100 % Dock Sud, idéntico",
-    )
-
-    # ------------------------------------------------------------------ 44
-    separador("44. Parte 3, etapa F3: del menú al plan y del plan a la simulación")
-    p_hoy, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes(despachar_plan=True))
-    p_40, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes(
-        despachar_plan=True, topes_origen=(("DOCK", 1.0), ("ARROYO", 0.4), ("LUJAN", 0.0))))
-    r_hoy, _ = correr_replica(p_hoy, semilla=1)
-    p_sin44, _ = aplicar_ajustes(base43, ParametrosEconomicos(), Ajustes())
-    r_sin44, _ = correr_replica(p_sin44, semilla=1)
-    plan44 = fl.plan_de_abastecimiento(red43, 22, {"DOCK": 1.0, "ARROYO": 0.4})
-    mt44 = fl.matriz_transbordo(fl.arcos_de_ruta(red43), {**dict(plan44.por_origen), "SANRAFAEL": -22})
-    tr44 = fl.resolver_transporte(mt44.oferta, mt44.demanda, mt44.costos)
-    controlar(
-        Ajustes().topes_origen == tuple(_valor("FLU-02")) and p_hoy.red.cuotas_origen == (("DOCK", 1.0),)
-        and tuple(r_hoy.totales) == tuple(r_sin44.totales)
-        and all(abs(dict(p_40.red.cuotas_origen)[o] - f) < 1e-9 for o, f in (("ARROYO", 0.4), ("DOCK", 0.6)))
-        and abs(tr44.costo - plan44.km_total) < 1e-6,
-        "El menú arma las cuotas del plan (con los topes de hoy, la corrida no cambia); la matriz de transbordo de la "
-        "red real da lo mismo que el flujo de costo mínimo",
-        f"cuotas con Arroyo Seco al 40 %: {p_40.red.cuotas_origen} · 22 camiones: {plan44.km_total:,.0f} camión-km por "
-        f"el flujo = {tr44.costo:,.0f} por la matriz ({len(mt44.filas)}×{len(mt44.columnas)}, B = {mt44.b:g})",
-    )
-
     # ------------------------------------------------------------------ 45
     separador("45. §24, G1: la tabla de camiones (cada pedido, su ruta y sus km)")
+    from sim.config import ParametrosRed
     from sim.red import demora_si_encuentra_el_corte, ruta_del_viaje
 
-    r45, _ = correr_replica(base43, semilla=1)
-    d_dock = demora_si_encuentra_el_corte(red43, "E4")
-    d_arroyo = demora_si_encuentra_el_corte(dataclasses.replace(red43, origen="ARROYO"), "E4")
-    desvio, como_d = ruta_del_viaje(red43, "DOCK", d_dock, "corte E4")
-    espera, como_e = ruta_del_viaje(red43, "ARROYO", d_arroyo, "corte E4")
-    normal, como_n = ruta_del_viaje(red43, "DOCK", 0.0, "")
+    red45 = ParametrosRed()
+    km_dock = sum(a.km for a in red45.arcos if {a.a, a.b} in ({"DOCK", "ALVEAR"}, {"ALVEAR", "SANRAFAEL"}))
+    base45 = con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1))
+
+    r45, _ = correr_replica(base45, semilla=1)
+    d_dock = demora_si_encuentra_el_corte(red45, "E4")
+    d_arroyo = demora_si_encuentra_el_corte(dataclasses.replace(red45, origen="ARROYO"), "E4")
+    desvio, como_d = ruta_del_viaje(red45, "DOCK", d_dock, "corte E4")
+    espera, como_e = ruta_del_viaje(red45, "ARROYO", d_arroyo, "corte E4")
+    normal, como_n = ruta_del_viaje(red45, "DOCK", 0.0, "")
     controlar(
         len(r45.camiones) == sum(dict(r45.pedidos_total).values()) > 0
-        and all(x.t_pedido >= base43.calentamiento for x in r45.camiones)
-        and abs(sum(x.litros for x in r45.camiones) - sum(i.cantidad_pedido for i in base43.inventario
+        and all(x.t_pedido >= base45.calentamiento for x in r45.camiones)
+        and abs(sum(x.litros for x in r45.camiones) - sum(i.cantidad_pedido for i in base45.inventario
                                                           for x in r45.camiones if x.producto == i.producto)) < 1e-6
         and como_d == "desvío por el corte" and desvio.ruta == ("DOCK", "LUJAN", "PAREDITAS", "SANRAFAEL")
         and como_e == "esperó que reabrieran" and espera.ruta == ("ARROYO", "ALVEAR", "SANRAFAEL")
@@ -2469,21 +2351,24 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 47
-    separador("47. Etapa 6 del rediseño: Economía separa lo verificable (cantidades) de lo supuesto (precios)")
-    from sim.economia_real import desglose_verificable
+    separador("47. Economía: el estado de resultados (ventas − compras − costos) da el margen operativo")
+    from sim.economia_real import estado_de_resultados, resultado_con_margen
 
     r47, _ = correr_replica(p_app, semilla=1)
     e47 = economia_mensual(r47, p_app, eco46)
-    renglones47 = desglose_verificable(r47, p_app, eco46)
+    renglones47 = estado_de_resultados(r47, p_app, eco46)
     ingresos47 = sum(x.importe for x in renglones47 if x.tipo == "ingreso")
     costos47 = sum(x.importe for x in renglones47 if x.tipo == "costo")
     controlar(
-        abs(ingresos47 - e47.ingreso_total) < 1e-6 and abs(costos47 - e47.costo_total) < 1e-6
-        and all(abs(x.cantidad * x.precio - x.importe) < 1e-6 for x in renglones47 if x.unidad != "mes")
-        and all(_valor(i) is not None for x in renglones47 for i in x.datos),
-        "Cada importe = cantidad de la simulación × precio del Registro, y suman los ingresos y costos del mes",
-        f"enero: {len(renglones47)} renglones · ingresos ${ingresos47:,.0f} = {e47.ingreso_total:,.0f} · "
-        f"costos ${costos47:,.0f} = {e47.costo_total:,.0f}",
+        abs((ingresos47 - costos47) - e47.margen_operativo) < 1e-3
+        and all(abs(x.cantidad * x.precio - x.importe) < 1e-3 for x in renglones47 if x.unidad != "mes")
+        and all(_valor(i) is not None for x in renglones47 for i in x.datos)
+        and abs(resultado_con_margen(e47, eco46, eco46.margen_por_litro) - e47.margen_operativo) < 1e-3
+        and abs(resultado_con_margen(e47, eco46, margen_de_equilibrio_por_litro(e47, eco46))) < 1e-3,
+        "Ventas al precio del cartel − compras (precio − margen) − fletes, sueldos y almacenamiento = margen "
+        "operativo; con el margen de equilibrio el resultado es 0",
+        f"enero: {len(renglones47)} renglones · ventas ${ingresos47:,.0f} − costos ${costos47:,.0f} = "
+        f"${e47.margen_operativo:,.0f}",
     )
 
     # ------------------------------------------------------------------ 48
@@ -2500,6 +2385,38 @@ def main() -> int:
         and all(len(x) == 2 and x[0] % 2 == 0 and x[1] == x[0] + 1 for x in tachados48),
         "Cada falla de surtidor tacha las dos caras del mismo surtidor (2k y 2k+1), nunca una sola",
         f"enero ×5: {len(r48.eventos)} fallas · {len(tachados48)} cuadros con un surtidor tachado",
+    )
+
+    # ------------------------------------------------------------------ 49
+    separador("49. Colas como el ejercicio 2 del parcial y la tabla de errores del pronóstico (23 y 25/10/2026)")
+    from sim.colas import con_little
+    from sim import pronostico as pr49
+
+    banco = con_little(60 / 7.5, 6.0, 1, 12.0)   # parcial B: un cliente cada 7,5 min, μ = 10/h, Wq = 12 min
+    controlar(
+        abs(banco.mu - 10) < 1e-9 and abs(banco.rho - 0.8) < 1e-9 and abs(banco.w - 18) < 1e-9
+        and abs(banco.lq - 1.6) < 1e-9 and abs(banco.l - 2.4) < 1e-9 and abs(banco.l - (banco.lq + banco.lam / banco.mu)) < 1e-9,
+        "Ejercicio 2 del parcial (banco, un cajero): W = 18 min, Lq = 1,6 y L = 2,4 clientes (L = Lq + λ/μ)",
+        f"ρ {banco.rho:.2f} · W {banco.w:.0f} min · Lq {banco.lq:.1f} · L {banco.l:.1f}",
+    )
+    reales49 = [1704, 1712, 1752, 1764, 1805, 1835, 1831, 1866, 1884, 1930, 1919, 1951]
+    pron49 = [1702, 1725, 1749, 1772, 1795, 1818, 1841, 1864, 1887, 1910, 1933, 1956]
+    comp49 = pr49.comparar([(2025, m) for m in range(1, 13)], pron49, reales49)
+    infl49 = pr49.inflacion_real()
+    minimo49, maximo49, _ = _valor("PRO-05")
+    anio49, _ = correr_replica(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 3)), semilla=1)
+    controlar(
+        abs(comp49.mae - 8.92) < 0.01 and abs(comp49.rmse - 10.68) < 0.01
+        and abs(comp49.mae - pr49.errores(reales49, pron49).mae) < 1e-9
+        and pr49.inflacion_real() == infl49 and all(minimo49 <= i <= maximo49 for i in infl49)
+        and abs(pr49.factores_de_precio([0.02, 0.03])[-1] - 1.02 * 1.03) < 1e-12
+        and [m for _, m, _, _ in anio49.por_mes] == [1, 2, 3]
+        and sum(n for _, _, n, _ in anio49.por_mes) == sum(x.autos_llegados for x in correr_replica(
+            con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 3)), semilla=1, con_traza=True)[1].dias),
+        "Ejercicio 1 del parcial (Cable Televisora): MAE = 8,92 y RMSE = 10,68; la inflación sorteada queda en el rango "
+        "de PRO-05 y siempre es la misma; los clientes por mes suman los del día a día",
+        f"MAE {comp49.mae:.2f} · MAPE {100 * comp49.mape:.2f} % · RMSE {comp49.rmse:.2f} · inflación "
+        + " ".join(f"{100 * i:.1f}" for i in infl49),
     )
 
     # ------------------------------------------------------------------

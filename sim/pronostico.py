@@ -271,3 +271,110 @@ def stock_de_seguridad(p, z: float | None = None) -> tuple[StockSeguridad, ...]:
 def politica_por_pronostico(p) -> dict[str, tuple[float, float]]:
     """{producto: (s, Q)} con el stock de seguridad del pronóstico (la Q de la política cargada)."""
     return {x.producto: (x.s, x.q) for x in stock_de_seguridad(p)}
+
+
+# =============================================================================
+# Pestaña Pronóstico (23/10/2026): un pronóstico simple contra la simulación, como el ejercicio 1 del parcial
+# =============================================================================
+class FilaComparacion(NamedTuple):
+    """Un mes de la tabla: pronóstico, real y las tres columnas de los errores."""
+
+    mes: tuple[int, int]
+    pronostico: float
+    real: float
+    error: float            # |pronóstico − real|        → MAE
+    error_relativo: float   # error ÷ real                → MAPE
+    error_cuadrado: float   # error²                      → RMSE
+
+
+class Comparacion(NamedTuple):
+    filas: tuple[FilaComparacion, ...]
+    mae: float     # Σ error ÷ n
+    mape: float    # Σ (error ÷ real) ÷ n, en fracción
+    mse: float     # Σ error² ÷ n
+    rmse: float    # √MSE
+
+
+def comparar(meses, pronosticos, reales) -> Comparacion:
+    """La tabla Pronóstico | Real | error con MAE, MAPE y RMSE (las fórmulas del práctico)."""
+    filas = []
+    for mes, f, y in zip(meses, pronosticos, reales):
+        e = abs(f - y)
+        filas.append(FilaComparacion(tuple(mes), float(f), float(y), e, e / y if y else 0.0, e * e))
+    n = max(len(filas), 1)
+    mse = sum(x.error_cuadrado for x in filas) / n
+    return Comparacion(
+        filas=tuple(filas), mae=sum(x.error for x in filas) / n,
+        mape=sum(x.error_relativo for x in filas) / n, mse=mse, rmse=math.sqrt(mse),
+    )
+
+
+def recta_de_la_serie() -> tuple[float, float, tuple[int, int]]:
+    """(A, B, mes de t = 0) de F = A + B·t ajustada a la serie real desde el primer mes de PRO-02, en m³."""
+    meses_todos, valores = serie_registro()
+    primero = tuple(valor("PRO-02")[0])
+    a, b = recta(valores[meses_todos.index(primero):])
+    return a, b, primero
+
+
+def escala_a_la_estacion() -> float:
+    """Litros de la estación por cada m³ de Shell Mendoza: DEM-01 ÷ el promedio de los últimos 12 meses de la serie."""
+    _, valores = serie_registro()
+    return float(valor("DEM-01")) / (sum(valores[-12:]) / 12.0)
+
+
+def litros_pronosticados(meses) -> tuple[float, ...]:
+    """Litros de nafta y diésel de la estación en cada mes: la recta de la serie real × la escala."""
+    a, b, (anio0, mes0) = recta_de_la_serie()
+    escala = escala_a_la_estacion()
+    return tuple((a + b * ((anio - anio0) * 12 + mes - mes0)) * escala for anio, mes in meses)
+
+
+def clientes_pronosticados(p, meses) -> tuple[int, ...]:
+    """Clientes de cada mes: litros pronosticados ÷ litros por cliente ÷ (1 − parte del GNC), redondeados."""
+    return tuple(round(x / p.litros_medios_por_cliente / (1.0 - p.pct_gnc)) for x in litros_pronosticados(meses))
+
+
+def inflacion_real(n: int = 12) -> tuple[float, ...]:
+    """La inflación de cada mes, sorteada entre el mínimo y el máximo de PRO-05 (semilla fija), redondeada a 0,1 %."""
+    import random
+
+    minimo, maximo, semilla = valor("PRO-05")
+    azar = random.Random(int(semilla))
+    return tuple(round(azar.uniform(minimo, maximo), 3) for _ in range(n))
+
+
+def inflacion_esperada() -> float:
+    """La que usa el pronóstico todos los meses: el punto medio del rango de PRO-05."""
+    minimo, maximo, _ = valor("PRO-05")
+    return (minimo + maximo) / 2.0
+
+
+def factores_de_precio(inflaciones) -> tuple[float, ...]:
+    """Cuánto vale el precio de cada mes respecto del de referencia: (1 + i₁)·(1 + i₂)·…·(1 + i_t)."""
+    salida, f = [], 1.0
+    for i in inflaciones:
+        f *= 1.0 + i
+        salida.append(f)
+    return tuple(salida)
+
+
+def ganancias_por_mes(p, margenes: dict[str, float], meses, vendidos_reales, factores_pron, factores_real):
+    """(pronóstico, real) de la ganancia bruta del combustible de cada mes, en $.
+
+    Ganancia = Σ litros (m³ el GNC) × margen del producto × factor de precio del mes: el margen en $/L sube en la
+    misma proporción que el precio (PRO-05). Pronóstico: los litros de la recta repartidos según DEM-04 y el GNC de los
+    clientes pronosticados. Real: lo que vendió la simulación en ese mes.
+    """
+    litros = litros_pronosticados(meses)
+    clientes = clientes_pronosticados(p, meses)
+    gnc = next((pr for pr in p.productos if pr.es_gnc), None)
+    pron, real = [], []
+    for k in range(len(meses)):
+        base = sum(litros[k] * pr.pct_litros * margenes[pr.id] for pr in p.productos if not pr.es_gnc)
+        if gnc is not None:
+            base += clientes[k] * p.pct_gnc * gnc.carga_media * margenes[gnc.id]
+        pron.append(base * factores_pron[k])
+        vendido = dict(vendidos_reales[k])
+        real.append(sum(v * margenes.get(pr, 0.0) for pr, v in vendido.items()) * factores_real[k])
+    return tuple(pron), tuple(real)

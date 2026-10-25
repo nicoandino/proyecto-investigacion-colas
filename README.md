@@ -44,9 +44,9 @@ módulos.
    Hay ajustes opcionales que arrancan con los valores del Registro: economía, GNC, calendario de demanda,
    abastecimiento y eventos aleatorios.
 2. **Simular con datos reales.** Corre sin azar, así que siempre da el mismo resultado y se puede comprobar. Los
-   resultados están en pestañas: La estación, Animación, Indicadores, Demanda, Pronóstico, Inventario, Red y rutas,
-   GNC, Economía, Conclusión, Modelo y método, y Datos y fuentes. La pestaña Eventos aparece sólo si se prendieron
-   eventos aleatorios en el menú.
+   resultados están en pestañas: La estación, Animación, Indicadores, Colas, Demanda, Pronóstico, Inventario, Red y rutas,
+   GNC, Economía, Conclusión y Datos y fuentes (al final, un desplegable con Modelo y método). La pestaña Eventos
+   aparece sólo si se prendieron eventos aleatorios en el menú.
 3. **Editar simulación** (al final de los resultados) cambia playeros, demanda o precios. La versión editada usa azar
    y agrega una pestaña que explica qué se sorteó.
 4. Desde el menú también se puede abrir:
@@ -74,7 +74,7 @@ lanzado, por ejemplo:
 | Carpeta o archivo | Qué es |
 |---|---|
 | `app.py` | La aplicación de Streamlit (la única entrada). |
-| `sim/` | El motor, sin Streamlit: datos (el Registro), parámetros, modelo SimPy, red de rutas (Dijkstra), flujos en redes, GNC, pronóstico, eventos, escenarios y economía. |
+| `sim/` | El motor, sin Streamlit: datos (el Registro), parámetros, modelo SimPy, red de rutas (Dijkstra), GNC, pronóstico, eventos, escenarios y economía. |
 | `ui/` | La presentación: tema y colores, la animación (dibujada en el navegador), los gráficos y las vistas. |
 | `verificar.py` | Los controles del modelo. |
 | `reports/` | Los QA con Playwright, sus capturas y `generar_datos_reales.py`, que regenera `DATOS_REALES.md`. |

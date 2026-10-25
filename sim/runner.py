@@ -131,6 +131,9 @@ class ResultadoReplica:
     eventos: tuple[EventoOcurrido, ...] = ()
     # §24: cada camión pedido en el período medido (para la tabla de Inventario)
     camiones: tuple[PedidoCamion, ...] = ()
+    # Pestaña Pronóstico: cada mes de calendario de la corrida, calentamiento incluido
+    por_mes: tuple[tuple[int, int, int, tuple[tuple[str, float], ...]], ...] = ()
+    # (año, mes, clientes que llegaron, ((producto, litros o m³ vendidos), …))
 
 
 #: Campos que NO son métricas numéricas (no se promedian en `resumir`).
@@ -157,6 +160,7 @@ NO_METRICAS = {
     "pedidos_por_origen",
     "eventos",
     "camiones",
+    "por_mes",
 }
 
 #: Métricas que se promedian entre réplicas (todas menos las no numéricas).
@@ -380,6 +384,7 @@ def correr_replica(
             p.red.origenes_alternativos or p.red.origenes_no_disponibles
         ) else (),   # sin orígenes alternativos todos salen del habitual: vacío (la corrida neutra no cambia)
         camiones=tuple(medidos) if p.estacion_real else (),
+        por_mes=tuple((a, m, n, tuple(v.items())) for (a, m), (n, v) in sorted(ind.por_mes.items())),
         eventos=tuple(sorted(
             [
                 EventoOcurrido(*ev, perdidos=n, extra=x)

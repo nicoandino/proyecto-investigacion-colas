@@ -19,8 +19,7 @@ para el informe) no se confirmaron como objetivo de diseño.
 Simulador de eventos discretos de **una estación real**: la Shell de Av. Balloffet 1810 esq. Av. Los Sauces, San
 Rafael, Mendoza. El producto del TP es un **informe del caso**; el simulador sirve para mostrarlo y tiene que ser
 **defendible y verificable**: cada número se comprueba contra los datos o contra una cuenta a la vista. Éxito = que el
-profesor vea que el modelo corre, que usa los temas de la cátedra (colas, Monte Carlo, inventario, pronóstico, redes,
-transporte, transbordo, flujos) con aspectos económicos, y que nada de lo que se muestra está inventado.
+profesor vea que el modelo corre, que usa los temas de la cátedra (colas, Monte Carlo, inventario, pronóstico, redes) con aspectos económicos, y que nada de lo que se muestra está inventado.
 
 Consigna del profesor: "cualquier tema, que corra en algún software, con alguna complejidad, preferiblemente aspectos
 económicos. Colas, transporte, Montecarlo, etc."
@@ -37,8 +36,8 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
 - Se corre localmente: `.venv/Scripts/streamlit run app.py` (http://localhost:8501) en la notebook de Nico.
 - Flujo: **menú inicial** (qué período: días, meses, estación o año; ajustes de economía, GNC, calendario de demanda,
   abastecimiento y eventos aleatorios) → **simulación con datos reales** → **resultados en pestañas** (La estación,
-  Animación, Indicadores, Demanda, Pronóstico, Inventario, Red y rutas, GNC, Economía, Conclusión, Modelo y método,
-  Datos y fuentes; Eventos y "Qué se sorteó" sólo cuando corresponde) → **Editar simulación** (con azar). Aparte, desde
+  Animación, Indicadores, Colas, Demanda, Pronóstico, Inventario, Red y rutas, GNC, Economía, Conclusión,
+  Datos y fuentes con Modelo y método desplegable; Eventos y "Qué se sorteó" sólo cuando corresponde) → **Editar simulación** (con azar). Aparte, desde
   el menú: **escenario único** (una semana) y **Caso de informe** (mejor política, catálogo S0–S12, tornado).
 - La animación es un tablero que dibuja el navegador (un día cada 5 s, avisos con pausa).
 - En vivo, el profesor pregunta por números puntuales: cada sección tiene "¿Cómo se comprueba?" con la cuenta.
@@ -49,7 +48,7 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
   HTML dentro de Streamlit (como el tablero animado, `st.components.v1.html`), sin cambiar de framework.
 - Reglas del proyecto (`CLAUDE.md`): `sim/` nunca importa Streamlit ni `ui/`; **ningún color fuera de `ui/tema.py`**
   (control N15); ningún número fuera del Registro (`sim/datos.py`); no se escala (sin base de datos, login, API,
-  Docker, plugins ni multiprocessing); `verificar.py` (146 controles) en verde antes de cada commit; un commit por etapa
+  Docker, plugins ni multiprocessing); `verificar.py` (143 controles) en verde antes de cada commit; un commit por etapa
   en castellano, sin Pull Request.
 - **Pantalla objetivo: notebook / escritorio.** Celular, tablet y proyector no se pidieron.
 - Idioma: castellano rioplatense; números con coma decimal y punto de miles; los importes se escapan antes de pasar a
@@ -69,11 +68,10 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
 
 ## Evidence on Hand
 
-- **Registro** `sim/datos.py` (148 datos con fuente) y su versión legible `DATOS_REALES.md`.
+- **Registro** `sim/datos.py` (146 datos con fuente) y su versión legible `DATOS_REALES.md`.
 - Notas de investigación con citas y URL: `research_notes/Datos reales estación Shell San Rafael/01–13`.
 - **Serie real** de ventas al público de Shell en Mendoza (Secretaría de Energía, PRO-01, ene-2019 – ago-2026).
-- Validaciones contra la cátedra (Cable Televisora, Lincoln, transporte $4.200/$4.100/$3.900, transbordo $20.700,
-  oleoducto 205.000 gal/h) y `verificar.py` con 146 controles.
+- Validaciones contra la cátedra (Cable Televisora, Lincoln) y `verificar.py` con 143 controles.
 - Capturas de QA en `reports/qa/`.
 - **Ausencias que no se deben inventar:** no hay mediciones de la propia estación (demanda, colas, tiempos); los
   márgenes por litro, el flete y el costo de almacenamiento son heredados sin fuente; la política real de reposición no

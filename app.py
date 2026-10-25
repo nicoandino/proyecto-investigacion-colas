@@ -28,12 +28,13 @@ from sim.config import (
     dias_del_mes,
 )
 from sim.economia_real import (
-    avisos as avisos_economia,
     conclusiones as conclusiones_economia,
     decision_s6,
     economia_de,
+    estado_de_resultados,
     km_por_viaje,
     margen_de_equilibrio_por_litro,
+    resultado_con_margen,
     resumir_economia,
 )
 from sim.periodo import (
@@ -92,6 +93,7 @@ from sim.runner import (
     PuntoBarrido,
     ResultadoBarridoReal,
     ResultadoEscenario,
+    ResultadoReplica,
     buscar,
     con_politicas,
     correr_estacion_real,
@@ -106,6 +108,7 @@ from sim.red import (
     demora_por_corte,
     descripcion_ruta,
     dias_de_mes_en_corrida,
+    cortes_que_eligen_cada_ruta,
     muestrear_plazos,
     rutas_posibles,
 )
@@ -120,7 +123,6 @@ from ui.textos import (
     DESCRIPCION_METODO,
     INDICADORES_DIFERENCIA,
     INDICADORES_GNC,
-    SUPUESTOS_REAL,
     DESCRIPCION_MODELO_REAL,
     Metrica,
 )
@@ -159,6 +161,20 @@ def correr_sensibilidad_cacheado(
 @st.cache_data(show_spinner=False, max_entries=8)
 def correr_traza_cacheada(p: ParametrosSimulacion, semilla: int):
     return correr_replica(p, semilla=semilla, con_traza=True)[1]
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def correr_anio_cacheado(p: ParametrosSimulacion, semilla: int) -> ResultadoReplica:
+    """El año completo con los mismos parámetros (pestaña Pronóstico), sin traza: ≈ 5 s."""
+    return correr_replica(con_periodo(p, anio_completo()), semilla=semilla)[0]
+
+
+def resultado_del_anio(p: ParametrosSimulacion, resultado: ResultadoEscenario) -> ResultadoReplica:
+    """La réplica del año: la de esta corrida si ya era el año completo; si no, se simula aparte (con caché)."""
+    if st.session_state.periodo.tipo == "anio":
+        return resultado.replicas[0]
+    with st.spinner("Simulando el año completo para el pronóstico (≈ 5 s)…"):
+        return correr_anio_cacheado(p, st.session_state.get("semilla_usada", 1))
 
 
 # =============================================================================
@@ -388,12 +404,13 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
     )
 
     st.markdown("##### 1. Cómo se movió cada tanque")
-    st.plotly_chart(graficos.grafico_tanques_real(traza, p), key="g_tanques_real")
-    st.caption(
-        "Un diente de sierra por tanque: baja mientras se vende y sube de golpe cuando descarga el "
-        "camión. La línea naranja es el punto de pedido s; donde la curva toca el cero, ese producto "
-        "dejó de venderse aunque los otros sigan."
-    )
+    with st.expander("Ver el nivel de cada tanque (gráficos)", expanded=True, icon=":material/show_chart:"):
+        st.plotly_chart(graficos.grafico_tanques_real(traza, p), key="g_tanques_real")
+        st.caption(
+            "Un diente de sierra por tanque: baja mientras se vende y sube de golpe cuando descarga el "
+            "camión. La línea naranja es el punto de pedido s; donde la curva toca el cero, ese producto "
+            "dejó de venderse aunque los otros sigan."
+        )
 
     st.markdown("##### 2. Quiebres de stock y lo que no se vendió")
     vistas.bloque_quiebres(p, base.replicas[0], eco)
@@ -432,12 +449,42 @@ def pestania_inventario_real(p: ParametrosSimulacion, eco: ParametrosEconomicos)
             icon=":material/warning:",
         )
 
-    vistas.bloque_stock_seguridad(p)
+    bloque_cuando_pedir(p)
     vistas.tabla_camiones(p, base.replicas[0], eco)
 
     st.caption(
         "¿Cuál sería la mejor política (s, Q) de cada tanque? Esa búsqueda está en el **Caso de informe** (botón "
         "en el menú principal), fuera del flujo normal porque prueba 14 políticas (13 de la grilla y la del pronóstico)."
+    )
+
+
+def bloque_cuando_pedir(p: ParametrosSimulacion) -> None:
+    """Inventario, punto 4: cuándo conviene pedir el camión, en palabras (sin cuentas)."""
+    s_hoy, q_hoy = valor("INV-13")
+    elegida = ajustes_actuales().politica
+    en_uso = {
+        "conveniente": f"la más conveniente: pedir cuando quedan **{vistas.dec(s_hoy, 0)} días de venta** y traer "
+                       f"**{vistas.dec(q_hoy)} días de venta** por camión",
+        "pronostico": "la del pronóstico: pedir cuando lo que queda alcanza para el viaje del camión más un colchón "
+                      "por si se vende más de lo esperado",
+        "cargada": "la de INV-07: pedir cuando queda un día y medio de venta",
+    }[elegida]
+    st.markdown("##### 4. Cuándo conviene pedir el camión")
+    st.markdown(
+        "- **Cuándo se pide:** cuando lo que queda en el tanque, más lo que ya viene en camino, baja hasta el punto "
+        "de pedido.\n"
+        f"- **Por qué ahí:** el camión tarda en promedio {vistas.dec(p.inventario[0].plazo_entrega.media / 24, 1)} días "
+        f"({vistas.dec(p.inventario[0].plazo_entrega.media, 0)} h) en llegar desde Dock Sud. Hay que pedirlo cuando todavía "
+        "queda combustible para vender mientras viaja; si se pide más tarde, el tanque se vacía antes de que llegue y "
+        "los clientes se van sin cargar.\n"
+        "- **Cuál se usa hoy:** la estación no publica cómo pide (no hay dato). En esta simulación se usa "
+        f"{en_uso}.\n"
+        f"- **La mejor:** pedir con {vistas.dec(s_hoy, 0)} días de venta y traer {vistas.dec(q_hoy)} días. Se probaron "
+        "14 formas de pedir en un año entero y es la más barata: el camión llega siempre a tiempo, no queda ningún "
+        "tanque vacío y se piden pocos camiones porque cada uno trae bastante.\n"
+        f"- **La peor:** pedir cuando queda {vistas.dec(min(S_EN_DIAS), 0)} día de venta y traer sólo "
+        f"{vistas.dec(min(Q_EN_DIAS), 0)} días. El camión llega cuando el tanque ya se vació, así que se pierden "
+        "muchos clientes, y como cada camión trae poco hay que pedir más del doble de camiones."
     )
 
 
@@ -452,7 +499,7 @@ def etiquetas_grilla() -> list[str]:
     """Nombre de cada punto de la grilla, en el orden de `grilla_politicas_real`."""
     return ["La cargada en esta corrida (INV-07 o la elegida en el menú)"] + [
         f"s = {s:g} · Q = {q:g} días de venta".replace(".", ",") for s in S_EN_DIAS for q in Q_EN_DIAS
-    ] + ["Por pronóstico: s con stock de seguridad (pestaña Pronóstico)"]
+    ] + ["Por pronóstico: s con un colchón por el error del pronóstico"]
 
 
 def puntos_de_busqueda(p: ParametrosSimulacion) -> list[dict[str, tuple[float, float]]]:
@@ -586,7 +633,7 @@ def _resultados_busqueda(p: ParametrosSimulacion, busqueda: dict) -> None:
     st.markdown(f"##### Las {hechas} evaluaciones (costo de los 4 tanques juntos)")
     st.dataframe(pd.DataFrame(filas), hide_index=True, height=36 * (len(filas) + 1) + 3)
     st.caption(
-        f"Ganadora: **{etiquetas[ganadora]}**. Costos con márgenes y flete heredados sin fuente (ECO-01/06/07): "
+        f"Ganadora: **{etiquetas[ganadora]}**. Costos con el margen supuesto (ECO-01) y el flete heredado sin fuente (ECO-06/07): "
         "ordenan las políticas, no son cifras del negocio. Abajo, la mejor de **cada tanque** por separado."
     )
 
@@ -740,89 +787,103 @@ def pestania_sensibilidad(p: ParametrosSimulacion, eco: ParametrosEconomicos) ->
 
 def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -> None:
     st.subheader("Economía de la estación real")
-    for aviso in avisos_economia(p, eco):
-        st.warning(escapar_pesos(aviso), icon=":material/payments:")
-
     base = st.session_state.resultados[0]
     lista = economia_de(base, eco)
-    res = resumir_economia(lista)
     dias = lista[0].dias_mes
+    # El estado de resultados de cada réplica, promediado renglón por renglón (todas tienen los mismos renglones).
+    estados = [estado_de_resultados(r, base.parametros, eco) for r in base.replicas]
+    renglones = [
+        x._replace(cantidad=sum(e[k].cantidad for e in estados) / len(estados),
+                   importe=sum(e[k].importe for e in estados) / len(estados))
+        for k, x in enumerate(estados[0])
+    ]
+    ingresos = [x for x in renglones if x.tipo == "ingreso"]
+    costos = [x for x in renglones if x.tipo == "costo"]
+    total_ingresos = sum(x.importe for x in ingresos)
+    total_costos = sum(x.importe for x in costos)
+    resultado = total_ingresos - total_costos
+    equilibrio = sum(margen_de_equilibrio_por_litro(e, eco) for e in lista) / len(lista)
+
     st.markdown(f"##### Ingresos y costos de un mes de {dias} días")
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(vistas.cifra_html("Ingresos", pesos(res["ingreso_total"].promedio)), unsafe_allow_html=True)
-    c2.markdown(vistas.cifra_html("Costos", pesos(res["costo_total"].promedio)), unsafe_allow_html=True)
-    margen = res["margen_operativo"]
-    c3.markdown(vistas.cifra_html("Margen operativo", pesos(margen.promedio)), unsafe_allow_html=True)
-    if len(lista) > 1:
-        c3.caption(escapar_pesos(f"± {pesos(margen.semiamplitud)} (IC 95 %)"))
-    equilibrio = margen_de_equilibrio_por_litro(lista[0], eco)
-    c4.markdown(vistas.cifra_html("Margen por litro de equilibrio", f"${equilibrio:,.0f} /L"), unsafe_allow_html=True)
+    def millones(x: float) -> str:
+        return f"$ {vistas.dec(x / 1e6, 1)} M"
+
+    c1.markdown(vistas.cifra_html("Ingresos (ventas)", millones(total_ingresos)), unsafe_allow_html=True)
+    c1.caption(escapar_pesos(vistas._pesos(total_ingresos)))
+    c2.markdown(vistas.cifra_html("Costos", millones(total_costos)), unsafe_allow_html=True)
+    c2.caption(escapar_pesos(vistas._pesos(total_costos)))
+    c3.markdown(vistas.cifra_html("Resultado del mes", millones(resultado)), unsafe_allow_html=True)
+    c3.caption(escapar_pesos(vistas._pesos(resultado)))
+    c4.markdown(vistas.cifra_html("Margen mínimo por litro", f"$ {vistas.ent(equilibrio)} /L"), unsafe_allow_html=True)
     liquidos = [pr.id for pr in p.productos if not pr.es_gnc]
     usados = sorted({eco.margen_de(x) for x in liquidos})
     c4.caption(escapar_pesos(
-        f"hoy se usa ${usados[0]:,.0f}/L (heredado sin fuente)" if len(usados) == 1
-        else "hoy se usan " + " · ".join(f"{NOMBRES_PRODUCTO[x]} ${eco.margen_de(x):,.0f}" for x in liquidos)
+        f"hoy ${vistas.ent(usados[0])}/L" if len(usados) == 1
+        else "hoy " + " · ".join(f"{NOMBRES_PRODUCTO[x]} ${vistas.ent(eco.margen_de(x))}" for x in liquidos)
     ))
-    if margen.promedio < 0:
-        st.error(
-            escapar_pesos(
-                f"Con los márgenes adoptados la estación **no cubre sus costos** "
-                f"({pesos(margen.promedio)} por mes). Para empatar haría falta un margen de "
-                f"${equilibrio:,.0f} por litro (hoy ${eco.margen_por_litro:,.0f}, heredado sin "
-                f"fuente). O el margen real es mayor, o la demanda real es mayor que los "
-                f"{p.litros_mes:,.0f} L/mes (C2): es lo primero que cierra el relevamiento."
-            ),
-            icon=":material/balance:",
-        )
+    st.caption(escapar_pesos(
+        f"Precios del cartel de la estación (ECO-08, 25/10/2026). Margen de ${vistas.ent(eco.margen_por_litro)} por litro de "
+        f"nafta y diésel (ECO-01, supuesto del grupo) y ${vistas.ent(eco.margen_gnc)} por m³ de GNC (ECO-03, heredado): la "
+        "estación le compra el combustible a Shell a precio − margen. Las cantidades salen de la simulación."
+    ))
 
-    ingresos = [(n, v) for n, v in (
-        ("Combustible líquido", res["ingreso_combustible"].promedio),
-        ("GNC", res["ingreso_gnc"].promedio),
-        ("Minimarket", res["ingreso_minimarket"].promedio),
-    )]
-    costos = [(n, res[k].promedio) for n, k in (
-        ("Flete", "flete"), ("Almacenamiento", "almacenamiento"), ("Personal", "personal_total"),
-    )]
-    if res["costo_eventos"].promedio > 0:
-        costos.append(("Eventos aleatorios", res["costo_eventos"].promedio))
-    st.plotly_chart(
-        graficos_escenarios.grafico_cascada_economica(
-            ingresos, costos, "De los ingresos al margen operativo (un mes)"),
-        key="g_cascada",
-    )
-    st.caption(
-        escapar_pesos(
-            f"El costo de personal sale de la dotación del modelo (playeros por tramo horario, "
-            f"cajas, más encargado y tienda de ECO-11) × {eco.cobertura_francos:g} personas por "
-            f"puesto (francos, ECO-10) × sueldo con adicionales (ECO-04). El flete usa "
-            f"{km_por_viaje(p):,.0f} km de ida y vuelta desde el origen elegido."
-        )
-    )
+    def tabla(filas, total: str):
+        cuerpo = [{
+            "Concepto": x.concepto,
+            "Cantidad del mes": f"{vistas.dec(x.cantidad, 1) if x.unidad in ('personas', 'camiones') else vistas.ent(x.cantidad)} "
+                                f"{x.unidad}",
+            "Precio": f"$ {vistas.dec(x.precio, 2) if x.precio < 10_000 else vistas.ent(x.precio)}",
+            "Importe": vistas._pesos(x.importe),
+            "Dato": " · ".join(x.datos),
+        } for x in filas]
+        cuerpo.append({"Concepto": total, "Cantidad del mes": "", "Precio": "",
+                       "Importe": vistas._pesos(sum(x.importe for x in filas)), "Dato": ""})
+        return pd.DataFrame(cuerpo)
 
-    vistas.tabla_verificable_supuesto(p, base.replicas[0], eco)
+    st.markdown("##### Cuadro de ingresos")
+    st.dataframe(tabla(ingresos, "Total de ingresos"), hide_index=True)
+    st.markdown("##### Cuadro de costos")
+    st.dataframe(tabla(costos, "Total de costos"), hide_index=True, height=36 * (len(costos) + 2) + 3)
+    st.caption(escapar_pesos(
+        f"Sueldos: personas que hacen falta para cubrir 24 h los 7 días (puestos × {vistas.dec(eco.cobertura_francos, 1)} por los "
+        f"francos, ECO-10) × sueldo con adicionales (ECO-04). Flete: cada camión paga ${vistas.ent(eco.costo_pedido)} fijos "
+        f"(ECO-06, heredado sin fuente) para {vistas.ent(km_por_viaje(p))} km de ida y vuelta."
+    ))
 
-    st.caption(
-        "Lo que cada escenario S0–S12 le suma o resta al margen mensual está en el **Caso de informe** (menú principal)."
-    )
+    st.markdown("##### Por qué da este resultado")
+    compra = sum(x.importe for x in costos if x.concepto.startswith("Compra de"))
+    otros = total_costos - compra
+    st.markdown(escapar_pesos(
+        f"- Lo que **queda de vender el combustible** (ventas − compra) es {vistas._pesos(total_ingresos - compra)}: el margen "
+        f"por litro × los litros vendidos, más el Shell Shop.\n"
+        f"- Con eso hay que pagar **fletes, sueldos y almacenamiento**: {vistas._pesos(otros)}.\n"
+        f"- **Resultado: {vistas._pesos(resultado)} por mes** — "
+        + ("la estación **gana** plata." if resultado > 0 else "la estación **pierde** plata.")
+    ))
+    if resultado < 0:
+        st.error(escapar_pesos(
+            f"Con un margen de ${vistas.ent(eco.margen_por_litro)}/L la estación no cubre sus costos: haría falta al menos "
+            f"${vistas.ent(equilibrio)} por litro."), icon=":material/balance:")
 
-    with st.expander("Cómo se calcula"):
-        st.markdown(escapar_pesos(
-            f"""
-| Concepto | Fórmula |
-|---|---|
-| Ingreso por producto | litros (o m³ de GNC) vendidos × margen (${eco.margen_por_litro:,.0f}/L · ${eco.margen_gnc:,.0f}/m³) |
-| Ingreso del minimarket | compras × ${eco.margen_compra:,.0f} |
-| Flete | pedidos del mes × (fijo ${eco.costo_pedido:,.0f} + ${eco.flete_por_km:,.0f}/km × km de ida y vuelta) |
-| Almacenamiento | litros promedio en los tanques × ${eco.costo_almacenamiento_litro_mes:,.0f} por litro y por mes |
-| Personal | personas-turno × {eco.cobertura_francos:g} (francos) × sueldo: playero ${eco.sueldo_playero_mensual:,.0f}, cajero y tienda ${eco.sueldo_cajero_mensual:,.0f}, encargado ${eco.sueldo_encargado_mensual:,.0f} |
-| Eventos aleatorios (si se prendieron) | horas extra de las licencias cubiertas × valor de la hora (sueldo ÷ 200 h, EVT-15) × 1,5 (× 2 el domingo) + visitas del técnico (sin dato: $0) |
-| **Margen operativo** | **ingresos − costos** (la venta perdida NO entra) |
-| Venta perdida (por motivo) | clientes perdidos × (litros medios × margen + prob. de compra × margen del minimarket); corte de GNC en m³ |
+    st.markdown("##### El margen mínimo: cuándo pierde y cuándo gana")
+    st.markdown(escapar_pesos(
+        f"Con **${vistas.ent(equilibrio)} por litro** la estación **empata** (ni gana ni pierde). Con menos, pierde plata y, "
+        "si dura, entra en quiebra; con más, gana. Cada $10 por litro más suman "
+        f"{vistas._pesos(resultado_con_margen(lista[0], eco, 10.0) - resultado_con_margen(lista[0], eco, 0.0))} por mes."
+    ))
+    margenes = sorted({round(equilibrio), 100, 150, 200, 250, 300, 400, round(eco.margen_por_litro)})
+    st.dataframe(pd.DataFrame([{
+        "Margen por litro": f"$ {m:,}".replace(",", ".")
+        + (" (empate)" if m == round(equilibrio) else "") + (" (el de hoy)" if m == round(eco.margen_por_litro) else ""),
+        "Resultado del mes": vistas._pesos(sum(resultado_con_margen(e, eco, m) for e in lista) / len(lista)),
+        "La estación": ("empata" if m == round(equilibrio) else
+                        "pierde" if sum(resultado_con_margen(e, eco, m) for e in lista) < 0 else "gana"),
+    } for m in margenes]), hide_index=True)
+    st.caption("Lo demás queda igual (litros, GNC, Shell Shop y costos): sólo cambia lo que se gana por litro de nafta y "
+               "diésel.")
 
-La venta perdida es un **costo de oportunidad**: no sale del bolsillo, pero es plata que la
-estación deja sobre la mesa. No se resta del margen (sería contarla dos veces: ya falta el
-ingreso de esos clientes) y se informa aparte.
-"""))
+    vistas.seccion_precio_futuro(eco)
 
 
 def seccion_decision(eco: ParametrosEconomicos) -> None:
@@ -966,10 +1027,6 @@ def pestania_conclusion_real(p: ParametrosSimulacion) -> None:
     for linea in sugerencias:
         st.markdown(f"- {linea}")
 
-    st.divider()
-    st.markdown("**Supuestos del modelo** (lo que hay que aclarar al presentarlo)")
-    for supuesto in SUPUESTOS_REAL:
-        st.markdown(f"- {escapar_pesos(supuesto)}")
 
 
 def pestania_conclusion() -> None:
@@ -1060,10 +1117,6 @@ def pestania_modelo_real(p: ParametrosSimulacion) -> None:
         )
 
 
-def pestania_modelo(p: ParametrosSimulacion) -> None:
-    pestania_modelo_real(p)
-
-
 # =============================================================================
 # Pestaña: red y rutas (Fase 5)
 # =============================================================================
@@ -1127,6 +1180,22 @@ def pestania_red(p: ParametrosSimulacion) -> None:
         f"(INV-01, que ya incluye el viaje por la óptima) + lo que tarda de más esa ruta. Los cortes de ruta usan "
         f"estas mismas rutas para desviarse."
     )
+    eligen = cortes_que_eligen_cada_ruta(red)
+    cortes_por_id = {c.id: c for c in red.cortes}
+    lineas = []
+    for k, c in enumerate(rutas):
+        nombre = " → ".join(NOMBRE_NODO[n] for n in c.ruta)
+        if k == 0:
+            cuando = "es la más corta: el camión la usa siempre que esté abierta."
+        elif c.ruta in eligen:
+            cuando = ("se usa cuando hay " + " y a la vez ".join(
+                f"el corte {i} — {cortes_por_id[i].nombre} —" for i in eligen[c.ruta])
+                + "; con eso las rutas más cortas quedan cerradas.")
+        else:
+            cuando = ("ningún corte cargado la vuelve la mejor: sólo se usaría si se cortaran a la vez tramos de "
+                      "todas las rutas más cortas (por ejemplo, también La Paz – Monte Comán).")
+        lineas.append(f"- **Ruta {k + 1}** ({nombre}): {cuando}")
+    st.markdown("**Cuándo se usaría cada una**\n" + "\n".join(lineas))
 
     st.markdown("##### De dónde puede salir el camión")
     r = st.session_state.resultados[0].replicas[0]
@@ -1134,15 +1203,15 @@ def pestania_red(p: ParametrosSimulacion) -> None:
         red.origen: (sum(n for _, n in r.pedidos_total), 0)
     }
     descripcion = {
-        "DOCK": "refinería de Shell/Raízen (origen documentado)",
-        "ARROYO": "terminal de despacho de Raízen/Shell (Santa Fe)",
-        "LUJAN": "refinería de YPF (último recurso: otra empresa)",
+        "DOCK": "refinería de Dock Sud: el único origen real de esta estación",
+        "ARROYO": "terminal de Santa Fe (supuesto del modelo)",
+        "LUJAN": "refinería de YPF, otra empresa (supuesto del modelo)",
     }
+    velocidad_media = optimo.km / plazo_medio
     alternativos = tuple(valor("RED-19"))
     filas = []
     for o in ("DOCK", *alternativos):
         camino = camino_mas_corto(red, origen=o)
-        extra = 0.0 if o == red.origen else camino.minutos - optimo.minutos + red.demora_redireccion_h * 60.0
         if o in red.origenes_no_disponibles:
             estado = "no disponible (marcado en el menú)"
         elif o == red.origen:
@@ -1156,19 +1225,29 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             "Origen": NOMBRE_NODO[o],
             "Qué es": descripcion.get(o, ""),
             "Distancia a la estación": f"{vistas.dec(camino.km)} km",
-            "Plazo promedio": f"{vistas.dec(plazo_medio + extra / 60)} h",
+            "Plazo promedio": f"{vistas.dec(camino.km / velocidad_media)} h",
             "Estado": estado,
             "Camiones de esta corrida": vistas.ent(n),
         })
     st.dataframe(pd.DataFrame(filas), hide_index=True)
+    st.caption(
+        f"**Plazo = distancia ÷ la velocidad media del pedido.** Desde Dock Sud son {vistas.dec(optimo.km, 0)} km en "
+        f"{vistas.dec(plazo_medio, 0)} h de plazo promedio (INV-01): {vistas.dec(velocidad_media)} km/h, contando pedir, "
+        "cargar, manejar con descansos y descargar. Se usa la misma velocidad para los otros orígenes."
+    )
+    st.info(
+        "**Arroyo Seco y Luján de Cuyo son un supuesto del modelo.** Hoy Shell abastece a esta estación sólo desde Dock "
+        "Sud: no le manda combustible desde Arroyo Seco ni desde Luján de Cuyo (que es la refinería de YPF, otra "
+        "empresa). Se agregaron para darle más complejidad al proyecto: qué pasaría si Dock Sud no pudiera despachar.",
+        icon=":material/info:",
+    )
     total_redirigidos = sum(x[2] for x in r.pedidos_por_origen)
     if red.origenes_alternativos:
         st.caption(
             f"Eventos de abastecimiento {'prendidos' if red.prob_origen_no_disponible > 0 else 'apagados'}"
             + (f" ({vistas.dec(100 * red.prob_origen_no_disponible, 0)} % de los pedidos, RED-20)"
                if red.prob_origen_no_disponible > 0 else "")
-            + f". Si un origen no puede, el pedido pasa al siguiente con su ruta, su distancia y "
-            f"{vistas.dec(red.demora_redireccion_h, 0)} h de demora por volver a gestionarlo (RED-21). En esta corrida se "
+            + f". Si un origen no puede, el pedido pasa al siguiente con su ruta y su plazo. En esta corrida se "
             f"redirigieron {vistas.ent(total_redirigidos)} camiones."
         )
     else:
@@ -1210,16 +1289,15 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     vistas.seccion_red_por_producto(p, st.session_state.resultados[0].replicas[0])
 
     # "Qué le hace cada corte a cada origen" y su efecto van sólo si se editó (pedido del grupo): con datos reales no
-    # hay cortes de ruta ni orígenes alternativos. El plan del período (abajo) deja probar cortes igual.
+    # hay cortes de ruta ni orígenes alternativos.
     editada = (st.session_state.get("modo") == "editada" or red.escenario_corte != "ninguno"
-               or bool(red.origenes_alternativos or red.origenes_no_disponibles or red.cuotas_origen))
+               or bool(red.origenes_alternativos or red.origenes_no_disponibles))
     if not editada:
         st.caption(
             "Esta corrida usa los datos reales: no hubo cortes de ruta ni camiones de otros orígenes, así que lo que le "
             "hace cada corte a cada origen no se muestra acá. Aparece si se edita la simulación o se prenden los "
-            "eventos de abastecimiento en el menú Abastecimiento; el efecto de un corte sobre el plan del período se prueba abajo."
+            "eventos de abastecimiento en el menú Abastecimiento."
         )
-        vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
         return
 
     st.markdown("##### Qué le hace cada corte a cada origen")
@@ -1243,7 +1321,7 @@ def pestania_red(p: ParametrosSimulacion) -> None:
     st.markdown("##### Plazo de entrega con y sin cortes")
     if red.escenario_corte == "ninguno":
         st.info("Esta corrida no tiene un escenario de cortes de ruta: el efecto de cada corte sobre el plazo se ve en "
-                "la tabla de arriba y en el plan del período (abajo).", icon=":material/construction:")
+                "la tabla de arriba.", icon=":material/construction:")
     else:
         mes = 7
         sin_corte, con_corte = muestrear_plazos(
@@ -1308,8 +1386,6 @@ def pestania_red(p: ParametrosSimulacion) -> None:
             "volvé a apretar el botón. Un camión demorado deja el tanque más tiempo sin "
             "reposición: el quiebre sube, y el óptimo de (s, Q) también cambia."
         )
-
-    vistas.seccion_plan_red(p, st.session_state.resultados[0].replicas[0], dict(ajustes_actuales().topes_origen))
 
 
 # =============================================================================
@@ -1381,40 +1457,6 @@ def pestania_gnc(p: ParametrosSimulacion) -> None:
     st.plotly_chart(
         graficos_gnc.grafico_gnc_dias(st.session_state.traza, p), key="g_gnc_dias"
     )
-
-    st.markdown("##### Efecto del corte en la estación")
-    st.caption("Corre la estación con y sin cortes (contrato firme), con las mismas semillas.")
-    replicas_gnc = st.slider("Réplicas", 1, 4, 2, 1, key="rep_gnc")
-    deshabilitado = g.contrato == "firme" or g.episodios == 0
-    if st.button("Simular el efecto del corte de GNC", icon=":material/propane_tank:", disabled=deshabilitado):
-        with st.spinner("Simulando con y sin cortes…"):
-            sin = correr_estacion_real_cacheado(
-                replace(p, gnc=replace(g, contrato="firme")), replicas_gnc,
-                st.session_state.semilla_usada,
-            )
-            con = correr_estacion_real_cacheado(p, replicas_gnc, st.session_state.semilla_usada)
-        st.session_state.efecto_gnc = (sin, con)
-    efecto = st.session_state.get("efecto_gnc")
-    if efecto:
-        sin, con = efecto
-        super_sin = promedio_por_producto(sin.replicas, "litros_vendidos_por_producto")["super"]
-        super_con = promedio_por_producto(con.replicas, "litros_vendidos_por_producto")["super"]
-        filas = [
-            ("GNC vendido (m³/día)", f"{sin.prom('m3_gnc_vendidos_dia'):.1f}", f"{con.prom('m3_gnc_vendidos_dia'):.1f}"),
-            ("Clientes perdidos por el corte (por día)", f"{sin.prom('perdidos_corte_gnc_dia'):.2f}", f"{con.prom('perdidos_corte_gnc_dia'):.2f}"),
-            ("Clientes que pasaron a Súper (por día)", f"{sin.prom('migrados_gnc_dia'):.2f}", f"{con.prom('migrados_gnc_dia'):.2f}"),
-            ("Súper vendido (L/día)", f"{super_sin:,.0f}", f"{super_con:,.0f}"),
-            ("Espera en la hora pico (min)", f"{sin.prom('espera_pico'):.2f}", f"{con.prom('espera_pico'):.2f}"),
-            ("Días con corte de GNC (%)", f"{sin.prom('dias_corte_gnc_pct'):.1f}", f"{con.prom('dias_corte_gnc_pct'):.1f}"),
-        ]
-        st.dataframe(
-            pd.DataFrame(filas, columns=["Indicador", "Sin cortes (contrato firme)", "Con los cortes elegidos"]),
-            hide_index=True,
-        )
-        st.caption(
-            "Resultado de la última comparación. Los que pasan a Súper suman litros de nafta "
-            "(y cola en la zona A); los que se pierden son venta de GNC que no se recupera."
-        )
 
 
 #: Segundos por réplica de un mes (medido: ≈ 1,3 s); sólo para estimar el tiempo de espera.
@@ -1567,7 +1609,7 @@ def pestania_estacion() -> None:
     st.markdown("#### El playón")
     st.markdown(
         "6 surtidores de doble cara = **12 caras en 3 zonas**: S1–S2 nafta (Súper y V-Power) · "
-        "S3 diésel (G2 y G3) · S4–S6 GNC. Servicio atendido por playeros, playa 24 h. "
+        "S3 diésel (Evolux y V-Power Diesel) · S4–S6 GNC. Servicio atendido por playeros, playa 24 h. "
         "La pestaña **Animación** lo muestra funcionando."
     )
 
@@ -1582,7 +1624,7 @@ def pestania_estacion() -> None:
 # =============================================================================
 # Pestaña: datos y fuentes (el Registro completo)
 # =============================================================================
-def pestania_datos_fuentes() -> None:
+def pestania_datos_fuentes(p: ParametrosSimulacion) -> None:
     """El Registro de datos (valor elegido, fuente, tipo y confianza) y cómo se resolvió cada contradicción."""
     st.subheader("Registro de datos")
     st.caption(
@@ -1621,6 +1663,11 @@ def pestania_datos_fuentes() -> None:
         height=36 * (len(CONTRADICCIONES) + 1) + 3,
     )
 
+    st.divider()
+    with st.expander("Modelo y método: cómo funciona el simulador y la configuración de esta corrida",
+                     icon=":material/account_tree:"):
+        pestania_modelo_real(p)
+
 
 # =============================================================================
 # Aplicación
@@ -1645,7 +1692,6 @@ def correr_todo(
     # El barrido de políticas corresponde a otros parámetros: se descarta.
     st.session_state.costos_real = None
     st.session_state.efecto_cortes = None
-    st.session_state.efecto_gnc = None
 
 
 # =============================================================================
@@ -1715,7 +1761,7 @@ def ajustes_actuales() -> Ajustes:
     return st.session_state.get("ajustes") or Ajustes()
 
 
-NOMBRES_PRODUCTO = {"super": "Súper", "vpower": "V-Power", "diesel_g2": "Diésel G2", "diesel_g3": "Diésel G3",
+NOMBRES_PRODUCTO = {"super": "Súper", "vpower": "V-Power Nafta", "diesel_g2": "Evolux Diesel", "diesel_g3": "V-Power Diesel",
                     "gnc": "GNC"}
 
 
@@ -1740,7 +1786,7 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             margenes.append((pr, float(col.number_input(
                 f"Margen {NOMBRES_PRODUCTO[pr]} ($/{unidad})", 0, 5000, int(margenes_previos.get(pr, defecto)), 10,
                 key=f"aj_margen_{pr}",
-                help=f"Registro: ${defecto:,.0f}/{unidad} ({d.id}, heredado sin fuente). Rango de prueba del tornado: "
+                help=f"Registro: ${defecto:,.0f}/{unidad} ({d.id}, {'heredado sin fuente' if d.tipo == 'heredado' else 'supuesto del grupo'}). Rango de prueba del tornado: "
                      f"${d.bajo:,.0f}–{d.alto:,.0f} (no es un dato).".replace(",", "."),
             ))))
         flete = por_id("ECO-06")
@@ -1830,8 +1876,9 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         )
         st.caption(
             f"Prendido, un origen puede no cumplir un pedido ({valor('RED-20'):.0%} de las veces, RED-20, supuesto) y el "
-            f"pedido pasa al siguiente: **Arroyo Seco** (terminal de Raízen/Shell) y después **Luján de Cuyo** (refinería "
-            f"de YPF), con su propia ruta y {valor('RED-21'):.0f} h de demora por volver a gestionarlo. Sin azar es una "
+            f"pedido pasa al siguiente: **Arroyo Seco** y después **Luján de Cuyo** (refinería de YPF), con su propia ruta y "
+            f"el plazo a la misma velocidad media que desde Dock Sud. Son un **supuesto**: hoy la estación se abastece "
+            f"sólo desde Dock Sud. Sin azar es una "
             f"cuota: 1 de cada 20 pedidos de cada producto, así que en un mes casi no aparece. Sólo los líquidos (el GNC "
             f"sale de la red de gas). La Paz y Pareditas no se incluyen: son cruces de ruta, no plantas (nota 09)."
         )
@@ -1842,25 +1889,9 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
             format_func=lambda o: NOMBRE_NODO[o], key="aj_no_disponibles",
             help="Para forzar el caso: por ejemplo, Dock Sud no disponible ⇒ todos los pedidos salen de Arroyo Seco.",
         )
-        st.markdown("**Plan de abastecimiento (flujo de costo mínimo, pestaña Red y rutas)**")
-        topes_previos = dict(previo.topes_origen)
-        t1, t2 = st.columns(2)
-        tope_arroyo = t1.number_input(
-            "Arroyo Seco puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("ARROYO", 0))), 5,
-            key="aj_tope_arroyo", help="FLU-02, supuesto: hoy 0 % (todo sale de Dock Sud).",
-        ) / 100
-        tope_lujan = t2.number_input(
-            "Luján de Cuyo puede despachar (% de los camiones)", 0, 100, int(round(100 * topes_previos.get("LUJAN", 0))), 5,
-            key="aj_tope_lujan", help="FLU-02, supuesto: hoy 0 % (YPF, sólo emergencia).",
-        ) / 100
-        despachar = st.toggle(
-            "Despachar según el plan", value=previo.despachar_plan, key="aj_despachar_plan",
-            help="Prendido: cada camión sale del origen que indica el plan de costo mínimo (cuotas exactas). Con los "
-                 "topes de hoy el plan es todo desde Dock Sud y la corrida no cambia.",
-        )
         politicas = {
             "conveniente": "La más conveniente: s = 2 días y Q = 4,5 días de venta (INV-13, por defecto)",
-            "pronostico": "Por pronóstico: s con stock de seguridad (pestaña Pronóstico)",
+            "pronostico": "Por pronóstico: s con un colchón por el error del pronóstico",
             "cargada": "La de INV-07: s = 1,5 días de venta",
         }
         politica = st.radio(
@@ -1880,8 +1911,6 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         margenes=tuple(margenes), flete_fijo=flete_fijo, flete_km=flete_km, almacenamiento=almacenamiento,
         sueldo_playero=sueldo, cortes_gnc=cortes, pct_gnc=pct, calendario=bool(calendario),
         indices_reales=bool(indices_reales), politica=str(politica),
-        topes_origen=(("DOCK", 1.0), ("ARROYO", float(tope_arroyo)), ("LUJAN", float(tope_lujan))),
-        despachar_plan=bool(despachar),
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,
@@ -2198,7 +2227,7 @@ def pantalla_editar() -> None:
         "El precio mueve el margen $ por $: se supone un costo fijo y que la demanda **no** reacciona "
         "al precio (sin elasticidad). Los de referencia son ECO-08."
     )
-    nombres = {"super": "Súper", "premium": "V-Power", "diesel_g2": "Diésel G2", "diesel_g3": "Diésel G3", "gnc": "GNC (por m³)"}
+    nombres = {"super": "Súper", "premium": "V-Power Nafta", "diesel_g2": "Evolux Diesel", "diesel_g3": "V-Power Diesel", "gnc": "GNC (por m³)"}
     actuales = dict(previa.precios or valor_registro_precios())
     columnas = st.columns(len(nombres))
     precios = tuple(
@@ -2284,7 +2313,7 @@ def pie_de_resultados() -> None:
 
 #: Ícono de línea (Material Symbols) de cada pestaña de resultados.
 ICONOS_PESTANIAS = {
-    "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring",
+    "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring", "Colas": "hourglass_top",
     "Eventos": "bolt", "Demanda": "directions_car", "Pronóstico": "trending_up", "Qué se sorteó": "casino",
     "Inventario": "oil_barrel", "Red y rutas": "route", "GNC": "propane_tank", "Economía": "payments",
     "Conclusión": "summarize", "Modelo y método": "account_tree", "Datos y fuentes": "database",
@@ -2341,13 +2370,13 @@ def main() -> None:
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
-        "La estación", "Animación", "Indicadores", "Demanda", "Pronóstico", "Inventario",
+        "La estación", "Animación", "Indicadores", "Colas", "Demanda", "Pronóstico", "Inventario",
         "Red y rutas", "GNC", "Economía", "Conclusión",
-        "Modelo y método", "Datos y fuentes",
+        "Datos y fuentes",
     ]
     con_eventos = bool(p_corrida.eventos.activos)
     if con_eventos:
-        nombres_tabs.insert(3, "Eventos")            # sólo si se prendieron eventos aleatorios en el menú
+        nombres_tabs.insert(nombres_tabs.index("Colas") + 1, "Eventos")   # sólo si se prendieron eventos
     if editada:
         nombres_tabs.insert(nombres_tabs.index("Inventario"), "Qué se sorteó")   # sólo si se editó
     etiquetas = [f":material/{ICONOS_PESTANIAS[n]}: {n}" for n in nombres_tabs]
@@ -2362,13 +2391,15 @@ def main() -> None:
             p_corrida, resultado, st.session_state.traza, st.session_state.periodo,
             st.session_state.modo,
         )
+    with pestanias["Colas"]:
+        vistas.pestania_colas(p_corrida, st.session_state.traza)
     if con_eventos:
         with pestanias["Eventos"]:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)
     with pestanias["Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
     with pestanias["Pronóstico"]:
-        vistas.pestania_pronostico(p_corrida)
+        vistas.pestania_pronostico(p_corrida, resultado_del_anio(p_corrida, resultado), st.session_state.parametros_eco)
     if editada:
         with pestanias["Qué se sorteó"]:
             pestania_sorteos(p_corrida)
@@ -2382,10 +2413,8 @@ def main() -> None:
         pestania_economia_real(p_corrida, st.session_state.parametros_eco)
     with pestanias["Conclusión"]:
         pestania_conclusion()
-    with pestanias["Modelo y método"]:
-        pestania_modelo(p_corrida)
     with pestanias["Datos y fuentes"]:
-        pestania_datos_fuentes()
+        pestania_datos_fuentes(p_corrida)
 
     pie_de_resultados()
 

@@ -54,9 +54,8 @@ Los controles cubren las dos partes del modelo:
    22. Grilla válida, monotonía de s (N11), independencia entre tanques y barrido que
        encuentra una política ≤ a la cargada en cada tanque.
 
-  REDISEÑO v3 (ORQUESTADOR.md)
-   47. Etapa 6: el desglose de Economía (cantidad de la simulación × precio del Registro) suma los
-       ingresos y costos del mes.
+   47. Economía: el estado de resultados (ventas − compras − fletes, sueldos y almacenamiento) da el margen
+       operativo, y con el margen de equilibrio el resultado es 0.
    49. Fórmulas de colas (M/M/1, M/M/s, costos) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
@@ -1454,7 +1453,7 @@ def main() -> int:
     eco_eq = replace_dc(eco, margen_por_litro=eq)
     margen_eq = economia_mensual(reps_eco[0], p_eco, eco_eq).margen_operativo
     controlar(
-        abs(margen_eq) < 1.0 and eq > eco.margen_por_litro,
+        abs(margen_eq) < 1.0 and eq > 0,
         "El margen por litro de equilibrio hace el margen operativo igual a 0",
         f"equilibrio ${eq:,.0f}/L (hoy ${eco.margen_por_litro:,.0f}/L) → margen {margen_eq:,.2f} $",
     )
@@ -1972,7 +1971,7 @@ def main() -> int:
         corrida33[etiqueta] = (ind33, correr_replica(p33, 1)[0])
     base33 = correr_replica(dataclasses.replace(p30, fecha_inicio=(1, 1), dias=365), 1)[0]
     plazos_arroyo = {round((x.t_llegada - x.t_pedido) / 60.0, 1) for x in corrida33["sin Dock Sud"][0].pedidos}
-    esperado_arroyo = round(36.0 + (_cmc(p30.red, origen="ARROYO").minutos - _cmc(p30.red).minutos) / 60.0 + 12.0, 1)
+    esperado_arroyo = round(36.0 * _cmc(p30.red, origen="ARROYO").km / _cmc(p30.red).km, 1)   # misma velocidad media
     ev = corrida33["eventos"][1].pedidos_por_origen
     controlar(
         corrida33["apagado"][1] == base33
@@ -2352,21 +2351,24 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 47
-    separador("47. Etapa 6 del rediseño: Economía separa lo verificable (cantidades) de lo supuesto (precios)")
-    from sim.economia_real import desglose_verificable
+    separador("47. Economía: el estado de resultados (ventas − compras − costos) da el margen operativo")
+    from sim.economia_real import estado_de_resultados, resultado_con_margen
 
     r47, _ = correr_replica(p_app, semilla=1)
     e47 = economia_mensual(r47, p_app, eco46)
-    renglones47 = desglose_verificable(r47, p_app, eco46)
+    renglones47 = estado_de_resultados(r47, p_app, eco46)
     ingresos47 = sum(x.importe for x in renglones47 if x.tipo == "ingreso")
     costos47 = sum(x.importe for x in renglones47 if x.tipo == "costo")
     controlar(
-        abs(ingresos47 - e47.ingreso_total) < 1e-6 and abs(costos47 - e47.costo_total) < 1e-6
-        and all(abs(x.cantidad * x.precio - x.importe) < 1e-6 for x in renglones47 if x.unidad != "mes")
-        and all(_valor(i) is not None for x in renglones47 for i in x.datos),
-        "Cada importe = cantidad de la simulación × precio del Registro, y suman los ingresos y costos del mes",
-        f"enero: {len(renglones47)} renglones · ingresos ${ingresos47:,.0f} = {e47.ingreso_total:,.0f} · "
-        f"costos ${costos47:,.0f} = {e47.costo_total:,.0f}",
+        abs((ingresos47 - costos47) - e47.margen_operativo) < 1e-3
+        and all(abs(x.cantidad * x.precio - x.importe) < 1e-3 for x in renglones47 if x.unidad != "mes")
+        and all(_valor(i) is not None for x in renglones47 for i in x.datos)
+        and abs(resultado_con_margen(e47, eco46, eco46.margen_por_litro) - e47.margen_operativo) < 1e-3
+        and abs(resultado_con_margen(e47, eco46, margen_de_equilibrio_por_litro(e47, eco46))) < 1e-3,
+        "Ventas al precio del cartel − compras (precio − margen) − fletes, sueldos y almacenamiento = margen "
+        "operativo; con el margen de equilibrio el resultado es 0",
+        f"enero: {len(renglones47)} renglones · ventas ${ingresos47:,.0f} − costos ${costos47:,.0f} = "
+        f"${e47.margen_operativo:,.0f}",
     )
 
     # ------------------------------------------------------------------ 48

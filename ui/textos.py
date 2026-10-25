@@ -259,7 +259,7 @@ que se afectan entre sí.
 1. **Llegadas**: **proceso de Poisson no homogéneo**; la tasa sigue el perfil horario de
    `DEM-02`. Los clientes por día **se derivan de los litros por mes** (nunca al revés).
 2. **Cliente "producto primero"** (Monte Carlo de 5 pasos, tablas en la pestaña Demanda):
-   se sortea el **producto** (Súper, V-Power, Diésel G2, Diésel G3 o GNC) y, condicionado a
+   se sortea el **producto** (Súper, V-Power Nafta, Evolux Diesel, V-Power Diesel o GNC) y, condicionado a
    él, el **tipo de vehículo** (moto, auto, pick-up, camión). Los litros salen de una
    triangular `(0,20 · T ; 0,30 · T ; 1,00 · T)` según el tanque del vehículo.
 3. **Tres zonas de caras**: A nafta (4), B diésel (2) y C GNC (6). Cada zona tiene su cola

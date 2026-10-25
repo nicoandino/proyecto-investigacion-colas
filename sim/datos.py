@@ -145,10 +145,11 @@ CONTRADICCIONES: tuple[Contradiccion, ...] = (
                   "Básico sin adicionales.",
                   "Oficial del sector (FECRA); el básico subestima lo que cuesta un empleado."),
     Contradiccion("C19", "Precios", "Informativo",
-                  "Súper $2.141 · Premium $2.300 · G2 $2.116 · G3 $2.641 · GNC $699/m³ (sept-2026).",
-                  "Nota 01 (Mendoza, 6/5/2026); precios de la propia estación en la Secretaría de Energía (2025).",
-                  "Más reciente: los de la Secretaría de Energía son oficiales pero están congelados desde 2025 "
-                  "(no vigentes)."),
+                  "Súper $2.227 · V-Power Nafta $2.514 · Evolux Diesel $2.447 · V-Power Diesel $2.729 · GNC "
+                  "$998,5/m³ (cartel de la estación, 25/10/2026).",
+                  "DATOS §7 (sept-2026: Súper $2.141 · G2 $2.116 · G3 $2.641 · GNC $699/m³); nota 01 (Mendoza, "
+                  "6/5/2026); Secretaría de Energía (2025, congelados).",
+                  "Medido en la propia estación y más reciente: el cartel de precios."),
     Contradiccion("C20", "Otros", "Nulo",
                   "Informativos: ninguno entra al modelo (Mercuria, estaciones en San Rafael, tránsito RN 143, "
                   "temperatura de julio).",
@@ -597,8 +598,9 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "evaluación del grupo (14/10/2026): la de menor costo de las 14 candidatas en el año completo con "
                     "datos reales y los índices de la serie real (control 46); la política real no está documentada "
                     "(INV-06)", "grupo", "", (),
-                    "s = 2 días de venta y Q = 4,5 días de venta: $4,52 M/mes contra $4,66 M la del pronóstico y $4,95 M "
-                    "la de INV-07, con 14 L/mes sin vender (costos con márgenes y flete heredados sin fuente)",
+                    "s = 2 días de venta y Q = 4,5 días de venta: $4,52 M/mes contra $4,66 M la del pronóstico y $5,44 M "
+                    "la de INV-07; la peor es s = 1 y Q = 2 días ($18,3 M). Con el margen de $200/L (25/10/2026; con "
+                    "$100/L también ganaba). Costos con flete heredado sin fuente",
                     None, None),
           (2.0, 4.5)),
         ("INV-10", ("Nivel inicial del tanque", "%", "A", "supuesto", "sin_dato",
@@ -670,11 +672,6 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "con 'eventos aleatorios de abastecimiento'; sin azar es una cuota: 1 de cada 20 pedidos "
                     "de cada producto", 0.0, 0.15),
           0.05),
-        ("RED-21", ("Demora de redirigir un pedido a otro origen", "h", "C", "supuesto", "sin_dato",
-                    "grupo (13/10/2026): volver a gestionar el pedido con otra terminal", "grupo",
-                    "", (), "plazo = base − viaje desde Dock Sud + viaje desde el origen usado + esta demora",
-                    None, None),
-          12.0),
         ("RED-11", ("Velocidad del camión", "km/h", "C", "supuesto", "sin_dato",
                     "orquestador (entre 80 km/h legales y 60 urbanos)", "orquestador",
                     "", (), "OSRM da 81 km/h, inalcanzable para un camión", None, None),
@@ -802,14 +799,14 @@ REGISTRO: tuple[Dato, ...] = tuple(
           "sin datos (ventana/episodio aleatorio)"),
 
         # ------------------------------------------------------- I. Economía
-        ("ECO-01", ("Margen por litro", "$/L", "E", "heredado", "sin_dato",
-                    "proyecto hipotético", "heredado",
-                    "", (("prueba −50 %", 50.0, "rango de prueba de sensibilidad (no es dato)"),
-                         ("prueba +50 %", 150.0, "rango de prueba de sensibilidad (no es dato)")),
-                    "≈ 4,7 % del Súper a $2.141; candidatas CECHA/FECRA; "
-                    "parametrizar también como % del precio. Los extremos son un rango de "
-                    "prueba para el tornado, no un dato", 50.0, 150.0),
-          100.0),
+        ("ECO-01", ("Margen por litro", "$/L", "E", "supuesto", "sin_dato",
+                    "grupo (25/10/2026, decisión de Nico): $200 por litro; antes $100, heredado del proyecto "
+                    "hipotético", "grupo",
+                    "", (("prueba −50 %", 100.0, "rango de prueba de sensibilidad (no es dato)"),
+                         ("prueba +50 %", 300.0, "rango de prueba de sensibilidad (no es dato)")),
+                    "≈ 9 % del Súper a $2.227; sigue sin fuente (candidatas CECHA/FECRA). Los extremos son un "
+                    "rango de prueba para el tornado, no un dato", 100.0, 300.0),
+          200.0),
         ("ECO-02", ("Margen por compra en minimarket", "$/compra", "E", "heredado",
                     "sin_dato",
                     "proyecto hipotético", "heredado",
@@ -856,12 +853,13 @@ REGISTRO: tuple[Dato, ...] = tuple(
                          ("prueba +50 %", 37.5, "rango de prueba de sensibilidad (no es dato)")),
                     "extremos de prueba para el tornado", 12.5, 37.5),
           25.0),
-        ("ECO-08", ("Precios (referencia, informativos)", "$", "B", "dato", "media",
-                    "DATOS §7, sept-2026 (GNC oct-2025)", "datos_operacionales",
-                    "C19", (), "Súper $2.141 · Premium $2.300+ · G2 $2.116 · "
-                              "G3 $2.641 · GNC $699/m³", None, None),
-          (("super", 2_141.0), ("premium", 2_300.0), ("diesel_g2", 2_116.0),
-           ("diesel_g3", 2_641.0), ("gnc", 699.0))),
+        ("ECO-08", ("Precios del cartel de la estación", "$", "A", "observacion", "alta",
+                    "foto del cartel de precios de la estación (grupo, 25/10/2026)", "grupo",
+                    "C19", (), "Súper $2.227 · V-Power Nafta $2.514 · V-Power Diesel $2.729 · "
+                              "Evolux Diesel $2.447 · GNC $998,5/m³. Evolux = gasoil grado 2 (G2); V-Power "
+                              "Diesel = grado 3 (G3)", None, None),
+          (("super", 2_227.0), ("premium", 2_514.0), ("diesel_g2", 2_447.0),
+           ("diesel_g3", 2_729.0), ("gnc", 998.5))),
         ("ECO-09", ("Anualización", "—", "E", "supuesto", "sin_dato",
                     "orquestador", "orquestador",
                     "", (), "año = 3 × Σ de los 4 meses representativos; "
@@ -1136,7 +1134,6 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosRed.origenes_alternativos": "RED-19",
     "ParametrosRed.prob_origen_no_disponible": "RED-20",
     "ParametrosRed.origenes_no_disponibles": "RED-19",
-    "ParametrosRed.demora_redireccion_h": "RED-21",
     # ParametrosEventos (parte 4)
     "ParametrosSimulacion.eventos": "EVT-00",
     "ParametrosEventos.activos": "EVT-00",

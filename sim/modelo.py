@@ -48,7 +48,7 @@ from sim.datos import valor
 from sim.estadisticas import Indicadores, PedidoCamion
 from sim.eventos import MECANISMO, EventoOcurrido, aumento_de_llegadas, calendario
 from sim.gnc import calendario_de_episodios, intervalos_de_corte, minutos_de_corte_en_dia
-from sim.red import demora_de_viaje, extra_por_origen, mes_del_dia, origen_del_pedido
+from sim.red import demora_de_viaje, factor_por_origen, mes_del_dia, origen_del_pedido
 from sim.traza import DT_INVENTARIO, DiaSimulado, Traza
 
 MOTIVOS = ("sin_combustible", "abandono_espera", "cola_llena", "corte_gnc", "abandono_caja")
@@ -992,7 +992,8 @@ class EstacionDeServicio:
             # Tanda 8: ¿de qué origen sale? (sin orígenes alternativos, el habitual sin sortear nada)
             origen, redirigido = origen_del_pedido(self.p.red, self.az, f"origen_{producto}")
             red_viaje = replace(self.p.red, origen=origen) if redirigido else self.p.red
-            plazo += extra_por_origen(self.p.red, origen, redirigido)
+            if redirigido:
+                plazo *= factor_por_origen(self.p.red, origen)   # misma velocidad media del pedido que desde Dock Sud
             dia = int(self.env.now // MINUTOS_POR_DIA) + 1
             demora, causa = demora_de_viaje(
                 red_viaje,

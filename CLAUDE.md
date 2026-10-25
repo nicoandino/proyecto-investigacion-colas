@@ -13,8 +13,9 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 - **Todos los números del modelo** están en el Registro (`sim/datos.py`) con valor, unidad, fuente, nivel, tipo
   y confianza. Su versión legible es **`DATOS_REALES.md`** (generado: `reports/generar_datos_reales.py`).
 - **No hay mediciones de la propia estación.** Casi todo es estimación o supuesto de fuentes públicas, y la app
-  lo tiene que decir. Los márgenes por litro, el flete y el costo de almacenamiento son **heredados sin fuente**
-  (placeholders): los pesos muestran cómo se calcula, no cifras del negocio.
+  lo tiene que decir. El margen de nafta y diésel es **$200/L, supuesto del grupo** (ECO-01, 25/10/2026); el del GNC,
+  el flete y el almacenamiento son **heredados sin fuente** (placeholders). Los **precios** son los del cartel de la
+  estación (ECO-08, foto del 25/10/2026): Súper, V-Power Nafta, Evolux Diesel (G2), V-Power Diesel (G3) y GNC.
 - Notas de investigación con citas y URL: `research_notes/`.
 - La documentación vieja (orquestador de las fases 0–10, onboarding, TASK, README, el compilado de datos
   anterior) está en **`..\Contextoviejo\`** (fuera del repo). Los comentarios del código que dicen
@@ -31,7 +32,8 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 - **Inventario:** un tanque por líquido, política (s, Q) por producto (en la app, por defecto la más conveniente:
   s = 2 y Q = 4,5 días de venta, INV-13), camión por producto (plazo 24–36–48 h)
   desde Dock Sud (991 km) por una red de rutas (Dijkstra) con cortes; orígenes alternativos Arroyo Seco y Luján
-  (apagados por defecto). Quiebres y litros no vendidos por causa.
+  (apagados por defecto; supuesto: la estación se abastece sólo de Dock Sud) con el plazo a la misma velocidad media
+  (991 km ÷ 36 h). Quiebres y litros no vendidos por causa.
 - **GNC:** 3 compresores; episodios de corte total en jun–ago (opción: más cortes en todo el invierno e invierno
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con

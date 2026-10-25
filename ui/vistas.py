@@ -60,7 +60,7 @@ def _md(texto: str) -> str:
 
 
 def _pesos(x: float) -> str:
-    return f"$ {ent(x)}"
+    return f"−$ {ent(-x)}" if x < -0.5 else f"$ {ent(x)}"
 
 
 # =============================================================================
@@ -105,6 +105,21 @@ def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametro
          "costo de oportunidad: no se resta del margen"),
     ])
 
+    if not quiebres or all(q[0] == 0 for q in quiebres.values()):
+        from sim.datos import valor
+
+        plazo = p.inventario[0].plazo_entrega
+        st.success(
+            f"**En esta corrida no se vació ningún tanque.** Con la política que usa la app (pedir cuando quedan "
+            f"{dec(valor('INV-13')[0], 0)} días de venta) y sin azar, el camión tarda siempre lo mismo "
+            f"({dec(plazo.media, 0)} h) y llega antes de que el tanque se vacíe. "
+            "Los tanques se vacían cuando: **se pide más tarde** (por ejemplo, la política de INV-07, con 1,5 días, "
+            "en un año deja tanques vacíos decenas de veces); **el camión tarda más** (con *Editar simulación* hay "
+            f"azar y puede tardar hasta {dec(plazo.maximo, 0)} h); o **hay eventos** (faltante de combustible con cupo, "
+            "cortes de ruta, "
+            "mucha más demanda). Por eso en otras simulaciones aparecen horas con tanques vacíos.",
+            icon=":material/check_circle:",
+        )
     st.markdown("##### Cada tanque")
     filas = []
     for pr in capacidad:
@@ -136,8 +151,8 @@ def bloque_quiebres(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametro
     st.dataframe(pd.DataFrame(filas), hide_index=True)
     st.caption(
         " · ".join(f"**{c}**: {d}" for c, d in CAUSAS)
-        + ". La venta perdida = lo que no se vendió × el margen por litro (por m³ el GNC), heredado sin fuente "
-        "(ECO-01/03): es un **costo de oportunidad** y se informa aparte, no se resta del margen. El GNC va en m³ "
+        + ". La venta perdida = lo que no se vendió × el margen por litro (por m³ el GNC) "
+        "(ECO-01, supuesto; ECO-03 del GNC, heredado): es un **costo de oportunidad** y se informa aparte, no se resta del margen. El GNC va en m³ "
         "y nunca se suma con los litros."
     )
     _comprobacion([
@@ -892,7 +907,7 @@ def pestania_pronostico(p: ParametrosSimulacion, anio: ResultadoReplica, eco: Pa
     f_pron = factores_de_precio([esperada] * len(meses))
     f_real = factores_de_precio(real_i)
     st.markdown("##### 2. Precio por mes")
-    productos = {"super": "Nafta Súper ($/L)", "diesel_g2": "Gasoil G2 ($/L)", "gnc": "GNC ($/m³)"}
+    productos = {"super": "Súper ($/L)", "diesel_g2": "Evolux Diesel ($/L)", "gnc": "GNC ($/m³)"}
     elegido = st.radio("Producto", list(productos), format_func=productos.get, horizontal=True, key="pron_precio")
     precio0 = float(dict(eco.precios)[elegido])
     st.caption(_md(
@@ -924,7 +939,7 @@ def pestania_pronostico(p: ParametrosSimulacion, anio: ResultadoReplica, eco: Pa
         "(misma inflación). **Pronóstico:** los litros de la recta (punto 1) repartidos por producto (DEM-04) con la "
         f"inflación de {dec(100 * esperada)} %. **Real:** lo que vendió la simulación en cada mes con la inflación "
         "real. Márgenes de hoy: " + " · ".join(f"{pr.nombre} ${ent(margenes[pr.id])}" for pr in p.productos)
-        + " (ECO-01/03, heredados sin fuente: los pesos muestran cómo se calcula, no cifras del negocio)."
+        + " (ECO-01, supuesto del grupo; ECO-03, heredado sin fuente: los pesos muestran cómo se calcula, no cifras del negocio)."
     ))
     g_pron, g_real = ganancias_por_mes(p, margenes, meses, [v for *_, v in anio.por_mes], f_pron, f_real)
     comp_g = comparar(meses, g_pron, g_real)
@@ -956,7 +971,7 @@ def seccion_precio_futuro(eco: ParametrosEconomicos) -> None:
     inflacion = inflacion_real(12)
     factores = factores_de_precio(inflacion)
     precios = dict(eco.precios)
-    nombres = {"super": "Nafta Súper", "premium": "Nafta V-Power", "diesel_g2": "Gasoil G2", "diesel_g3": "Gasoil G3",
+    nombres = {"super": "Súper", "premium": "V-Power Nafta", "diesel_g2": "Evolux Diesel", "diesel_g3": "V-Power Diesel",
                "gnc": "GNC"}
     st.markdown("##### Cuánto va a valer el litro")
     st.caption(_md(
@@ -1080,38 +1095,6 @@ def seccion_formulas_colas(p: ParametrosSimulacion, r: ResultadoReplica, traza: 
 
 
 
-def bloque_stock_seguridad(p: ParametrosSimulacion) -> None:
-    """Inventario: la cuenta del punto de pedido con el stock de seguridad del pronóstico (P4)."""
-    from sim.pronostico import stock_de_seguridad
-
-    filas_calc = stock_de_seguridad(p)
-    nombres = _nombres(p)
-    en_uso = all(abs(i.punto_pedido - x.s) < 1e-6 for i, x in zip(p.inventario, filas_calc))
-    st.markdown("##### 4. El punto de pedido con el pronóstico (stock de seguridad)")
-    st.caption(
-        "**s = D · L + z · σ_día · √L**: lo que se vende mientras viaja el camión (D·L) más un colchón por el error del "
-        "pronóstico. El error sale de la **serie real** de Shell Mendoza (PRO-01): el RMSE del método elegido en los meses "
-        f"de prueba es el **{dec(100 * filas_calc[0].error_relativo)} %** de lo que se vende en un mes; se lleva a cada "
-        "tanque (σ_mes = error × D × 30) y a un día suponiendo errores diarios independientes (σ_día = σ_mes ÷ √30). "
-        "z = 1,96 (95 %). La Q no cambia. "
-        + ("**Esta corrida usa esta política** (elegida en el menú Abastecimiento)." if en_uso else
-           "Esta corrida **no** la usa: se elige en el menú Abastecimiento, y en el Caso de informe compite con las "
-           "otras 13 políticas.")
-    )
-    filas = [{
-        "Tanque": nombres[x.producto],
-        "D (L por día)": ent(x.consumo_dia),
-        "L (días)": dec(x.plazo_dias, 2),
-        "D · L": f"{ent(x.consumo_dia * x.plazo_dias)} L",
-        "σ por día": f"{ent(x.sigma_dia)} L",
-        "Stock de seguridad z·σ·√L": f"{ent(x.seguridad)} L",
-        "s por pronóstico": f"{ent(x.s)} L",
-        "s cargada": f"{ent(i.punto_pedido)} L",
-    } for x, i in zip(filas_calc, p.inventario)]
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-
-
-
 # =============================================================================
 # §24 · Inventario: cada camión, de punta a punta
 # =============================================================================
@@ -1155,7 +1138,7 @@ def tabla_camiones(p: ParametrosSimulacion, r: ResultadoReplica, eco: Parametros
         f"{ent(len(filas))} camiones de los tanques elegidos ({ent(len(r.camiones))} en total = los pedidos de "
         f"Indicadores) · {ent(total_km)} km de ida · flete {_pesos(total_flete)} = {ent(len(filas))} × "
         f"{_pesos(eco.costo_pedido)} fijo + {_pesos(eco.flete_por_km)}/km × km de ida y vuelta (ECO-06, heredado sin "
-        "fuente). El plazo es el de INV-01 más la diferencia de viaje si salió de otro origen y la demora de un corte."
+        "fuente). El plazo es el de INV-01 (× km del origen ÷ km de Dock Sud si salió de otro origen) más la demora de un corte."
     ))
 
 
@@ -1202,41 +1185,3 @@ def seccion_red_por_producto(p: ParametrosSimulacion, r: ResultadoReplica) -> No
         "distribuidora Ecogas lo lleva a los usuarios (GNC-11, nota 13; informativo: el modelo no simula la red de gas). "
         "Con contrato **interrumpible** (GNC-01), en invierno se le corta el gas a la estación (pestaña GNC)."
     )
-
-
-
-# =============================================================================
-# Economía: lo verificable (cantidades) y lo supuesto (precios)
-# =============================================================================
-def tabla_verificable_supuesto(p: ParametrosSimulacion, r: ResultadoReplica, eco: ParametrosEconomicos) -> None:
-    """Cada importe del mes = cantidad (sale de la simulación, se comprueba) × precio (del Registro, con su tipo)."""
-    from sim.datos import por_id
-    from sim.economia_real import desglose_verificable
-
-    etiqueta_tipo = {"dato": "dato", "estimacion": "estimación", "observacion": "observación", "supuesto": "supuesto",
-                     "heredado": "heredado sin fuente"}
-    renglones = desglose_verificable(r, p, eco)
-    st.markdown("##### Lo verificable y lo supuesto")
-    st.caption(
-        "Cada importe es **cantidad × precio**. La **cantidad** sale de la simulación y se comprueba en las otras "
-        "pestañas (litros y compras en Indicadores, camiones en Inventario, dotación en el Modelo). El **precio** sale "
-        "del Registro, y casi todos son **heredados sin fuente** o estimaciones: ahí está la incertidumbre de la plata."
-    )
-    filas = []
-    for x in renglones:
-        datos = [por_id(i) for i in x.datos]
-        filas.append({
-            "Concepto": x.concepto,
-            "": "ingreso" if x.tipo == "ingreso" else "costo",
-            "Cantidad del mes (verificable)": f"{ent(x.cantidad)} {x.unidad}" if x.unidad != "mes" else "—",
-            "Precio unitario": _pesos(x.precio) if x.unidad != "mes" else "—",
-            "De dónde sale el precio": " · ".join(f"{d.id} ({etiqueta_tipo.get(d.tipo, d.tipo)})" for d in datos),
-            "Importe del mes": _pesos(x.importe),
-        })
-    st.dataframe(pd.DataFrame(filas), hide_index=True)
-    heredados = sorted({i for x in renglones for i in x.datos if por_id(i).tipo == "heredado"})
-    st.caption(_md(
-        f"Ingresos: {_pesos(sum(x.importe for x in renglones if x.tipo == 'ingreso'))} · costos: "
-        f"{_pesos(sum(x.importe for x in renglones if x.tipo == 'costo'))} (los mismos de arriba). Precios heredados sin "
-        f"fuente: {', '.join(heredados) if heredados else 'ninguno'}; se cambian en el menú Economía."
-    ))

@@ -314,9 +314,9 @@ def productos_desde_registro() -> tuple[Producto, ...]:
     salida = []
     for id_, nombre, grupo in (
         ("super", "Súper", "A"),
-        ("vpower", "V-Power", "A"),
-        ("diesel_g2", "Diésel G2", "B"),
-        ("diesel_g3", "Diésel G3", "B"),
+        ("vpower", "V-Power Nafta", "A"),
+        ("diesel_g2", "Evolux Diesel", "B"),
+        ("diesel_g3", "V-Power Diesel", "B"),
     ):
         cargas = matriz[id_]
         media = sum(
@@ -482,7 +482,6 @@ class ParametrosRed:
     origenes_alternativos: tuple[str, ...] = ()          # a cuáles se redirige, en orden
     prob_origen_no_disponible: float = 0.0               # prob. de que un origen no pueda cumplir el pedido
     origenes_no_disponibles: tuple[str, ...] = ()        # marcados a mano como no disponibles
-    demora_redireccion_h: float = valor("RED-21")        # sólo si un pedido se redirige
 
     def __post_init__(self) -> None:
         nodos = {n for a in self.arcos for n in (a.a, a.b)}
@@ -492,8 +491,8 @@ class ParametrosRed:
             raise ValueError("La velocidad del camión tiene que ser positiva.")
         if not 0.0 <= self.prob_corte_viaje <= 1.0:
             raise ValueError("La probabilidad de corte tiene que estar entre 0 y 1.")
-        if not 0.0 <= self.prob_origen_no_disponible <= 1.0 or self.demora_redireccion_h < 0:
-            raise ValueError("prob_origen_no_disponible entre 0 y 1; demora_redireccion_h ≥ 0.")
+        if not 0.0 <= self.prob_origen_no_disponible <= 1.0:
+            raise ValueError("prob_origen_no_disponible tiene que estar entre 0 y 1.")
         if any(o not in nodos for o in (*self.origenes_alternativos, *self.origenes_no_disponibles)):
             raise ValueError("Los orígenes alternativos tienen que ser nodos de la red.")
         validos = {"ninguno", "aleatorio", *(c.id for c in self.cortes)}

@@ -199,7 +199,7 @@ def aplicar_edicion(
 # =============================================================================
 # Los ajustes del menú inicial (parte 2, tanda 4)
 # =============================================================================
-#: Margen de cada producto según el Registro: los líquidos ECO-01 ($/L), el GNC ECO-03 ($/m³). Heredados sin fuente.
+#: Margen de cada producto según el Registro: los líquidos ECO-01 ($/L), el GNC ECO-03 ($/m³). ECO-01 es un supuesto del grupo; ECO-03, heredado.
 MARGENES_REGISTRO: tuple[tuple[str, float], ...] = tuple(
     (pr, float(valor("ECO-03") if pr == "gnc" else valor("ECO-01")))
     for pr in ("super", "vpower", "diesel_g2", "diesel_g3", "gnc")

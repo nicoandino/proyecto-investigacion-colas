@@ -649,3 +649,24 @@ rutas con Dijkstra, los cortes y los orígenes alternativos (tanda 8). Las secci
   corrida no es el año completo, el año se simula aparte (≈ 5 s, con caché). El motor ahora guarda clientes y litros
   vendidos por mes de calendario (`ResultadoReplica.por_mes`). Los cinco métodos y el stock de seguridad siguen en
   `sim/pronostico.py` (índices de la demanda y política por pronóstico).
+
+## 33. Pedidos de Nico: inventario, rutas, economía con estado de resultados y precios del cartel (25/10/2026)
+
+- **Inventario:** los gráficos del nivel de cada tanque van en un desplegable (abierto). Si no se vació ningún tanque,
+  un aviso explica por qué (política INV-13 + sin azar ⇒ el camión llega a tiempo) y cuándo sí pasa (INV-07, azar con
+  plazos de hasta 48 h, eventos). El punto 4 ya no tiene cuentas: dice en palabras cuándo pedir y por qué, cuál se usa,
+  cuál es la mejor (s = 2, Q = 4,5 días) y la peor (s = 1, Q = 2 días) de las 14 probadas en el año.
+- **Red y rutas:** el plazo desde otro origen es plazo base × km del origen ÷ km de Dock Sud (la misma velocidad media,
+  991 km ÷ 36 h ≈ 27,5 km/h): Arroyo Seco ≈ 32 h, Luján ≈ 8 h. Se saca la demora de redirección (RED-21). Un aviso dice
+  que Arroyo Seco y Luján son un supuesto (la estación se abastece sólo de Dock Sud; Luján es de YPF). Debajo de las 4
+  rutas, cuándo se usaría cada una según los cortes cargados (`cortes_que_eligen_cada_ruta`).
+- **GNC:** se saca "Efecto del corte en la estación".
+- **Economía:** quedan los ingresos y costos del mes, un **cuadro de ingresos** (ventas al precio del cartel y el margen
+  del Shell Shop), un **cuadro de costos** (compra del combustible = precio − margen, flete por camión, sueldos de
+  playeros, cajeros, tienda y encargado, almacenamiento), por qué da ese resultado, el **margen mínimo** (empate) con una
+  tabla de márgenes, y el precio del litro mes a mes. Se sacaron los avisos, la cascada y "Lo verificable y lo supuesto".
+- **Margen:** ECO-01 = **$200/L** (supuesto del grupo; antes $100 heredado). INV-13 sigue siendo la más barata.
+- **Precios (ECO-08):** los del cartel de la estación (foto del 25/10/2026): Súper $2.227 · V-Power Nafta $2.514 ·
+  V-Power Diesel $2.729 · Evolux Diesel $2.447 · GNC $998,5/m³. Los productos se llaman como en el cartel.
+- **Conclusión:** se sacan los supuestos del modelo. **Modelo y método** deja de ser pestaña: va en un desplegable al
+  final de Datos y fuentes.

@@ -670,3 +670,12 @@ rutas con Dijkstra, los cortes y los orígenes alternativos (tanda 8). Las secci
   V-Power Diesel $2.729 · Evolux Diesel $2.447 · GNC $998,5/m³. Los productos se llaman como en el cartel.
 - **Conclusión:** se sacan los supuestos del modelo. **Modelo y método** deja de ser pestaña: va en un desplegable al
   final de Datos y fuentes.
+
+## 34. Pestaña Colas, práctica (25/10/2026)
+
+Nico pidió la parte de colas como el ejercicio 2 del parcial y entendible para alguien que nunca estudió colas. Nueva
+pestaña **Colas** (después de Indicadores): elegís la hora (por defecto, la de más clientes); una tabla con los datos
+(λ, 1/μ, μ, s, Wq: qué es, cuánto vale y de dónde sale); cuatro tarjetas (ocupación ρ, tiempo total W, autos
+esperando Lq, autos en la estación L) con la fórmula, la cuenta con los números y qué significa; y una conclusión en
+una frase. Se sacó todo lo teórico (M/M/1, M/M/s, P0, costos): `sim/colas.py` quedó con las leyes de Little
+(`con_little`), validadas con el parcial B (W = 18 min, Lq = 1,6, L = 2,4) en el control 49.

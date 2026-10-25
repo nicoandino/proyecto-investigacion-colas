@@ -2313,7 +2313,7 @@ def pie_de_resultados() -> None:
 
 #: Ícono de línea (Material Symbols) de cada pestaña de resultados.
 ICONOS_PESTANIAS = {
-    "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring",
+    "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring", "Colas": "hourglass_top",
     "Eventos": "bolt", "Demanda": "directions_car", "Pronóstico": "trending_up", "Qué se sorteó": "casino",
     "Inventario": "oil_barrel", "Red y rutas": "route", "GNC": "propane_tank", "Economía": "payments",
     "Conclusión": "summarize", "Modelo y método": "account_tree", "Datos y fuentes": "database",
@@ -2370,13 +2370,13 @@ def main() -> None:
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
-        "La estación", "Animación", "Indicadores", "Demanda", "Pronóstico", "Inventario",
+        "La estación", "Animación", "Indicadores", "Colas", "Demanda", "Pronóstico", "Inventario",
         "Red y rutas", "GNC", "Economía", "Conclusión",
         "Datos y fuentes",
     ]
     con_eventos = bool(p_corrida.eventos.activos)
     if con_eventos:
-        nombres_tabs.insert(3, "Eventos")            # sólo si se prendieron eventos aleatorios en el menú
+        nombres_tabs.insert(nombres_tabs.index("Colas") + 1, "Eventos")   # sólo si se prendieron eventos
     if editada:
         nombres_tabs.insert(nombres_tabs.index("Inventario"), "Qué se sorteó")   # sólo si se editó
     etiquetas = [f":material/{ICONOS_PESTANIAS[n]}: {n}" for n in nombres_tabs]
@@ -2391,6 +2391,8 @@ def main() -> None:
             p_corrida, resultado, st.session_state.traza, st.session_state.periodo,
             st.session_state.modo,
         )
+    with pestanias["Colas"]:
+        vistas.pestania_colas(p_corrida, st.session_state.traza)
     if con_eventos:
         with pestanias["Eventos"]:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)

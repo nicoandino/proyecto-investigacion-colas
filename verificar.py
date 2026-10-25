@@ -56,7 +56,7 @@ Los controles cubren las dos partes del modelo:
 
    47. Economía: el estado de resultados (ventas − compras − fletes, sueldos y almacenamiento) da el margen
        operativo, y con el margen de equilibrio el resultado es 0.
-   49. Fórmulas de colas (M/M/1, M/M/s, costos) y la tabla de errores del pronóstico contra la cátedra;
+   49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
    46. Valores por defecto de la app: índices de la serie real y la política INV-13, que es la más
@@ -2388,20 +2388,16 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 49
-    separador("49. Fórmulas de colas y la tabla de errores del pronóstico, contra la cátedra (23/10/2026)")
-    from sim.colas import costo_total, mms
+    separador("49. Colas como el ejercicio 2 del parcial y la tabla de errores del pronóstico (23 y 25/10/2026)")
+    from sim.colas import con_little
     from sim import pronostico as pr49
 
-    banco = mms(8, 10)
-    nacion3, nacion4 = mms(30, 12, 3), mms(30, 12, 4)
-    taxi = {s: costo_total(s, 24, 100 / 24, mms(1 / 12, 1 / 21, s).l) for s in (2, 3)}
+    banco = con_little(60 / 7.5, 6.0, 1, 12.0)   # parcial B: un cliente cada 7,5 min, μ = 10/h, Wq = 12 min
     controlar(
-        abs(banco.wq - 0.4) < 1e-9 and abs(banco.l - 4) < 1e-9 and abs(banco.lq - 3.2) < 1e-9
-        and abs(60 * nacion3.wq - 7.02) < 0.01 and abs(60 * nacion4.wq - 1.07) < 0.01
-        and round(taxi[2], 2) == 79.11 and round(taxi[3], 2) == 81.24,
-        "M/M/1 y M/M/s como en la práctica: banco (Wq = 0,4 h, L = 4), Banco Nación (≈ 7 min con 3 cajeros, ≈ 1 con 4) "
-        "y NY Taxi (2 mecánicos $79,11/h < 3 mecánicos $81,24/h)",
-        f"Banco Nación: Wq {60 * nacion3.wq:.2f} / {60 * nacion4.wq:.2f} min · NY Taxi {taxi[2]:.2f} vs {taxi[3]:.2f}",
+        abs(banco.mu - 10) < 1e-9 and abs(banco.rho - 0.8) < 1e-9 and abs(banco.w - 18) < 1e-9
+        and abs(banco.lq - 1.6) < 1e-9 and abs(banco.l - 2.4) < 1e-9 and abs(banco.l - (banco.lq + banco.lam / banco.mu)) < 1e-9,
+        "Ejercicio 2 del parcial (banco, un cajero): W = 18 min, Lq = 1,6 y L = 2,4 clientes (L = Lq + λ/μ)",
+        f"ρ {banco.rho:.2f} · W {banco.w:.0f} min · Lq {banco.lq:.1f} · L {banco.l:.1f}",
     )
     reales49 = [1704, 1712, 1752, 1764, 1805, 1835, 1831, 1866, 1884, 1930, 1919, 1951]
     pron49 = [1702, 1725, 1749, 1772, 1795, 1818, 1841, 1864, 1887, 1910, 1933, 1956]

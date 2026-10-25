@@ -362,7 +362,6 @@ def pestania_indicadores(
             "Espera = minutos entre que el auto llega y empieza a ser atendido, promediada sobre todos los clientes.",
             "La hora pico es la hora del día con mayor espera promedio; las barras son los clientes por hora.",
         ])
-        seccion_formulas_colas(p, r, traza, modo)
 
     elif seccion == "Clientes":
         st.markdown("##### Qué pasó con los clientes")
@@ -994,105 +993,112 @@ def seccion_precio_futuro(eco: ParametrosEconomicos) -> None:
 
 
 # =============================================================================
-# Indicadores · Colas: las fórmulas de la cátedra con los números de la simulación
+# Pestaña Colas: como el ejercicio 2 del parcial, con los números de la simulación
 # =============================================================================
 def _playeros_a_la_hora(p: ParametrosSimulacion, hora: int) -> int:
     """Playeros en turno a esa hora (el último tramo de `turnos` que empezó antes)."""
     return [n for inicio, n in sorted(p.turnos) if inicio <= hora][-1]
 
 
-def seccion_formulas_colas(p: ParametrosSimulacion, r: ResultadoReplica, traza: Traza, modo: str) -> None:
-    """M/M/1 o M/M/s con λ, μ y s de la simulación, y las leyes de Little con lo que midió la simulación."""
-    from sim.colas import mms
+def _tarjeta_cola(titulo: str, formula: str, valor: str, cuenta: str, significa: str) -> None:
+    with st.container(border=True):
+        st.markdown(cifra_html(titulo, valor), unsafe_allow_html=True)
+        st.caption(f"**{formula}**")
+        st.markdown(f"**Cuenta:** {cuenta}  \n**Qué significa:** {significa}")
 
-    st.markdown("##### Las fórmulas de la cátedra con los números de la simulación")
-    st.caption(
-        "La estación como un sistema de colas: los **servidores son los playeros** (cada cliente necesita uno, también "
-        "el de GNC: PER-04). Notación de la cátedra: λ = clientes que llegan por hora · μ = clientes que atiende un "
-        "playero por hora · s = playeros · ρ = λ ÷ (s·μ) = utilización."
+
+def _conclusion_colas(c, hora: int) -> str:
+    """Una frase que se arma sola según la utilización y la espera."""
+    franja = f"Entre las {hora:02d} y las {(hora + 1) % 24:02d} h"
+    espera = ("casi no se espera" if c.wq < 1 else "se espera poco" if c.wq < 5 else "la espera ya es larga")
+    sobra = c.s * c.mu - c.lam
+    if c.rho < 0.5:
+        return f"{franja} la estación anda holgada: {espera} y los playeros tienen bastante tiempo libre."
+    if c.rho < 0.8:
+        return f"{franja} la estación anda bien: {espera} y los playeros están ocupados, pero con margen."
+    if c.rho < 1:
+        return (f"{franja} {espera}, pero los playeros están casi al límite: con {ent(sobra)} clientes más por hora "
+                "no darían abasto y empezaría a formarse cola.")
+    return (f"{franja} llegan más clientes de los que los playeros pueden atender: la cola crece y algunos se van "
+            "sin cargar.")
+
+
+def pestania_colas(p: ParametrosSimulacion, traza: Traza) -> None:
+    """La pestaña Colas: datos, cuatro resultados con su cuenta y qué significan, y una conclusión."""
+    from sim.colas import con_little
+
+    st.subheader("Colas: cuánto se espera y cuántos autos hay")
+    st.markdown(
+        "Una **cola** se forma cuando llegan clientes más rápido de lo que se los puede atender. Acá los que atienden "
+        "son los **playeros** (cada cliente necesita uno, también el de GNC). Con cuatro datos de la simulación se "
+        "calcula todo lo demás, como en el ejercicio de colas del parcial."
     )
-    st.latex(r"L = \lambda W \qquad L_q = \lambda W_q \qquad W = W_q + \frac{1}{\mu} \qquad L = L_q + \frac{\lambda}{\mu}")
     dias = max(len(traza.llegadas_dia_hora), 1)
     llegadas_h = [sum(d[h] for d in traza.llegadas_dia_hora) / dias for h in range(24)]
     pico = max(range(24), key=lambda h: llegadas_h[h])
     hora = st.selectbox(
-        "Hora del día", list(range(24)), index=pico, key="colas_hora",
-        format_func=lambda h: f"{h:02d}–{(h + 1) % 24:02d} h" + (" (la de más llegadas)" if h == pico else ""),
+        "¿Qué hora del día mirar?", list(range(24)), index=pico, key="colas_hora",
+        format_func=lambda h: f"De {h:02d} a {(h + 1) % 24:02d} h" + (" (la de más clientes)" if h == pico else ""),
     )
     lam = llegadas_h[hora]
-    servicio = p.media_servicio_playero()
-    mu = 60.0 / servicio
+    atencion = p.media_servicio_playero()
     s = _playeros_a_la_hora(p, hora)
     suma = sum(d[hora][0] for d in traza.espera_dia_hora)
     cant = sum(d[hora][1] for d in traza.espera_dia_hora)
-    wq_sim = (suma / cant if cant else 0.0) / 60.0          # horas
-
-    st.markdown(
-        f"**1. Datos (en horas).** λ = {dec(lam, 2)} clientes/h (promedio de los {dias} días en esa hora) · "
-        f"1/μ = {dec(servicio, 2)} min de atención (TIE-02 y TIE-04 ponderados por producto) ⇒ "
-        f"μ = 60 ÷ {dec(servicio, 2)} = {dec(mu, 2)} clientes/h por playero · s = {s} "
-        f"playero{'s' if s != 1 else ''} en turno · ρ = λ ÷ (s·μ) = {dec(lam, 2)} ÷ ({s} × {dec(mu, 2)}) = "
-        f"**{dec(lam / (s * mu), 3)}**."
-    )
+    wq = suma / cant if cant else 0.0
     if lam <= 0:
-        st.info("A esa hora no llega nadie: no hay cola que calcular.", icon=":material/info:")
+        st.info("A esa hora no llega nadie: no hay cola.", icon=":material/info:")
         return
-    try:
-        f = mms(lam, mu, s)
-    except ValueError:
-        st.warning("ρ ≥ 1: con estas tasas la cola crecería sin límite y las fórmulas no tienen solución.",
-                   icon=":material/warning:")
-        return
-    a = lam / mu
-    sup = str.maketrans("0123456789", "⁰¹²³⁴⁵⁶⁷⁸⁹")
-    if s == 1:
-        st.latex(r"\text{M/M/1:}\quad P_0 = 1 - \rho \qquad L_q = \frac{\rho^2}{1-\rho} \qquad "
-                 r"W_q = \frac{L_q}{\lambda} \qquad W = W_q + \frac{1}{\mu} \qquad L = \lambda W")
-        cuenta_p0 = f"P0 = 1 − {dec(f.rho, 3)} = {dec(f.p0, 4)}"
-        cuenta_lq = f"Lq = {dec(f.rho, 3)}² ÷ (1 − {dec(f.rho, 3)}) = {dec(f.lq, 4)} clientes"
-    else:
-        st.latex(r"\text{M/M/s:}\quad P_0 = \left[\sum_{n=0}^{s-1}\frac{(\lambda/\mu)^n}{n!} + "
-                 r"\frac{(\lambda/\mu)^s}{s!\,(1-\rho)}\right]^{-1} \qquad "
-                 r"L_q = \frac{P_0\,(\lambda/\mu)^s\,\rho}{s!\,(1-\rho)^2}")
-        st.latex(r"W_q = \frac{L_q}{\lambda} \qquad W = W_q + \frac{1}{\mu} \qquad L = \lambda W")
-        cuenta_p0 = (f"λ/μ = {dec(a, 3)} ⇒ P0 = 1 ÷ [" + " + ".join(
-            f"{dec(a, 3)}{str(n).translate(sup)} ÷ {n}!" for n in range(s)) + f" + {dec(a, 3)}{str(s).translate(sup)} ÷ ({s}! × (1 − {dec(f.rho, 3)}))] = "
-            f"{dec(f.p0, 4)}")
-        cuenta_lq = (f"Lq = {dec(f.p0, 4)} × {dec(a, 3)}{str(s).translate(sup)} × {dec(f.rho, 3)} ÷ ({s}! × (1 − {dec(f.rho, 3)})²) = "
-                     f"{dec(f.lq, 4)} clientes")
-    st.markdown(
-        f"**2. Las fórmulas.** {cuenta_p0} · {cuenta_lq} · Wq = Lq ÷ λ = {dec(f.lq, 4)} ÷ {dec(lam, 2)} = "
-        f"{dec(f.wq, 4)} h = **{dec(60 * f.wq, 2)} min** · W = Wq + 1/μ = {dec(60 * f.wq, 2)} + {dec(servicio, 2)} = "
-        f"**{dec(60 * f.w, 2)} min** · L = λ·W = {dec(lam, 2)} × {dec(f.w, 4)} = **{dec(f.l, 3)} clientes**."
-    )
-    w_sim = wq_sim + 1.0 / mu
-    st.markdown(
-        f"**3. La simulación en esa hora, con Little.** Wq medida = {dec(60 * wq_sim, 2)} min ⇒ Lq = λ·Wq = "
-        f"{dec(lam, 2)} × {dec(wq_sim, 4)} = {dec(lam * wq_sim, 4)} · W = Wq + 1/μ = {dec(60 * w_sim, 2)} min · "
-        f"L = λ·W = {dec(lam * w_sim, 3)}."
-    )
-    st.dataframe(pd.DataFrame({
-        "": ["ρ (utilización)", "Wq (min en la cola)", "W (min en el sistema)", "Lq (clientes en la cola)",
-             "L (clientes en el sistema)"],
-        "Fórmula M/M/" + ("1" if s == 1 else "s"): [dec(f.rho, 3), dec(60 * f.wq, 2), dec(60 * f.w, 2),
-                                                    dec(f.lq, 4), dec(f.l, 3)],
-        "Simulación (+ Little)": [dec(lam / (s * mu), 3), dec(60 * wq_sim, 2), dec(60 * w_sim, 2),
-                                  dec(lam * wq_sim, 4), dec(lam * w_sim, 3)],
-    }), hide_index=True)
-    lam_min = sum(llegadas_h) / (24 * 60)
-    st.caption(
-        "**Por qué no dan igual:** la fórmula supone llegadas al azar (Poisson) y atención exponencial con una sola "
-        "cola. En la simulación la atención es triangular (menos variable), cada zona tiene su propia cola, hace falta "
-        "una cara libre además del playero y la cola tiene un tope"
-        + (", y **sin azar los clientes llegan parejos** (cuotas exactas), así que casi no se forma cola."
-           if modo != "editada" else ".")
-        + f" Little vale siempre: en todo el período, λ = {dec(60 * lam_min, 2)} clientes/h y Wq = "
-        f"{dec(r.espera_surtidor, 2)} min ⇒ Lq = λ·Wq = {dec(lam_min * r.espera_surtidor, 4)} clientes esperando en "
-        f"promedio. La cola que se ve frente a los surtidores es más chica ({dec(r.cola_surtidor, 4)} autos) porque "
-        "parte de esa espera es ya en la cara, esperando que se libere un playero; Little con la espera hasta la "
-        "cara da exactamente esa cola (control 3 de `verificar.py`)."
-    )
+    c = con_little(lam, atencion, s, wq)
 
+    st.markdown("##### 1. Los datos")
+    st.dataframe(pd.DataFrame([
+        {"Variable": "λ (lambda)", "Qué es": "Clientes que llegan por hora", "Valor": f"{dec(c.lam)} clientes/h",
+         "De dónde sale": f"Los que llegaron a esa hora ÷ {dias} días simulados"},
+        {"Variable": "1/μ", "Qué es": "Cuánto tarda un playero en atender a un cliente", "Valor": f"{dec(atencion)} min",
+         "De dónde sale": "Tiempo medio de carga del Registro (TIE-02 y TIE-04)"},
+        {"Variable": "μ (mu)", "Qué es": "Clientes que atiende un playero por hora", "Valor": f"{dec(c.mu)} clientes/h",
+         "De dónde sale": f"60 min ÷ {dec(atencion)} min"},
+        {"Variable": "s", "Qué es": "Playeros trabajando a esa hora", "Valor": ent(s),
+         "De dónde sale": "El turno de esa hora (PER-01)"},
+        {"Variable": "Wq", "Qué es": "Cuánto espera un cliente antes de que lo atiendan", "Valor": f"{dec(c.wq)} min",
+         "De dónde sale": "Lo midió la simulación"},
+    ]), hide_index=True)
+
+    st.markdown("##### 2. Los resultados")
+    c1, c2 = st.columns(2)
+    with c1:
+        _tarjeta_cola(
+            "Ocupación de los playeros", "ρ = λ ÷ (s × μ)", f"{dec(100 * c.rho, 0)} %",
+            f"{dec(c.lam)} ÷ ({s} × {dec(c.mu)}) = {dec(c.rho, 2)}",
+            f"en esa hora los playeros están ocupados el {dec(100 * c.rho, 0)} % del tiempo"
+            + ("; casi no les queda tiempo libre." if c.rho >= 0.8 else "." if c.rho >= 0.5
+               else "; tienen bastante tiempo libre."),
+        )
+        _tarjeta_cola(
+            "Autos esperando", "Lq = λ × Wq", f"{dec(c.lq)} autos",
+            f"{dec(c.lam)} clientes/h × {dec(c.wq)} min ÷ 60 = {dec(c.lq, 2)}",
+            "en promedio " + ("casi nunca hay un auto esperando." if c.lq < 0.5 else
+                              "hay menos de un auto esperando." if c.lq < 1 else
+                              f"hay {ent(c.lq)} autos esperando que los atiendan."),
+        )
+    with c2:
+        _tarjeta_cola(
+            "Tiempo total en la estación", "W = Wq + 1/μ", f"{dec(c.w)} min",
+            f"{dec(c.wq)} min esperando + {dec(atencion)} min de atención = {dec(c.w)} min",
+            f"un cliente pasa en total {dec(c.w)} minutos: {dec(c.wq)} esperando y el resto cargando.",
+        )
+        _tarjeta_cola(
+            "Autos en la estación", "L = λ × W", f"{dec(c.l)} autos",
+            f"{dec(c.lam)} clientes/h × {dec(c.w)} min ÷ 60 = {dec(c.l, 2)}",
+            f"en promedio hay {'1 auto' if round(c.l) <= 1 else f'{ent(c.l)} autos'} en la playa, entre los que cargan "
+            "y los que esperan.",
+        )
+
+    st.markdown("##### 3. En pocas palabras")
+    st.info(_conclusion_colas(c, hora), icon=":material/lightbulb:")
+    st.caption("Las cuentas pasan los minutos a horas (÷ 60) porque λ está en clientes por hora. Probá otra hora del día "
+               "para comparar: a la madrugada hay un solo playero.")
 
 
 # =============================================================================

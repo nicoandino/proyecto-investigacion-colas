@@ -44,7 +44,7 @@ módulos.
    Hay ajustes opcionales que arrancan con los valores del Registro: economía, GNC, calendario de demanda,
    abastecimiento y eventos aleatorios.
 2. **Simular con datos reales.** Corre sin azar, así que siempre da el mismo resultado y se puede comprobar. Los
-   resultados están en pestañas: La estación, Animación, Indicadores, Demanda, Pronóstico, Inventario, Red y rutas,
+   resultados están en pestañas: La estación, Animación, Indicadores, Colas, Demanda, Pronóstico, Inventario, Red y rutas,
    GNC, Economía, Conclusión y Datos y fuentes (al final, un desplegable con Modelo y método). La pestaña Eventos
    aparece sólo si se prendieron eventos aleatorios en el menú.
 3. **Editar simulación** (al final de los resultados) cambia playeros, demanda o precios. La versión editada usa azar

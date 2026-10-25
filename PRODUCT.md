@@ -36,7 +36,7 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
 - Se corre localmente: `.venv/Scripts/streamlit run app.py` (http://localhost:8501) en la notebook de Nico.
 - Flujo: **menú inicial** (qué período: días, meses, estación o año; ajustes de economía, GNC, calendario de demanda,
   abastecimiento y eventos aleatorios) → **simulación con datos reales** → **resultados en pestañas** (La estación,
-  Animación, Indicadores, Demanda, Pronóstico, Inventario, Red y rutas, GNC, Economía, Conclusión,
+  Animación, Indicadores, Colas, Demanda, Pronóstico, Inventario, Red y rutas, GNC, Economía, Conclusión,
   Datos y fuentes con Modelo y método desplegable; Eventos y "Qué se sorteó" sólo cuando corresponde) → **Editar simulación** (con azar). Aparte, desde
   el menú: **escenario único** (una semana) y **Caso de informe** (mejor política, catálogo S0–S12, tornado).
 - La animación es un tablero que dibuja el navegador (un día cada 5 s, avisos con pausa).

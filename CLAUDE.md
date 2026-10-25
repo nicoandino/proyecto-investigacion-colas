@@ -47,8 +47,9 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   es como el ejercicio 1 del parcial: tres tablas Pronóstico | Real | error con MAE, MAPE y RMSE y su explicación —
   clientes por mes (recta A + B·t de la serie contra el año simulado), precio (inflación 2,4 % fija contra la sorteada
   entre 1,9 y 2,9 %, PRO-05) y ganancia bruta del combustible. Economía muestra el precio del litro mes a mes.
-- **Colas** (`sim/colas.py`): M/M/1, M/M/s, Little y costos de la cátedra; en Indicadores → Colas y esperas, con λ, μ y
-  s (playeros) de la simulación y la comparación con lo que midió.
+- **Colas** (`sim/colas.py`, pestaña Colas): como el ejercicio 2 del parcial — λ, μ, s (playeros) y la Wq que midió la
+  simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y qué significa. Sin M/M/s teórico
+  (Nico lo pidió práctico, para alguien que nunca vio colas).
 
 ## Reglas de oro (no romper)
 

@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 146 datos · 🟢 dato 40 · 🟡 estimación 19 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 74
+**Resumen:** 149 datos · 🟢 dato 40 · 🟡 estimación 19 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 77
 
 ## La estación
 
@@ -236,6 +236,14 @@
 | PRO-03 | Nivel de confianza del intervalo del pronóstico (z) | 1.96 | — | 🟢 dato | Argentina / otro | alta | estadística: z de la normal estándar para 95 % | — |
 | PRO-04 | Parámetros de los métodos: meses del promedio móvil y α del suavizado exponencial | (3, 0.3) | meses · α | 🟠 supuesto | Argentina / otro | sin_dato | grupo (14/10/2026): valores típicos de la cátedra | — |
 | PRO-05 | Inflación mensual de los precios: mínimo, máximo y semilla del sorteo | (0.019, 0.029, 2026) | fracción por mes · semilla | 🟠 supuesto | Argentina / otro | sin_dato | grupo (23/10/2026, pedido de Nico): la inflación de cada mes varía entre 1,9 % y 2,9 % | — |
+
+## Análisis financiero
+
+| ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
+|---|---|---|---|---|---|---|---|---|
+| FIN-01 | Tasa de descuento real anual del análisis financiero | 0.12 | fracción por año | 🟠 supuesto | Argentina / otro | sin_dato | grupo (26/10/2026): costo de oportunidad del capital en moneda constante (los flujos van en pesos de hoy, así la inflación no se cuenta dos veces) | — |
+| FIN-02 | Horizonte del análisis financiero | 10 | años | 🟠 supuesto | Argentina / otro | sin_dato | grupo (26/10/2026): vida útil razonable de un surtidor y plazo habitual para evaluar una estación | — |
+| FIN-03 | Inversión para montar la estación completa | 1450000000.0 | $ | 🟠 supuesto | Argentina / otro | sin_dato | grupo (26/10/2026): orden de magnitud de una estación urbana de 6 surtidores con tienda (≈ USD 1 millón, sin el terreno) | — |
 
 ## Contradicciones entre fuentes: qué se eligió y por qué
 

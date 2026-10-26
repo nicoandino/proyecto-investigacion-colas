@@ -37,6 +37,13 @@ from sim.economia_real import (
     resultado_con_margen,
     resumir_economia,
 )
+from sim.finanzas import (
+    OPCIONES as OPCIONES_FINANCIERAS,
+    analizar as analizar_financiero,
+    con_decision,
+    flujo_mensual as flujo_mensual_decision,
+    inversion_de,
+)
 from sim.periodo import (
     CLIENTELAS,
     FRANJAS,
@@ -167,6 +174,12 @@ def correr_traza_cacheada(p: ParametrosSimulacion, semilla: int):
 def correr_anio_cacheado(p: ParametrosSimulacion, semilla: int) -> ResultadoReplica:
     """El año completo con los mismos parámetros (pestaña Pronóstico), sin traza: ≈ 5 s."""
     return correr_replica(con_periodo(p, anio_completo()), semilla=semilla)[0]
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def economia_con_decision(p: ParametrosSimulacion, eco: ParametrosEconomicos, opcion: str, replicas: int, semilla: int):
+    """La economía del mes de la estación con la decisión tomada (análisis financiero), con las mismas semillas."""
+    return economia_de(correr_estacion_real(con_decision(p, opcion), replicas=replicas, semilla_base=semilla), eco)
 
 
 def resultado_del_anio(p: ParametrosSimulacion, resultado: ResultadoEscenario) -> ResultadoReplica:
@@ -807,7 +820,7 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     st.markdown(f"##### Ingresos y costos de un mes de {dias} días")
     c1, c2, c3, c4 = st.columns(4)
     def millones(x: float) -> str:
-        return f"$ {vistas.dec(x / 1e6, 1)} M"
+        return f"−$ {vistas.dec(-x / 1e6, 1)} M" if x < 0 else f"$ {vistas.dec(x / 1e6, 1)} M"
 
     c1.markdown(vistas.cifra_html("Ingresos (ventas)", millones(total_ingresos)), unsafe_allow_html=True)
     c1.caption(escapar_pesos(vistas._pesos(total_ingresos)))
@@ -883,7 +896,96 @@ def pestania_economia_real(p: ParametrosSimulacion, eco: ParametrosEconomicos) -
     st.caption("Lo demás queda igual (litros, GNC, Shell Shop y costos): sólo cambia lo que se gana por litro de nafta y "
                "diésel.")
 
+    with st.expander("Análisis financiero: VAN, TIR y recupero de una inversión", icon=":material/account_balance:"):
+        seccion_financiera(p, eco, base, lista)
+
     vistas.seccion_precio_futuro(eco)
+
+
+def seccion_financiera(p: ParametrosSimulacion, eco: ParametrosEconomicos, base: ResultadoEscenario,
+                       lista: list) -> None:
+    """Economía: VAN, TIR y payback de una decisión, con el flujo mensual que da la simulación."""
+    st.markdown(
+        "Una decisión se evalúa como un **proyecto de inversión**: cuánto hay que poner al principio (**inversión**) y "
+        "cuánto **más** gana la estación por mes gracias a ella (**flujo**). El flujo lo da la simulación: se corre la "
+        "estación con la decisión y se le resta la estación de hoy. Todo va en pesos de hoy, con una tasa real."
+    )
+    opcion = st.radio("¿Qué decisión evaluar?", list(OPCIONES_FINANCIERAS), format_func=OPCIONES_FINANCIERAS.get,
+                      horizontal=True, key="fin_opcion")
+    c1, c2, c3 = st.columns(3)
+    tasa = c1.number_input("Tasa de descuento real (% anual)", 0.0, 100.0, 100 * float(valor("FIN-01")), 1.0,
+                           key="fin_tasa", help="FIN-01, supuesto: el costo de oportunidad del dinero sin inflación.") / 100
+    anios = int(c2.number_input("Horizonte (años)", 1, 30, int(valor("FIN-02")), 1, key="fin_anios",
+                                help="FIN-02, supuesto: cuántos años se cuentan los flujos."))
+    inversion = float(c3.number_input(
+        "Inversión inicial ($)", 0, 50_000_000_000, int(inversion_de(opcion, eco)), 1_000_000, key=f"fin_inv_{opcion}",
+        help={"surtidor": "ECO-05: instalar un surtidor.", "playero": "Sumar un playero no requiere inversión inicial.",
+              "estacion": "FIN-03, supuesto: montar la estación completa (sin el terreno)."}[opcion]))
+    if opcion == "estacion":
+        con = lista
+    else:
+        with st.spinner("Simulando la estación con la decisión…"):
+            con = economia_con_decision(p, eco, opcion, len(base.replicas), st.session_state.get("semilla_usada", 1))
+    flujo = flujo_mensual_decision(opcion, lista, con, eco)
+    fin = analizar_financiero(inversion, flujo, 12 * anios, tasa)
+
+    explicacion = {
+        "surtidor": f"Se agrega un surtidor de doble cara en la zona de nafta (4 → 6 caras). Flujo = resultado con 6 caras "
+                    f"− resultado de hoy − ${vistas.ent(eco.operativo_surtidor_mensual)} por mes de mantenimiento (ECO-05).",
+        "playero": "Se suma un playero de 7 a 10 h y de 16 a 18 h. Flujo = resultado con el playero extra − resultado "
+                   "de hoy (el sueldo ya está adentro: suben las personas-turno).",
+        "estacion": "Se evalúa el negocio entero: la inversión para montar la estación contra el resultado de cada mes.",
+    }[opcion]
+    st.caption(escapar_pesos(explicacion))
+
+    def millones(x: float) -> str:
+        return f"−$ {vistas.dec(-x / 1e6, 1)} M" if x < 0 else f"$ {vistas.dec(x / 1e6, 1)} M"
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.markdown(vistas.cifra_html("Flujo por mes", millones(flujo)), unsafe_allow_html=True)
+    c1.caption(escapar_pesos(vistas._pesos(flujo)))
+    c2.markdown(vistas.cifra_html("VAN", millones(fin.van)), unsafe_allow_html=True)
+    c2.caption("conviene" if fin.van > 0 else "no conviene")
+    c3.markdown(vistas.cifra_html("TIR", "—" if fin.tir_anual is None else f"{vistas.dec(100 * fin.tir_anual)} %"),
+                unsafe_allow_html=True)
+    c3.caption("anual, real" if fin.tir_anual is not None else
+               ("sin inversión: no aplica" if inversion <= 0 else "no se recupera"))
+    c4.markdown(vistas.cifra_html(
+        "Recupero", "—" if fin.payback_meses is None else f"{vistas.dec(fin.payback_meses / 12)} años"),
+        unsafe_allow_html=True)
+    c4.caption("—" if fin.payback_descontado_meses is None else
+               f"descontado: {vistas.dec(fin.payback_descontado_meses / 12)} años")
+
+    st.markdown("##### Flujo de fondos")
+    st.dataframe(pd.DataFrame([{
+        "Año": "0 (inversión)" if a == 0 else str(a),
+        "Flujo": vistas._pesos(f_),
+        "Flujo descontado": vistas._pesos(d_),
+        "Acumulado descontado": vistas._pesos(ac),
+    } for a, f_, d_, ac in fin.por_anio]), hide_index=True, height=36 * (len(fin.por_anio) + 1) + 3)
+
+    if fin.van > 0:
+        veredicto = (f"**Conviene.** A {vistas.dec(100 * tasa, 0)} % anual y {anios} años, "
+                     f"{'el negocio' if opcion == 'estacion' else 'la decisión'} deja "
+                     f"{millones(fin.van)} más de lo que se invirtió, en pesos de hoy")
+        if fin.tir_anual is not None:
+            veredicto += f"; rinde {vistas.dec(100 * fin.tir_anual)} % anual, más que la tasa pedida"
+        st.success(escapar_pesos(veredicto + "."), icon=":material/trending_up:")
+    elif flujo <= 0:
+        st.error(escapar_pesos(
+            f"**No conviene.** La estación no gana más con esta decisión: el flujo es {vistas._pesos(flujo)} por mes. "
+            + ("Hoy casi no se pierden clientes, así que más capacidad no trae más ventas y sólo suma costos."
+               if opcion != "estacion" else "")), icon=":material/trending_down:")
+    else:
+        st.warning(escapar_pesos(
+            f"**No conviene con esta tasa.** El flujo es positivo, pero en {anios} años no alcanza para recuperar la "
+            "inversión con el rendimiento pedido (VAN negativo)."), icon=":material/trending_flat:")
+    st.caption(
+        "VAN = −I + Σ F ÷ (1 + i)ᵗ, con i la tasa mensual equivalente. TIR = la tasa que hace VAN = 0. Recupero = I ÷ F "
+        "(el descontado suma los flujos descontados hasta cubrir I). Si la decisión no requiere inversión, se decide sólo "
+        "por el VAN. La simulación base no tiene azar: con 'Editar simulación' el flujo incluye los clientes que se "
+        "recuperan en los momentos de más espera."
+    )
 
 
 def seccion_decision(eco: ParametrosEconomicos) -> None:

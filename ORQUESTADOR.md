@@ -679,3 +679,13 @@ pestaña **Colas** (después de Indicadores): elegís la hora (por defecto, la d
 esperando Lq, autos en la estación L) con la fórmula, la cuenta con los números y qué significa; y una conclusión en
 una frase. Se sacó todo lo teórico (M/M/1, M/M/s, P0, costos): `sim/colas.py` quedó con las leyes de Little
 (`con_little`), validadas con el parcial B (W = 18 min, Lq = 1,6, L = 2,4) en el control 49.
+
+## 35. Análisis financiero (26/10/2026, pedido del profesor)
+
+El profesor pidió que toda simulación tenga la herramienta económica/financiera (en FlexSim, "Financial Analysis").
+En Economía hay un desplegable **"Análisis financiero: VAN, TIR y recupero de una inversión"**: se elige la decisión
+(un surtidor más de nafta, un playero más en el pico o la estación completa), la tasa real (FIN-01, 12 %), el horizonte
+(FIN-02, 10 años) y la inversión (ECO-05, 0 o FIN-03). El flujo mensual es la diferencia de resultado que da la
+simulación con la decisión contra la de hoy (`sim/finanzas.py`); salen el VAN, la TIR anual, el recupero simple y el
+descontado, el flujo de fondos por año y un veredicto. Con los datos de hoy: el surtidor y el playero no convienen
+(no hay clientes perdidos que recuperar) y la estación completa da VAN > 0 y TIR ≈ 16 % real. Control 50.

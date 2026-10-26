@@ -1059,6 +1059,23 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "el mínimo y el máximo (redondeada a 0,1 %); el pronóstico usa el punto medio (2,4 %) todos los "
                     "meses. El margen en $/L sube en la misma proporción que el precio", None, None),
           (0.019, 0.029, 2026)),
+
+        # ------------------------------------------- M. Análisis financiero (26/10/2026, pedido del profesor)
+        ("FIN-01", ("Tasa de descuento real anual del análisis financiero", "fracción por año", "E", "supuesto",
+                    "sin_dato", "grupo (26/10/2026): costo de oportunidad del capital en moneda constante (los flujos "
+                    "van en pesos de hoy, así la inflación no se cuenta dos veces)", "grupo", "", (),
+                    "12 % anual real ≈ 0,95 % mensual; se cambia en el desplegable de Economía", None, None),
+          0.12),
+        ("FIN-02", ("Horizonte del análisis financiero", "años", "E", "supuesto", "sin_dato",
+                    "grupo (26/10/2026): vida útil razonable de un surtidor y plazo habitual para evaluar una estación",
+                    "grupo", "", (), "10 años = 120 meses con el flujo del mes simulado", None, None),
+          10),
+        ("FIN-03", ("Inversión para montar la estación completa", "$", "E", "supuesto", "sin_dato",
+                    "grupo (26/10/2026): orden de magnitud de una estación urbana de 6 surtidores con tienda "
+                    "(≈ USD 1 millón, sin el terreno)", "grupo", "", (),
+                    "sólo para la opción 'la estación completa' del análisis financiero; se cambia en el desplegable",
+                    None, None),
+          1_450_000_000.0),
     ]
 )
 

@@ -38,7 +38,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **143 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **144 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -47,6 +47,10 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   es como el ejercicio 1 del parcial: tres tablas Pronóstico | Real | error con MAE, MAPE y RMSE y su explicación —
   clientes por mes (recta A + B·t de la serie contra el año simulado), precio (inflación 2,4 % fija contra la sorteada
   entre 1,9 y 2,9 %, PRO-05) y ganancia bruta del combustible. Economía muestra el precio del litro mes a mes.
+- **Análisis financiero** (`sim/finanzas.py`, desplegable en Economía; pedido del profesor 26/10/2026): VAN, TIR y
+  recupero (simple y descontado) de un surtidor más, un playero más en el pico o la estación completa; el flujo
+  mensual es la diferencia de resultado que da la simulación; tasa real FIN-01, horizonte FIN-02, inversión
+  ECO-05 / FIN-03 (supuestos).
 - **Colas** (`sim/colas.py`, pestaña Colas): como el ejercicio 2 del parcial — λ, μ, s (playeros) y la Wq que midió la
   simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y qué significa. Sin M/M/s teórico
   (Nico lo pidió práctico, para alguien que nunca vio colas).
@@ -70,9 +74,9 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      143 controles
+verificar.py      144 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
-                  red · colas · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
+                  red · colas · finanzas · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos · vistas
 static/fonts/     Archivo (woff2, SIL OFL) servida por Streamlit en app/static/
 reports/          QA con Playwright (usa el Chrome instalado) y generar_datos_reales.py
@@ -83,7 +87,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 143 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 144 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·

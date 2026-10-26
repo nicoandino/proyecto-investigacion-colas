@@ -48,7 +48,7 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
   HTML dentro de Streamlit (como el tablero animado, `st.components.v1.html`), sin cambiar de framework.
 - Reglas del proyecto (`CLAUDE.md`): `sim/` nunca importa Streamlit ni `ui/`; **ningún color fuera de `ui/tema.py`**
   (control N15); ningún número fuera del Registro (`sim/datos.py`); no se escala (sin base de datos, login, API,
-  Docker, plugins ni multiprocessing); `verificar.py` (143 controles) en verde antes de cada commit; un commit por etapa
+  Docker, plugins ni multiprocessing); `verificar.py` (144 controles) en verde antes de cada commit; un commit por etapa
   en castellano, sin Pull Request.
 - **Pantalla objetivo: notebook / escritorio.** Celular, tablet y proyector no se pidieron.
 - Idioma: castellano rioplatense; números con coma decimal y punto de miles; los importes se escapan antes de pasar a
@@ -71,7 +71,7 @@ su semilla a la vista). Los métodos de la cátedra se programaron a mano y se v
 - **Registro** `sim/datos.py` (146 datos con fuente) y su versión legible `DATOS_REALES.md`.
 - Notas de investigación con citas y URL: `research_notes/Datos reales estación Shell San Rafael/01–13`.
 - **Serie real** de ventas al público de Shell en Mendoza (Secretaría de Energía, PRO-01, ene-2019 – ago-2026).
-- Validaciones contra la cátedra (Cable Televisora, Lincoln) y `verificar.py` con 143 controles.
+- Validaciones contra la cátedra (Cable Televisora, Lincoln) y `verificar.py` con 144 controles.
 - Capturas de QA en `reports/qa/`.
 - **Ausencias que no se deben inventar:** no hay mediciones de la propia estación (demanda, colas, tiempos); los
   márgenes por litro, el flete y el costo de almacenamiento son heredados sin fuente; la política real de reposición no

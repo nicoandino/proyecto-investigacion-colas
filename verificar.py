@@ -56,6 +56,8 @@ Los controles cubren las dos partes del modelo:
 
    47. Economía: el estado de resultados (ventas − compras − fletes, sueldos y almacenamiento) da el margen
        operativo, y con el margen de equilibrio el resultado es 0.
+   50. Análisis financiero: VAN, TIR y recupero de una anualidad conocida; el flujo de cada decisión sale de
+       la simulación.
    49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
@@ -2417,6 +2419,35 @@ def main() -> int:
         "de PRO-05 y siempre es la misma; los clientes por mes suman los del día a día",
         f"MAE {comp49.mae:.2f} · MAPE {100 * comp49.mape:.2f} % · RMSE {comp49.rmse:.2f} · inflación "
         + " ".join(f"{100 * i:.1f}" for i in infl49),
+    )
+
+    # ------------------------------------------------------------------ 50
+    separador("50. Análisis financiero: VAN, TIR y recupero (26/10/2026)")
+    from sim import finanzas as fz
+
+    simple = fz.analizar(1000.0, 100.0, 12, 0.0)
+    anualidad = fz.analizar(1000.0, 100.0, 12, 0.10)
+    r_tir = fz.tir_mensual(1000.0, 100.0, 12)
+    p50, eco50 = aplicar_ajustes(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1)),
+                                 ParametrosEconomicos(), Ajustes())
+    from sim.economia_real import economia_de as _eco50
+    from sim.runner import correr_estacion_real as _cer50
+
+    base50 = _eco50(_cer50(p50, replicas=1, semilla_base=1), eco50)
+    playero50 = _eco50(_cer50(fz.con_decision(p50, "playero"), replicas=1, semilla_base=1), eco50)
+    f_est = fz.flujo_mensual("estacion", base50, base50, eco50)
+    f_pla = fz.flujo_mensual("playero", base50, playero50, eco50)
+    controlar(
+        abs(simple.van - 200.0) < 1e-9 and simple.payback_meses == 10.0 and simple.payback_descontado_meses == 10
+        and abs(fz.van(1000.0, 100.0, 12, r_tir)) < 1e-6 and abs(r_tir - 0.029229) < 1e-5
+        and abs(anualidad.tir_anual - ((1 + r_tir) ** 12 - 1)) < 1e-12
+        and abs(anualidad.por_anio[-1][3] - anualidad.van) < 1e-6
+        and abs(f_est - base50[0].margen_operativo) < 1e-6
+        and abs(f_pla - (playero50[0].margen_operativo - base50[0].margen_operativo)) < 1e-6,
+        "VAN, TIR y recupero de una anualidad (1.000 contra 12 × 100: VAN 200 a tasa 0, recupero 10 meses, TIR 2,92 % "
+        "mensual con VAN = 0) y el flujo de cada decisión sale de la simulación",
+        f"TIR {100 * r_tir:.3f} % mensual = {100 * anualidad.tir_anual:.1f} % anual · flujo de la estación "
+        f"${f_est:,.0f}/mes · playero extra ${f_pla:,.0f}/mes",
     )
 
     # ------------------------------------------------------------------

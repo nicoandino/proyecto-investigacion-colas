@@ -32,6 +32,7 @@ SECCIONES = {
     "MOD": "Modelo",
     "EVT": "Eventos aleatorios",
     "PRO": "Pronóstico",
+    "FIN": "Análisis financiero",
 }
 ETIQUETA_TIPO = {
     "dato": "🟢 dato", "estimacion": "🟡 estimación", "observacion": "🔵 observación",

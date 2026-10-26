@@ -1847,7 +1847,8 @@ def simular_periodo(periodo: Periodo, edicion: Edicion | None = None) -> None:
         semilla = edicion.semilla
     # La animación de todos los días llega en la etapa 3: por ahora se graba el día elegido.
     base = replace(base, animar_todo=False)
-    etiqueta = "datos reales" if edicion is None else "edición con azar"
+    etiqueta = ("datos reales" if edicion is None else "edición con azar" if edicion.con_azar
+                else "edición sin azar")
     with st.spinner(f"Simulando {periodo.dias} días ({etiqueta})…"):
         correr_todo(base, eco, 1, semilla)
     for clave in ("estaciones", "comparacion", "sensibilidad"):
@@ -2295,9 +2296,13 @@ def pantalla_editar() -> None:
     previa: Edicion = st.session_state.get("edicion") or Edicion()
     st.container(key="portada").title("Editar simulación")
     st.markdown(
-        f"Período: **{periodo.titulo}** — {periodo.texto}. Lo que cambies acá **ya no son datos "
-        f"reales**: la simulación usa azar (Monte Carlo) y aparece una pestaña que explica qué se "
-        f"sorteó. La simulación principal no se toca."
+        f"Período: **{periodo.titulo}** — {periodo.texto}. Lo que cambies acá **ya no son datos reales**. "
+        f"Sin azar, la corrida es como la de datos reales pero con tus cambios (siempre da lo mismo); con azar, "
+        f"se sortean llegadas y tiempos (Monte Carlo) y aparece una pestaña que explica qué se sorteó."
+    )
+    con_azar = st.toggle(
+        "Usar azar (Monte Carlo)", value=previa.con_azar if "edicion" in st.session_state and st.session_state.edicion else False,
+        key="ed_azar", help="Apagado: llegadas parejas y tiempos promedio, como la simulación con datos reales.",
     )
 
     st.markdown("##### Playeros por turno")
@@ -2338,12 +2343,12 @@ def pantalla_editar() -> None:
     )
 
     semilla = int(st.number_input(
-        "Semilla del azar", 1, 9999, previa.semilla, 1, key="ed_semilla",
+        "Semilla del azar", 1, 9999, previa.semilla, 1, key="ed_semilla", disabled=not con_azar,
         help="Con la misma semilla la simulación editada da siempre lo mismo.",
     ))
 
     edicion = Edicion(playeros=playeros, nivel_demanda=nivel, doble_pico=bool(doble),
-                      pct_gnc=pct_gnc, precios=precios, semilla=semilla)
+                      pct_gnc=pct_gnc, precios=precios, semilla=semilla, con_azar=bool(con_azar))
     b1, b2 = st.columns([1, 1])
     if b1.button("Simular editada", icon=":material/play_arrow:", type="primary"):
         simular_periodo(periodo, edicion)
@@ -2363,22 +2368,29 @@ def valor_registro_precios() -> tuple:
 def encabezado_resultados() -> None:
     periodo: Periodo = st.session_state.periodo
     editada = st.session_state.get("modo") == "editada"
+    con_azar = editada and st.session_state.edicion.con_azar
     c1, c2 = st.container(key="portada").columns([4, 1], vertical_alignment="bottom")
     c1.title("Simulador de la Estación Shell — San Rafael")
     c1.caption("Av. Balloffet 1810 esq. Los Sauces · San Rafael, Mendoza · Investigación Operativa")
     c2.markdown(
-        f"<div class='tot-periodo'>{html.escape(periodo.titulo)}<span>{'editada, con azar' if editada else 'datos reales, sin azar'}"
+        f"<div class='tot-periodo'>{html.escape(periodo.titulo)}<span>{('editada, con azar' if con_azar else 'editada, sin azar') if editada else 'datos reales, sin azar'}"
         f"</span></div>",
         unsafe_allow_html=True,
     )
     if c2.button("Cambiar período", icon=":material/arrow_back:", key="btn_cambiar_periodo", width="stretch"):
         st.session_state.vista = "inicio"
         st.rerun()
-    if editada:
+    if editada and con_azar:
         st.warning(
             f"**Simulación EDITADA (con azar)** · {periodo.titulo} — {periodo.texto}. No son datos "
             f"reales: playeros, demanda, GNC o precios fueron cambiados y los sorteos usan la "
             f"semilla {st.session_state.semilla_usada}.",
+            icon=":material/edit:",
+        )
+    elif editada:
+        st.warning(
+            f"**Simulación EDITADA (sin azar)** · {periodo.titulo} — {periodo.texto}. Como la de datos reales, "
+            f"pero con los playeros, la demanda, el GNC o los precios que cambiaste. Siempre da el mismo resultado.",
             icon=":material/edit:",
         )
     else:
@@ -2479,7 +2491,7 @@ def main() -> None:
     con_eventos = bool(p_corrida.eventos.activos)
     if con_eventos:
         nombres_tabs.insert(nombres_tabs.index("Colas") + 1, "Eventos")   # sólo si se prendieron eventos
-    if editada:
+    if editada and st.session_state.edicion.con_azar:
         nombres_tabs.insert(nombres_tabs.index("Inventario"), "Qué se sorteó")   # sólo si se editó
     etiquetas = [f":material/{ICONOS_PESTANIAS[n]}: {n}" for n in nombres_tabs]
     pestanias = dict(zip(nombres_tabs, st.tabs(etiquetas)))
@@ -2502,7 +2514,7 @@ def main() -> None:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
     with pestanias["Pronóstico"]:
         vistas.pestania_pronostico(p_corrida, resultado_del_anio(p_corrida, resultado), st.session_state.parametros_eco)
-    if editada:
+    if "Qué se sorteó" in pestanias:
         with pestanias["Qué se sorteó"]:
             pestania_sorteos(p_corrida)
     with pestanias["Inventario"]:

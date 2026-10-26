@@ -160,6 +160,7 @@ class Edicion:
     pct_gnc: float | None = None                      # 0 a 1
     precios: tuple[tuple[str, float], ...] | None = None
     semilla: int = 1                                  # la edición usa azar: la semilla la repite
+    con_azar: bool = True                             # False = los mismos cambios, sin azar (como los datos reales)
 
     def hay_cambios(self, base: ParametrosSimulacion) -> bool:
         return (
@@ -174,8 +175,9 @@ class Edicion:
 def aplicar_edicion(
     p: ParametrosSimulacion, eco: ParametrosEconomicos, ed: Edicion
 ) -> tuple[ParametrosSimulacion, ParametrosEconomicos]:
-    """Parámetros y economía de una simulación editada: **con azar** (sin `determinista`)."""
-    p = replace(p, determinista=False)
+    """Parámetros y economía de una simulación editada: con azar (sin `determinista`) salvo que se pida sin azar."""
+    if ed.con_azar:
+        p = replace(p, determinista=False)
     if ed.playeros is not None:
         p = replace(p, playeros_por_turno=ed.playeros, turnos=turnos_de(ed.playeros))
     litros = litros_de_nivel(ed.nivel_demanda)

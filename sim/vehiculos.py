@@ -1,4 +1,7 @@
-"""Vehículos por día (Montecarlo): motos, autos, camionetas, colectivos y camiones (2/11/2026).
+"""Vehículos por día: motos, autos, camionetas, colectivos y camiones (2/11/2026).
+
+Por defecto, sin azar (`por_dia`): vehículos del día = litros del día ÷ litros medios por vehículo, repartidos con
+las proporciones del censo (VEH-08/09). El sorteo Montecarlo de abajo (`sortear`, `resumen_mes`) queda como opción.
 
 ¿Hay un dato publicado de cuántos vehículos de cada tipo cargan por día o por mes en una estación de San Rafael?
 **No** (research_notes/demanda_310k_y_mix_vehicular.md). Sí hay **proporciones**: el censo de Vialidad en la RN 143 a
@@ -120,6 +123,30 @@ def _un_dia(rng, media: float, desvio: float, acumuladas, a, m, b):
     idx = np.minimum(np.searchsorted(acumuladas, u, side="right"), len(CATEGORIAS) - 1)
     litros = rng.triangular(a[idx], m[idx], b[idx]) if n else np.zeros(0)
     return n, u, idx, litros
+
+
+def _repartir(n: int, probabilidades) -> tuple[int, ...]:
+    """Reparte `n` vehículos entre los tipos según sus probabilidades, en enteros que suman `n` (mayor resto)."""
+    exactos = [n * q for q in probabilidades]
+    enteros = [int(x) for x in exactos]
+    orden = sorted(range(len(exactos)), key=lambda i: exactos[i] - enteros[i], reverse=True)
+    for i in orden[:n - sum(enteros)]:
+        enteros[i] += 1
+    return tuple(enteros)
+
+
+def por_dia(p) -> tuple[DiaVehiculos, ...]:
+    """Sin azar: cada día, vehículos = litros del día ÷ litros medios, repartidos con las proporciones del censo."""
+    intervalos = tabla(p)
+    tipos = {t.id: t for t in p.tipos_vehiculo}
+    dias = []
+    for d in range(1, p.dias + 1):
+        media = media_del_dia(p, d)
+        n = int(round(media))
+        cantidades = _repartir(n, [f.probabilidad for f in intervalos])
+        litros = tuple(c * tipos[k].litros.media for c, k in zip(cantidades, CATEGORIAS))
+        dias.append(DiaVehiculos(d, media, n, cantidades, litros))
+    return tuple(dias)
 
 
 def sortear(p, semilla: int = 1, cv: float | None = None, detalle: int = 15) -> tuple[DiaVehiculos, ...]:

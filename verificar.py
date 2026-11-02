@@ -297,9 +297,14 @@ def main() -> int:
     def lejos_de_un_borde(minuto: float) -> bool:
         return all(((minuto - b) % MINUTOS_POR_DIA) >= margen_borde for b in bordes)
 
+    def lejos_de_la_salida_del_encargado(t: float) -> bool:
+        # Igual que en el borde de turno: si se va con un vehículo a medio atender, lo termina.
+        return all(not (0.0 <= t - hasta < margen_borde) for _, hasta in traza.ayudas_encargado)
+
     sobrepasa = [
         c for c in traza.cuadros
-        if lejos_de_un_borde(c.minuto_del_dia) and c.playeros_ocupados > c.playeros_en_turno
+        if lejos_de_un_borde(c.minuto_del_dia) and lejos_de_la_salida_del_encargado(c.t)
+        and c.playeros_ocupados > c.playeros_en_turno
     ]
     maximo_playeros = max(c.playeros_ocupados for c in traza.cuadros)
     con_encargado = 1 if p.encargado is not None else 0
@@ -2475,11 +2480,12 @@ def main() -> int:
         f"playeros {p51.playeros_por_turno} · {p51.litros_mes:,.0f} L/mes · visitas {p51.visitas_encargado()}",
     )
     controlar(
-        abs(r51.visitas_encargado_dia - 4.0) < 1e-9 and 1.0 <= r51.ayudas_encargado_dia <= 1.5
+        abs(r51.visitas_encargado_dia - 4.0) < 1e-9 and 1.0 <= r51.ayudas_encargado_dia < 4.0
         and r51_sin.visitas_encargado_dia == 0.0 and r51_sin.minutos_encargado_dia == 0.0
         and abs(r51_cola.ayudas_encargado_dia - 4.0) < 1e-9 and r51_cola.minutos_encargado_dia > 4 * 20.0
         and 0.0 < r51_azar.ayudas_encargado_dia < 4.0 and r51_azar.atendidos_encargado_pct > 0.0,
-        "El encargado pasa 4 veces por día; sin azar se suma en ≈ 0,3 de las visitas (cuotas exactas); con 'cola ≥ 0' "
+        "El encargado pasa 4 veces por día; sin azar se suma en parte de las visitas (≈ 0,3 por cuota y además cuando "
+        "hay ≥ 3 esperando); con 'cola ≥ 0' "
         "se suma siempre; con azar, a veces, y atiende algunos vehículos",
         f"sin azar {r51.ayudas_encargado_dia:.2f} ayudas/día · con azar {r51_azar.ayudas_encargado_dia:.2f} "
         f"({r51_azar.minutos_encargado_dia:.0f} min-hombre, {r51_azar.atendidos_encargado_pct:.2f} % de los vehículos)",
@@ -2514,9 +2520,9 @@ def main() -> int:
         and all(abs(por_tipo52[t] - v) < 1e-9 for t, v in esperada52.items())
         and all(abs(litros_prod52[pr.id] / suma_l52 - pr.pct_litros) < 1e-9 for pr in liquidos52)
         and abs(litros_medios_de() - p52.litros_medios_por_cliente) / p52.litros_medios_por_cliente < 0.001
-        and abs(p52.media_servicio_liquidos() - 5.3) < 0.1,
+        and abs(p52.media_servicio_liquidos() - 9.8) < 0.1,
         "La matriz VEH-00 derivada cumple a la vez la mezcla de visitas (moto 20 · auto 56,4 · camioneta 15,84 · "
-        "colectivo 1,28 · camión 6,48 %) y la de litros (DEM-04); 39,7 L por vehículo y ≈ 5,3 min de playero",
+        "colectivo 1,28 · camión 6,48 %) y la de litros (DEM-04); 39,7 L por vehículo y ≈ 9,8 min de playero (Shell Tucumán)",
         f"litros medios {litros_medios_de():.2f} L · playero {p52.media_servicio_liquidos():.2f} min · "
         + " · ".join(f"{t} {100 * por_tipo52[t]:.2f} %" for t in vh.CATEGORIAS),
     )
@@ -2524,6 +2530,7 @@ def main() -> int:
     p52m = replace(p52, fecha_inicio=(1, 1), dias=31)
     sorteo52 = vh.sortear(p52m, semilla=5)
     resumen52 = vh.resumen_mes(p52, 1, semilla=5, repeticiones=400)
+    reales52 = vh.por_dia(p52m)
     controlar(
         [round(f.acumulada, 4) for f in tabla52] == [0.2, 0.764, 0.9224, 0.9352, 1.0]
         and tabla52[0].desde == 0.0 and all(b.desde == a.hasta for a, b in zip(tabla52, tabla52[1:]))
@@ -2531,9 +2538,10 @@ def main() -> int:
         and vh.tipo_de(0.93, tabla52) == "colectivo"
         and all(sum(d.cantidades) == d.n for d in sorteo52) and sorteo52 == vh.sortear(p52m, semilla=5)
         and abs(vh.media_base(p52) - 314.0) < 1.0
+        and all(sum(x.cantidades) == x.n == round(x.media) for x in reales52) and reales52 == vh.por_dia(p52m)
         and abs(resumen52.media / resumen52.esperado - 1.0) < 0.01 and resumen52.p5 < resumen52.media < resumen52.p95,
         "Pestaña Vehículos: la tabla de rangos de U(0,1) del prompt, cada día suma sus vehículos, misma semilla = mismo "
-        "sorteo, ≈ 314 vehículos por día y el mes sorteado reproduce los litros de la simulación (± 1 %)",
+        "sorteo, ≈ 314 vehículos por día, la vista sin azar reparte cada día exacto y el mes sorteado reproduce los litros de la simulación (± 1 %)",
         f"media base {vh.media_base(p52):.1f} veh/día · enero {resumen52.media:,.0f} L (P5 {resumen52.p5:,.0f} · "
         f"P95 {resumen52.p95:,.0f}) contra {resumen52.esperado:,.0f} L",
     )

@@ -1025,8 +1025,8 @@ def _tarjeta_cola(titulo: str, formula: str, valor: str, cuenta: str, significa:
         st.markdown(f"**Cuenta:** {cuenta}  \n**Qué significa:** {significa}")
 
 
-def _conclusion_colas(c, hora: int) -> str:
-    """Una frase que se arma sola según la utilización y la espera."""
+def _conclusion_colas(c, hora: int, se_van: float = 0.0) -> str:
+    """Una frase que se arma sola según la utilización, la espera y los que se van por la cola."""
     franja = f"Entre las {hora:02d} y las {(hora + 1) % 24:02d} h"
     espera = ("casi no se espera" if c.wq < 1 else "se espera poco" if c.wq < 5 else "la espera ya es larga")
     sobra = c.s * c.mu - c.lam
@@ -1034,6 +1034,9 @@ def _conclusion_colas(c, hora: int) -> str:
         return f"{franja} la estación anda holgada: {espera} y los playeros tienen bastante tiempo libre."
     if c.rho < 0.8:
         return f"{franja} la estación anda bien: {espera} y los playeros están ocupados, pero con margen."
+    if se_van >= 0.01:
+        return (f"{franja} llegan más clientes de los que los playeros pueden atender: se forma cola, {espera} "
+                f"({dec(c.wq)} min) y el {dec(100 * se_van, 0)} % se va sin cargar porque no quiere esperar más.")
     if c.rho < 1:
         return (f"{franja} {espera}, pero los playeros están casi al límite: con {ent(sobra)} clientes más por hora "
                 "no darían abasto y empezaría a formarse cola.")
@@ -1044,9 +1047,7 @@ def _conclusion_colas(c, hora: int) -> str:
 def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | None = None) -> None:
     """La pestaña Colas: datos, cuatro resultados con su cuenta y qué significan, y una conclusión.
 
-    `traza_azar` = la misma estación con llegadas al azar (Poisson). Sin azar los autos llegan espaciados exactos y,
-    mientras los playeros alcancen, nunca se cruzan: no hay cola y las cuentas dan cero. Por eso, por defecto, la
-    espera se mide con llegadas al azar, que es lo que supone la teoría de colas.
+    `traza_azar` (opcional) = la misma estación con llegadas al azar; la app usa la de la corrida, sin azar.
     """
     from sim.colas import con_little
 
@@ -1073,7 +1074,7 @@ def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | No
         "¿Qué hora del día mirar?", list(range(24)), index=pico, key="colas_hora",
         format_func=lambda h: f"De {h:02d} a {(h + 1) % 24:02d} h" + (" (la de más clientes)" if h == pico else ""),
     )
-    lam = llegadas_h[hora]
+    llegan = llegadas_h[hora]
     atencion = p.media_servicio_playero()
     s_turno = _playeros_a_la_hora(p, hora)
     s_encargado = _encargado_a_la_hora(traza, hora, dias)
@@ -1081,6 +1082,8 @@ def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | No
     suma = sum(d[hora][0] for d in traza.espera_dia_hora)
     cant = sum(d[hora][1] for d in traza.espera_dia_hora)
     wq = suma / cant if cant else 0.0
+    lam = cant / dias                                   # los atendidos: los que se fueron no pasan por la caja
+    se_van = max(0.0, 1.0 - lam / llegan) if llegan else 0.0
     if lam <= 0:
         st.info("A esa hora no llega nadie: no hay cola.", icon=":material/info:")
         return
@@ -1088,10 +1091,15 @@ def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | No
 
     st.markdown("##### 1. Los datos")
     st.dataframe(pd.DataFrame([
-        {"Variable": "λ (lambda)", "Qué es": "Clientes que llegan por hora", "Valor": f"{dec(c.lam)} clientes/h",
+        {"Variable": "Llegan", "Qué es": "Clientes que llegan por hora", "Valor": f"{dec(llegan)} clientes/h",
          "De dónde sale": f"Los que llegaron a esa hora ÷ {dias} días simulados"},
+        {"Variable": "Se van", "Qué es": "Los que se van sin cargar porque la cola es larga",
+         "Valor": f"{dec(100 * se_van, 1)} %",
+         "De dónde sale": f"No esperan más de {dec(p.paciencia_surtidor, 0)} min (TIE-06); lo midió la simulación"},
+        {"Variable": "λ (lambda)", "Qué es": "Clientes que se atienden por hora", "Valor": f"{dec(c.lam)} clientes/h",
+         "De dónde sale": "Los que llegan menos los que se van"},
         {"Variable": "1/μ", "Qué es": "Cuánto tarda un playero en atender a un cliente", "Valor": f"{dec(atencion)} min",
-         "De dónde sale": "Tiempo medio de carga del Registro (TIE-02 y TIE-04)"},
+         "De dónde sale": "Tiempo medio del playero del Registro (TIE-07 por tipo de vehículo y TIE-04 el GNC)"},
         {"Variable": "μ (mu)", "Qué es": "Clientes que atiende un playero por hora", "Valor": f"{dec(c.mu)} clientes/h",
          "De dónde sale": f"60 min ÷ {dec(atencion)} min"},
         {"Variable": "s", "Qué es": "Playeros trabajando a esa hora", "Valor": dec(s, 1) if s_encargado else ent(s),
@@ -1105,12 +1113,15 @@ def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | No
     st.markdown("##### 2. Los resultados")
     c1, c2 = st.columns(2)
     with c1:
+        rho = llegan / (s * c.mu)        # con los que LLEGAN: la carga que recibe la estación
         _tarjeta_cola(
-            "Ocupación de los playeros", "ρ = λ ÷ (s × μ)", f"{dec(100 * c.rho, 0)} %",
-            f"{dec(c.lam)} ÷ ({dec(s, 1) if s_encargado else s} × {dec(c.mu)}) = {dec(c.rho, 2)}",
-            f"en esa hora los playeros están ocupados el {dec(100 * c.rho, 0)} % del tiempo"
-            + ("; casi no les queda tiempo libre." if c.rho >= 0.8 else "." if c.rho >= 0.5
-               else "; tienen bastante tiempo libre."),
+            "Ocupación de los playeros", "ρ = llegan ÷ (s × μ)", f"{dec(100 * rho, 0)} %",
+            f"{dec(llegan)} ÷ ({dec(s, 1) if s_encargado else s} × {dec(c.mu)}) = {dec(rho, 2)}",
+            (f"llegan {dec(llegan)} clientes por hora y los playeros pueden atender {dec(s * c.mu)}: están "
+             "desbordados (más del 100 %), por eso se forma la cola y algunos se van sin cargar." if rho >= 1 else
+             f"en esa hora los playeros están ocupados el {dec(100 * rho, 0)} % del tiempo"
+             + ("; casi no les queda tiempo libre." if rho >= 0.8 else "." if rho >= 0.5
+                else "; tienen bastante tiempo libre.")),
         )
         _tarjeta_cola(
             "Autos esperando", "Lq = λ × Wq", f"{dec(c.lq)} autos",
@@ -1133,13 +1144,13 @@ def pestania_colas(p: ParametrosSimulacion, traza: Traza, traza_azar: Traza | No
         )
 
     st.markdown("##### 3. En pocas palabras")
-    st.info(_conclusion_colas(c, hora), icon=":material/lightbulb:")
+    st.info(_conclusion_colas(c, hora, se_van), icon=":material/lightbulb:")
     from sim.datos import por_id as _por_id
 
     ref = _por_id("REF-01")
     st.caption(
         f"Para comparar: en una Shell de Tucumán ({ref.fuente}), en la hora pico: {ref.valor}. Allá μ es la ocupación "
-        "de la cara del surtidor (maniobra + carga + pago, ≈ 9,8 min); acá es el tiempo del playero (TIE-07)."
+        "de la cara del surtidor (maniobra + carga + pago, ≈ 9,8 min), el mismo tiempo que usa esta simulación (TIE-07)."
     )
     if p.encargado is not None:
         ayudas = traza.ayudas_encargado
@@ -1261,44 +1272,93 @@ def _resumen_mes_cacheado(p: ParametrosSimulacion, mes: int, semilla: int):
 
 
 def pestania_vehiculos(p: ParametrosSimulacion) -> None:
-    """Cuántos vehículos de cada tipo cargan por día: Montecarlo (total Normal, tipo por U(0,1), litros Triangular)."""
+    """Cuántos vehículos de cada tipo cargan por día: litros del día ÷ litros medios, repartidos con el censo (sin azar).
+
+    El sorteo Montecarlo (total Normal, tipo por U(0,1), litros Triangular) queda como opción.
+    """
     from sim import vehiculos as veh
     from sim.datos import por_id
 
-    st.subheader("Vehículos por día (Montecarlo)")
+    st.subheader("Vehículos por día")
     st.markdown(
-        "**¿Hay un dato publicado?** No: ninguna fuente pública dice cuántas motos, autos, camionetas, colectivos y "
-        "camiones carga **por día** una estación de San Rafael. Sí hay **proporciones**, y con ellas se sortea:"
+        "**De dónde sale:** los vehículos de cada día salen de los **litros** que vende la estación ese día ÷ los "
+        "litros medios de una carga, y se reparten entre motos, autos, camionetas, colectivos y camiones con las "
+        "**proporciones del censo de la RN 143** (la propia Av. Balloffet):"
     )
     censo = por_id("VEH-08")
     st.markdown(
-        "- **Censo de Vialidad Nacional en la RN 143, entrada a San Rafael** (la RN 143 es la propia Av. Balloffet), "
+        "- **Censo de Vialidad Nacional en la RN 143, entrada a San Rafael**, "
         "48 h en El Toledano, marzo de 2018: de 6.720 vehículos por día, **70,5 % autos, 19,8 % camionetas, 1,6 % "
         "ómnibus y 8,1 % camiones** (VEH-08). El censo no cuenta motos.\n"
         "- **Motos:** en San Rafael hay 55.192 motos y 90.065 automotores (DNRPA, 2021), pero cargan poco y menos "
-        f"seguido: se supone que son el **{dec(100 * float(valor_registro('VEH-09')), 0)} % de las visitas** (VEH-09, "
-        "supuesto). El resto se reparte con el censo.\n"
-        "- **Litros de cada carga:** una Triangular por tipo (VEH-10, supuesto)."
+        f"seguido: son el **{dec(100 * float(valor_registro('VEH-09')), 0)} % de las visitas** (VEH-09). El resto se "
+        "reparte con el censo.\n"
+        "- **Litros de cada carga:** los litros medios de cada tipo de vehículo (VEH-10)."
     )
     st.caption(f"Fuente del censo: {censo.fuente}.")
 
     intervalos = veh.tabla(p)
     tipos = {t.id: t for t in p.tipos_vehiculo}
-    st.markdown("##### 1. La tabla de probabilidades (el método de los rangos de números aleatorios)")
+    dias_reales = veh.por_dia(p)
+    n_dias = len(dias_reales)
+    inicio = date(ANO_REFERENCIA, *p.fecha_inicio)
+
+    def fecha(d: int) -> str:
+        f = inicio + timedelta(days=d - 1)
+        return f"{DIAS_SEMANA[f.weekday()][:3]} {f.day:02d}/{f.month:02d}"
+
+    st.markdown("##### 1. Un día promedio del período")
+    promedio = sum(x.n for x in dias_reales) / n_dias
+    st.dataframe(pd.DataFrame([
+        {"Tipo": veh.NOMBRES[f.categoria], "% de las visitas": f"{dec(100 * f.probabilidad, 1)} %",
+         "Litros por carga": dec(tipos[f.categoria].litros.media, 1),
+         "Vehículos por día": dec(sum(x.cantidades[i] for x in dias_reales) / n_dias, 1),
+         "Litros por día": ent(sum(x.litros[i] for x in dias_reales) / n_dias)}
+        for i, f in enumerate(intervalos)
+    ] + [{"Tipo": "Total", "% de las visitas": "100 %", "Litros por carga": dec(p.litros_medios_por_cliente, 1),
+          "Vehículos por día": dec(promedio, 1),
+          "Litros por día": ent(sum(x.litros_total for x in dias_reales) / n_dias)}]), hide_index=True)
+    st.caption(
+        f"Litros medios por vehículo = Σ % × litros por carga = **{dec(p.litros_medios_por_cliente, 1)} L** (DEM-11). "
+        f"Con {ent(p.litros_mes)} L/mes son **≈ {ent(veh.media_base(p))} vehículos por día** de nafta y diésel (el "
+        "GNC va aparte, en m³). La simulación usa estas mismas proporciones para decidir qué vehículo es cada cliente."
+    )
+
+    st.markdown("##### 2. Un día elegido")
+    dia_ver = st.selectbox("Día", [d.dia for d in dias_reales], key="veh_dia_real", format_func=fecha)
+    d = dias_reales[dia_ver - 1]
+    st.markdown(
+        f"**{ent(p.litros_del_dia(dia_ver))} L** ese día (con el fin de semana y el mes) ÷ "
+        f"{dec(p.litros_medios_por_cliente, 1)} L = **{ent(d.n)} vehículos**, repartidos con los % de arriba:"
+    )
+    filas = [{"Tipo": veh.NOMBRES[c], "Cantidad": n, "Litros": ent(l)}
+             for c, n, l in zip(veh.CATEGORIAS, d.cantidades, d.litros)]
+    filas.append({"Tipo": "Total", "Cantidad": d.n, "Litros": ent(d.litros_total)})
+    st.dataframe(pd.DataFrame(filas), hide_index=True)
+
+    with st.expander("Todos los días del período (gráfico de barras y tabla)", icon=":material/bar_chart:"):
+        st.plotly_chart(graficos.grafico_vehiculos_por_dia(
+            dias_reales, veh.NOMBRES, veh.CATEGORIAS, titulo="Cada día: cuántos vehículos de cada tipo cargaron"),
+            key="g_vehiculos_reales")
+        st.dataframe(pd.DataFrame([
+            {"Día": fecha(x.dia), "Vehículos": x.n,
+             **{veh.NOMBRES[c]: n for c, n in zip(veh.CATEGORIAS, x.cantidades)},
+             "Litros": ent(x.litros_total)}
+            for x in dias_reales
+        ]), hide_index=True, height=300)
+
+    if not st.toggle("Mostrar el sorteo Montecarlo (opcional)", key="veh_montecarlo"):
+        return
+    st.markdown("##### Opcional: el sorteo Montecarlo")
+    st.markdown("La tabla de probabilidades (el método de los rangos de números aleatorios):")
     st.dataframe(pd.DataFrame([
         {"Tipo": veh.NOMBRES[f.categoria], "Probabilidad": f"{f.probabilidad:.4f}".replace(".", ","),
          "Acumulada": f"{f.acumulada:.4f}".replace(".", ","), "Rango de U(0,1)": f.texto,
          "Litros (mín · moda · máx)": " · ".join(dec(x, 0) for x in (tipos[f.categoria].litros.minimo,
                                                                     tipos[f.categoria].litros.moda,
-                                                                    tipos[f.categoria].litros.maximo)),
-         "Litros medios": dec(tipos[f.categoria].litros.media, 1)}
+                                                                    tipos[f.categoria].litros.maximo))}
         for f in intervalos
     ]), hide_index=True)
-    st.caption(
-        f"Litros medios por vehículo = Σ probabilidad × litros medios = **{dec(p.litros_medios_por_cliente, 1)} L** "
-        f"(DEM-11). Con {ent(p.litros_mes)} L/mes son **≈ {ent(veh.media_base(p))} vehículos por día** de líquidos "
-        "(el GNC va aparte, en m³). La simulación usa esta misma tabla para decidir qué vehículo es cada cliente."
-    )
 
     if "veh_semilla" not in st.session_state:
         st.session_state.veh_semilla = 1
@@ -1308,13 +1368,7 @@ def pestania_vehiculos(p: ParametrosSimulacion) -> None:
     c1.markdown(f"Semilla del sorteo: **{st.session_state.veh_semilla}** (con la misma semilla sale siempre lo mismo).")
     semilla = int(st.session_state.veh_semilla)
     dias = veh.sortear(p, semilla=semilla)
-    inicio = date(ANO_REFERENCIA, *p.fecha_inicio)
-
-    def fecha(d: int) -> str:
-        f = inicio + timedelta(days=d - 1)
-        return f"{DIAS_SEMANA[f.weekday()][:3]} {f.day:02d}/{f.month:02d}"
-
-    st.markdown("##### 2. Un día: cuántos vehículos, de qué tipo y cuántos litros")
+    st.markdown("##### Un día sorteado: cuántos vehículos, de qué tipo y cuántos litros")
     dia_ver = st.selectbox("Día", [d.dia for d in dias], key="veh_dia", format_func=fecha)
     d = dias[dia_ver - 1]
     st.markdown(
@@ -1333,7 +1387,7 @@ def pestania_vehiculos(p: ParametrosSimulacion) -> None:
     filas.append({"Tipo": "Total", "Cantidad": d.n, "Litros": ent(d.litros_total)})
     st.dataframe(pd.DataFrame(filas), hide_index=True)
 
-    st.markdown("##### 3. Todos los días del período")
+    st.markdown("##### Todos los días sorteados")
     st.plotly_chart(graficos.grafico_vehiculos_por_dia(dias, veh.NOMBRES, veh.CATEGORIAS), key="g_vehiculos")
     st.dataframe(pd.DataFrame([
         {"Día": fecha(x.dia), "Vehículos": x.n,
@@ -1349,7 +1403,7 @@ def pestania_vehiculos(p: ParametrosSimulacion) -> None:
             debajo=f"esperado {dec(sum(x.media for x in dias) / len(dias) * intervalos[i].probabilidad, 1)}",
         ), unsafe_allow_html=True)
 
-    st.markdown("##### 4. El mes sorteado mil veces: litros")
+    st.markdown("##### El mes sorteado mil veces: litros")
     meses = sorted({(inicio + timedelta(days=k)).month for k in range(p.dias)},
                    key=lambda m: [(inicio + timedelta(days=k)).month for k in range(p.dias)].index(m))
     mes = st.selectbox("Mes", meses, key="veh_mes", format_func=lambda m: MESES_NOMBRE[m - 1].capitalize())

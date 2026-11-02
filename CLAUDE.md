@@ -59,13 +59,15 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   ECO-05 / FIN-03 (supuestos).
 - **Colas** (`sim/colas.py`, pestaña Colas): como el ejercicio 2 del parcial — λ, μ, s (playeros + lo que aporta el
   encargado a esa hora) y la Wq que midió la simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y
-  qué significa. Sin M/M/s teórico (Nico lo pidió práctico). Por defecto la Wq sale de la **misma estación con llegadas
-  al azar** (Poisson): sin azar, con 3 playeros en el pico, los autos llegan espaciados exactos y la cola da cero.
-- **Vehículos (Montecarlo)** (`sim/vehiculos.py`, 2/11/2026): no hay un dato publicado de vehículos por tipo y por
-  día ⇒ por día, N ~ Normal(media del día; 0,15 × 257) (DEM-16), el tipo por rangos de U(0,1) (la misma tabla que usa el
-  motor) y los litros Triangular por tipo; el mes sorteado 1.000 veces (media, P5, P95 ≈ 310 mil L). Semilla visible y
-  "Re-sortear"; numpy con semilla propia (no toca STREAMS). Nota `research_notes/demanda_310k_y_mix_vehicular.md`,
-  ORQUESTADOR §36. Con 2·3·3 la cola en el pico es chica (Wq ≈ 1 min con azar, ≈ 0 sin azar).
+  qué significa. Sin M/M/s teórico (Nico lo pidió práctico). **Sin azar** (pedido de Nico, 2/11/2026): la Wq es la
+  de la corrida; λ = los atendidos por hora (los que llegan menos los que se van por la cola, TIE-06).
+- **Vehículos** (`sim/vehiculos.py`, 2/11/2026): **sin azar** (`por_dia`): vehículos del día = litros del día ÷ 39,7 L,
+  repartidos con las proporciones del censo de la RN 143 (VEH-08/09); el gráfico de barras de todos los días va en un
+  desplegable. El sorteo Montecarlo (N Normal, tipo por U(0,1), litros Triangular, el mes 1.000 veces) queda como
+  opción apagada ("Mostrar el sorteo Montecarlo"). Nota `research_notes/demanda_310k_y_mix_vehicular.md`, ORQUESTADOR §36.
+- **Cola (valores oficiales del grupo, 2/11/2026):** 380.000 L/mes, perfil DEM-02 con picos 07–09 y 17–19 h y tiempo
+  de playero ≈ 9,8 min por vehículo (TIE-07, Shell Tucumán). Año sin azar: ≈ 8 % se va por la cola; en el pico Wq
+  5–7 min.
 
 ## Reglas de oro (no romper)
 

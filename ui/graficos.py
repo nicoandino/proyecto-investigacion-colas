@@ -626,8 +626,10 @@ def grafico_indices(indices) -> go.Figure:
 # =============================================================================
 # Vehículos por día (Monte Carlo, pestaña Vehículos)
 # =============================================================================
-def grafico_vehiculos_por_dia(dias, nombres: dict[str, str], categorias: tuple[str, ...]) -> go.Figure:
-    """Barras apiladas: cuántos vehículos de cada tipo salieron en el sorteo de cada día."""
+def grafico_vehiculos_por_dia(dias, nombres: dict[str, str], categorias: tuple[str, ...],
+                              titulo: str = "Cada día: cuántos vehículos de cada tipo salieron en el sorteo"
+                              ) -> go.Figure:
+    """Barras apiladas: cuántos vehículos de cada tipo cargaron cada día."""
     colores = {"moto": TURQUESA, "auto": AMARILLO, "pick_up": CELESTE, "colectivo": VIOLETA, "camion": NARANJA}
     numeros = [d.dia for d in dias]
     fig = go.Figure()
@@ -637,7 +639,7 @@ def grafico_vehiculos_por_dia(dias, nombres: dict[str, str], categorias: tuple[s
         fig.add_bar(x=numeros, y=[d.cantidades[i] for d in dias], name=nombres[categoria],
                     marker_color=colores[categoria])
     fig.update_layout(
-        title="Cada día: cuántos vehículos de cada tipo salieron en el sorteo",
+        title=titulo,
         xaxis_title="Día del período",
         yaxis_title="Vehículos",
         barmode="stack",

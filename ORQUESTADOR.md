@@ -735,3 +735,14 @@ Pedido de Nico: en la estación, a las 21 h, había movimiento y una camioneta e
 **perfil horario DEM-02 parejo de 07 a 21 h** (factores 2,2–3,0; picos 07–09 y 17–19 h; el perfil anterior queda como
 alternativa). Medido (enero, con azar, 2 réplicas): 15–21 vehículos/h de 07 a 21 h; Wq 0,3–1,2 min, Lq 0,1–0,4; a
 las 21 h λ ≈ 18/h, Wq 0,7 min. Se saca del VEH-08 la frase "el PDF no se pudo abrir" (el censo se verificó).
+
+### 36.2 Colas que se notan, todo sin azar (2/11/2026)
+
+Pedido de Nico: "no hay absolutamente colas"; quiere en el pico una espera de 5–10 min y que el 5–10 % se vaya por la
+cola, y **nada de azar**. Cambios: **TIE-07** pasa al tiempo medido en la Shell de Tucumán (≈ 9,8 min de cara:
+maniobra + carga + cobro; antes ≈ 5,3 min sólo de carga), repartido por tipo de vehículo; **DEM-02** con picos más
+marcados (3,6 a las 07–08 y 17–18 h; 1,9–2,1 al mediodía). Medido sin azar: enero 7,2 % se va, Wq 07 h 4,8 · 09 h 6,0
+· 18 h 7,4 min, al mediodía ≈ 0; **año completo 8,4 % se va, Wq en el pico 5,0–7,3 min**. La pestaña Colas usa la
+corrida (sin azar) y λ = los atendidos (así ρ no pasa del 100 %), con una fila de "se van" y la conclusión que lo
+dice. La pestaña Vehículos arma los vehículos del día sin azar (litros ÷ 39,7 L × proporciones del censo); el gráfico
+de barras va en un desplegable y el Montecarlo queda como opción apagada.

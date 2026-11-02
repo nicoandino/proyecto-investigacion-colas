@@ -182,14 +182,6 @@ def economia_con_decision(p: ParametrosSimulacion, eco: ParametrosEconomicos, op
     return economia_de(correr_estacion_real(con_decision(p, opcion), replicas=replicas, semilla_base=semilla), eco)
 
 
-def traza_con_azar(p: ParametrosSimulacion):
-    """La traza de la misma estación con llegadas al azar (pestaña Colas): la de la corrida si ya tenía azar."""
-    if not p.determinista:
-        return st.session_state.traza
-    with st.spinner("Simulando las llegadas al azar para la pestaña Colas…"):
-        return correr_traza_cacheada(replace(p, determinista=False), st.session_state.get("semilla_usada", 1))
-
-
 def resultado_del_anio(p: ParametrosSimulacion, resultado: ResultadoEscenario) -> ResultadoReplica:
     """La réplica del año: la de esta corrida si ya era el año completo; si no, se simula aparte (con caché)."""
     if st.session_state.periodo.tipo == "anio":
@@ -2588,7 +2580,7 @@ def main() -> None:
             st.session_state.modo,
         )
     with pestanias["Colas"]:
-        vistas.pestania_colas(p_corrida, st.session_state.traza, traza_con_azar(p_corrida))
+        vistas.pestania_colas(p_corrida, st.session_state.traza)
     if con_eventos:
         with pestanias["Eventos"]:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)

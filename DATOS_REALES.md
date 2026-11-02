@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 157 datos · 🟢 dato 42 · 🟡 estimación 18 · ⚪ heredado 12 · 🔵 observación 2 · 🟠 supuesto 83
+**Resumen:** 157 datos · 🟢 dato 43 · 🟡 estimación 18 · ⚪ heredado 12 · 🔵 observación 2 · 🟠 supuesto 82
 
 ## La estación
 
@@ -62,7 +62,7 @@
 |---|---|---|---|---|---|---|---|---|
 | DEM-00 | Modo de demanda por defecto | esperada | — | 🟠 supuesto | la estación | sin_dato | orquestador (N5: el Monte Carlo se conserva para tipo de cliente y producto; el total diario sale de los litros) | monte_carlo = monte_carlo |
 | DEM-01 | Demanda mensual (combustibles líquidos) | 380000.0 | L/mes | 🟠 supuesto | San Rafael | media | VALOR OFICIAL DEL GRUPO (2/11/2026): 15–20 vehículos por hora de 07 a 21 h, como se observó en la estación (visita a las 21 h, con cola en la isla … | 150.000 = 150000.0 · 270.000 = 270000.0 · 310.000 = 310000.0 · 400.000 = 400000.0 |
-| DEM-02 | Perfil horario (24 factores) | (0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.5, 3.0, 3.0, 2.8, 2.2, 2.2, 2.4, 2.4, 2.2, 2.2, 2.8, 3.0, 3.0, 3.0, 2.8, 2.6, 1.8, 1.0) | factor | 🟡 estimación | San Rafael | baja | observación del grupo en la estación (2/11/2026): movimiento parejo de 07 a 21 h, con cola a las 21 h; picos 07–09 y 17–19 h | heredado = (0.3, 0.2, 0.15, 0.15, 0.25, 0.6, 1.1, 1.8, 2.0, 1.5, 1.1, 1.0, 1.2, 1.1, 0.9, 0.9, 1.0, 1.4, 1.9, 2.0, 1.6, 1.1, 0.7, 0.4) · anterior =… |
+| DEM-02 | Perfil horario (24 factores) | (0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.5, 3.6, 3.6, 3.0, 2.0, 1.9, 2.1, 2.1, 1.9, 1.9, 2.8, 3.6, 3.6, 3.3, 2.8, 2.6, 1.7, 1.0) | factor | 🟡 estimación | San Rafael | baja | observación del grupo en la estación (2/11/2026): movimiento parejo de 07 a 21 h, con cola a las 21 h; picos 07–09 y 17–19 h | heredado = (0.3, 0.2, 0.15, 0.15, 0.25, 0.6, 1.1, 1.8, 2.0, 1.5, 1.1, 1.0, 1.2, 1.1, 0.9, 0.9, 1.0, 1.4, 1.9, 2.0, 1.6, 1.1, 0.7, 0.4) · anterior =… |
 | DEM-03 | Factor de fin de semana | 1.3 | × | 🟡 estimación | San Rafael | media | DATOS §2 (tabla ×1,3–1,5) | 1,24 = 1.24 · 1,50 = 1.5 |
 | DEM-04 | Mezcla de producto en litros (líquidos) | (('super', 28.0), ('vpower', 19.5), ('diesel_g2', 29.3), ('diesel_g3', 23.2)) | % | 🟡 estimación | San Rafael | baja | DATOS §7 (Surtidores.com.ar, mercado por volumen) | mix de flota · G2/G3 75/25 = 0.75 · sólo G2 (100/0) = 1.0 |
 | DEM-05 | Clientes GNC (% de las llegadas) | 0.03 | % | 🟡 estimación | San Rafael | baja | DATOS §7 | 11 % = 0.11 · 20 % = 0.2 |
@@ -102,7 +102,7 @@
 | TIE-01 | Caudal de la manguera | 40.0 | L/min | 🟢 dato | Argentina / otro | baja | nota 03 D22/D23 (Paraguay 2012) | 90 L/min = 90.0 · 120 L/min = 120.0 |
 | TIE-02 | Carga nafta/diésel (por vehículo en la cara) | (2.0, 5.0, 8.0) | min | 🟠 supuesto | Argentina / otro | media | DATOS §3 (papers UNLP/UTN/UNC, sin medición en San Rafael) | nota 03 = (2.4, 3.7, 5.0) |
 | TIE-03 | Extra de camión/ómnibus | + litros ÷ 90 | min | 🟠 supuesto | San Rafael | baja | orquestador | — |
-| TIE-07 | Tiempo de playero según el tipo de vehículo | (('moto', (2.0, 3.0, 5.0)), ('auto', (3.0, 4.5, 8.0)), ('pick_up', (3.5, 5.0, 9.0)), ('colectivo', (6.0, 9.0, 14.0)), ('camion', (6.0, 10.0, 16.0))) | min | 🟠 supuesto | San Rafael | media | prompt del grupo (2/11/2026). Referencia: Shell Tucumán (UNT, FACE, ago-2026) ocupa la cara ≈ 9,8 min, pero eso es maniobra + carga + pago; acá es … | una sola distribución = (2.0, 5.0, 8.0) |
+| TIE-07 | Tiempo de playero según el tipo de vehículo | (('moto', (3.7, 5.6, 9.3)), ('auto', (5.6, 8.3, 14.8)), ('pick_up', (6.5, 9.3, 16.7)), ('colectivo', (11.1, 16.7, 25.9)), ('camion', (11.1, 18.5, 2… | min | 🟢 dato | San Rafael | media | Shell Tucumán (UNT, FACE, ago-2026): el vehículo ocupa la cara ≈ 9,8 min en promedio (maniobra + carga + cobro), y el playero lo atiende todo ese t… | una sola distribución = (2.0, 5.0, 8.0) · sólo la carga (anterior) = (('moto', (2.0, 3.0, 5.0)), ('auto', (3.0, 4.5, 8.0)), ('pick_up', (3.5, 5.0, … |
 | TIE-04 | Carga GNC | (5.0, 7.0, 12.0) | min | 🟠 supuesto | San Rafael | media | DATOS §3 | nota 03 = (10.0, 15.0, 30.0) |
 | TIE-05 | Compra en el minimarket | (2.0, 4.0, 10.0) | min | 🟠 supuesto | San Rafael | baja | DATOS §3 | heredado = (1.5, 3.0, 6.0) |
 | TIE-06 | Paciencia (cola de cara / cola de caja) | (10.0, 8.0) | min | ⚪ heredado | San Rafael | sin_dato | proyecto hipotético | 5 min = 5.0 · 20 min = 20.0 |

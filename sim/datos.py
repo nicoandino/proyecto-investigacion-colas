@@ -360,10 +360,10 @@ REGISTRO: tuple[Dato, ...] = tuple(
                      ("anterior", (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0,
                                    1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0),
                       "perfil anterior (picos 07–10 y 16–18, poco movimiento a la noche)"),),
-                    "picos 07–09 y 17–19 h; de 07 a 21 h entre 2,2 y 3,0 (15–21 vehículos/h); suma 46,7",
-                    None, None),
-          (0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.5, 3.0, 3.0, 2.8, 2.2, 2.2,
-           2.4, 2.4, 2.2, 2.2, 2.8, 3.0, 3.0, 3.0, 2.8, 2.6, 1.8, 1.0)),
+                    "picos 07–09 y 17–19 h (≈ 23 vehículos/h); el resto del día de 07 a 21 h, 12–18 "
+                    "vehículos/h; suma 47,3", None, None),
+          (0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.5, 3.6, 3.6, 3.0, 2.0, 1.9,
+           2.1, 2.1, 1.9, 1.9, 2.8, 3.6, 3.6, 3.3, 2.8, 2.6, 1.7, 1.0)),
         ("DEM-03", ("Factor de fin de semana", "×", "B", "estimacion", "media",
                     "DATOS §2 (tabla ×1,3–1,5)", "datos_operacionales",
                     "C17", (("1,24", 1.24, "DATOS §2"), ("1,50", 1.50, "DATOS §2")),
@@ -574,15 +574,21 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "orquestador", "orquestador",
                     "", (), "+ litros ÷ 90 por la manguera de alto caudal", None, None),
           "+ litros ÷ 90"),
-        ("TIE-07", ("Tiempo de playero según el tipo de vehículo", "min", "B", "supuesto", "media",
-                    "prompt del grupo (2/11/2026). Referencia: Shell Tucumán (UNT, FACE, ago-2026) ocupa la cara "
-                    "≈ 9,8 min, pero eso es maniobra + carga + pago; acá es el tiempo del playero", "grupo",
-                    "C11", (("una sola distribución", (2.0, 5.0, 8.0), "TIE-02 + TIE-03 (antes)"),),
-                    "Triangular(mín, moda, máx): moto (2, 3, 5) · auto (3, 4,5, 8) · camioneta (3,5, 5, 9) · "
-                    "colectivo (6, 9, 14) · camión (6, 10, 16); media ponderada ≈ 5,3 min. Reemplaza a TIE-02 + "
-                    "TIE-03 en la estación real; el GNC sigue con TIE-04", None, None),
-          (("moto", (2.0, 3.0, 5.0)), ("auto", (3.0, 4.5, 8.0)), ("pick_up", (3.5, 5.0, 9.0)),
-           ("colectivo", (6.0, 9.0, 14.0)), ("camion", (6.0, 10.0, 16.0)))),
+        ("TIE-07", ("Tiempo de playero según el tipo de vehículo", "min", "B", "dato", "media",
+                    "Shell Tucumán (UNT, FACE, ago-2026): el vehículo ocupa la cara ≈ 9,8 min en promedio "
+                    "(maniobra + carga + cobro), y el playero lo atiende todo ese tiempo; repartido por tipo de "
+                    "vehículo con las proporciones del prompt del grupo (2/11/2026)", "grupo",
+                    "C11", (("una sola distribución", (2.0, 5.0, 8.0), "TIE-02 + TIE-03 (antes)"),
+                            ("sólo la carga (anterior)", (("moto", (2.0, 3.0, 5.0)), ("auto", (3.0, 4.5, 8.0)),
+                                                          ("pick_up", (3.5, 5.0, 9.0)),
+                                                          ("colectivo", (6.0, 9.0, 14.0)),
+                                                          ("camion", (6.0, 10.0, 16.0))),
+                             "≈ 5,3 min: sin maniobra ni cobro")),
+                    "Triangular(mín, moda, máx): moto (3,7, 5,6, 9,3) · auto (5,6, 8,3, 14,8) · camioneta (6,5, "
+                    "9,3, 16,7) · colectivo (11,1, 16,7, 25,9) · camión (11,1, 18,5, 29,6); media ponderada ≈ 9,8 "
+                    "min. Reemplaza a TIE-02 + TIE-03 en la estación real; el GNC sigue con TIE-04", None, None),
+          (("moto", (3.7, 5.6, 9.3)), ("auto", (5.6, 8.3, 14.8)), ("pick_up", (6.5, 9.3, 16.7)),
+           ("colectivo", (11.1, 16.7, 25.9)), ("camion", (11.1, 18.5, 29.6)))),
         ("TIE-04", ("Carga GNC", "min", "B", "supuesto", "media",
                     "DATOS §3", "datos_operacionales",
                     "C11", (("nota 03", (10.0, 15.0, 30.0), "probablemente incluye espera"),),

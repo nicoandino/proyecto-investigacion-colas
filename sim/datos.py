@@ -70,10 +70,10 @@ CONTRADICCIONES: tuple[Contradiccion, ...] = (
                   "S10: cierre nocturno 22–06 (DATOS §5, sin fuente).",
                   "Oficial: API de Shell (twenty_four_hour, 5/10/2026)."),
     Contradiccion("C2", "Demanda mensual", "Alto",
-                  "310.000 L/mes (valor oficial del grupo, 2/11/2026).",
-                  "270.000 L/mes (estimación anterior); 150.000 y 400.000 L/mes como ejes de sensibilidad.",
-                  "Decisión del grupo: dentro del promedio nacional (270–380 mil) y del punto de equilibrio "
-                  "(315–400 mil), con algo de cola en la hora pico. No hay fuente oficial de esta estación."),
+                  "380.000 L/mes (valor oficial del grupo, 2/11/2026).",
+                  "310.000 y 270.000 L/mes (valores anteriores); 150.000 y 500.000 L/mes como ejes de sensibilidad.",
+                  "Decisión del grupo: 15–20 vehículos por hora de 07 a 21 h, como se vio en la estación (2/11/2026, "
+                  "21 h, cola en diésel); dentro de la franja media de CECHA (250–600 mil)."),
     Contradiccion("C3", "Litros vs. autos", "Crítico",
                   "Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente).",
                   "— (los documentos confundían litros/día con autos/día, error ×35–50).",
@@ -334,7 +334,8 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "siendo Poisson); 'monte_carlo' = sorteo de la tabla DEM-07", None, None),
           "esperada"),
         ("DEM-01", ("Demanda mensual (combustibles líquidos)", "L/mes", "B", "supuesto", "media",
-                    "SUPUESTO ADOPTADO por el grupo (2/11/2026), no un despacho medido de la estación. Referencias: "
+                    "VALOR OFICIAL DEL GRUPO (2/11/2026): 15–20 vehículos por hora de 07 a 21 h, como se observó en la "
+                    "estación (visita a las 21 h, con cola en la isla de diésel). Referencias: "
                     "despacho promedio por estación en Argentina ≈ 270 mil L/mes (Surtidores.com.ar, informe "
                     "UNVENU/CLAEC); CECHA: el 51 % de las estaciones vende hasta 250 mil L/mes y el 37 % entre 250 y "
                     "600 mil (vía Télam / Sitio Andino; fecha original vieja); en Mendoza el gasoil vende más que la "
@@ -342,21 +343,27 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "C2",
                     (("150.000", 150_000.0, "DATOS §1 (base)"),
                      ("270.000", 270_000.0, "estimación anterior; promedio nacional (Surtidores, UNVENU/CLAEC)"),
+                     ("310.000", 310_000.0, "valor anterior del grupo (2/11/2026)"),
                      ("400.000", 400_000.0, "punto de equilibrio 2021")),
-                    "≈ 10.200 L/día ⇒ ≈ 257 vehículos/día de líquidos (÷ 39,7 L, DEM-11). No incluye el GNC "
+                    "≈ 12.500 L/día ⇒ ≈ 314 vehículos/día de líquidos (÷ 39,7 L, DEM-11). No incluye el GNC "
                     "(m³, DEM-05). Queda en la franja media de CECHA (250–600 mil)",
-                    150_000.0, 400_000.0),
-          310_000.0),
+                    150_000.0, 500_000.0),
+          380_000.0),
         ("DEM-02", ("Perfil horario (24 factores)", "factor", "B", "estimacion", "baja",
-                    "DATOS §2 (tabla de 24 factores, §14.3)", "datos_operacionales",
+                    "observación del grupo en la estación (2/11/2026): movimiento parejo de 07 a 21 h, con cola a las "
+                    "21 h; picos 07–09 y 17–19 h", "grupo",
                     "C16",
                     (("heredado", (0.30, 0.20, 0.15, 0.15, 0.25, 0.60, 1.10, 1.80, 2.00,
                                    1.50, 1.10, 1.00, 1.20, 1.10, 0.90, 0.90, 1.00, 1.40,
                                    1.90, 2.00, 1.60, 1.10, 0.70, 0.40),
-                      "proyecto hipotético"),),
-                    "picos 07–10 y 16–18 (≈ 3–4× el promedio); suma 43", None, None),
-          (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0,
-           1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0)),
+                      "proyecto hipotético"),
+                     ("anterior", (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0,
+                                   1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0),
+                      "perfil anterior (picos 07–10 y 16–18, poco movimiento a la noche)"),),
+                    "picos 07–09 y 17–19 h; de 07 a 21 h entre 2,2 y 3,0 (15–21 vehículos/h); suma 46,7",
+                    None, None),
+          (0.6, 0.4, 0.3, 0.3, 0.4, 0.8, 1.5, 3.0, 3.0, 2.8, 2.2, 2.2,
+           2.4, 2.4, 2.2, 2.2, 2.8, 3.0, 3.0, 3.0, 2.8, 2.6, 1.8, 1.0)),
         ("DEM-03", ("Factor de fin de semana", "×", "B", "estimacion", "media",
                     "DATOS §2 (tabla ×1,3–1,5)", "datos_operacionales",
                     "C17", (("1,24", 1.24, "DATOS §2"), ("1,50", 1.50, "DATOS §2")),
@@ -456,7 +463,7 @@ REGISTRO: tuple[Dato, ...] = tuple(
         ("DEM-16", ("Variabilidad del total de vehículos del día (pestaña Vehículos)", "×", "B", "supuesto", "baja",
                     "prompt del grupo (2/11/2026)", "grupo",
                     "", (), "N del día ~ Normal(media del día, 0,15 × media base), redondeado y ≥ 0. La media del "
-                            "día sale de los litros del día ÷ DEM-11 (≈ 257 vehículos con el día medio)", 0.05, 0.30),
+                            "día sale de los litros del día ÷ DEM-11 (≈ 314 vehículos con el día medio)", 0.05, 0.30),
           0.15),
         ("DEM-12", ("Cambio de quincena (S12): factor y días del mes", "× · día del mes",
                     "B", "supuesto", "sin_dato",
@@ -525,8 +532,8 @@ REGISTRO: tuple[Dato, ...] = tuple(
           "derivada (ver nota)"),
         ("VEH-08", ("Composición del tránsito en la RN 143, entrada a San Rafael", "%", "B", "dato", "alta",
                     "DNV 4º Distrito, Estudio de tránsito RN 143, censo de cobertura de 48 h en El Toledano "
-                    "(prog. 528), mar-2018; IF-2021-06581772-APN-DMZA#DNV (ene-2021). Datos del prompt del grupo: "
-                    "el PDF no se pudo abrir desde el entorno de trabajo", "grupo",
+                    "(prog. 528), mar-2018; IF-2021-06581772-APN-DMZA#DNV (ene-2021). Verificado contra el PDF "
+                    "(2/11/2026)", "grupo",
                     "", (("accesos de Mendoza (DNV vía MDZ, 2019)", (0.867, 0.099, 0.034),
                           "livianos · camiones s/acoplado, ómnibus cortos y combis · largos y con acoplado"),),
                     "4.740 autos (70,5 %), 1.330 camionetas (19,8 %, columna 'Cta.+r'), ómnibus 1,6 % y camiones "

@@ -632,7 +632,7 @@ PRODUCTOS_REALES = productos_desde_registro()
 GRUPOS_REALES = grupos_desde_registro()
 #: Los cinco tipos de vehículo.
 TIPOS_REALES = tipos_vehiculo_desde_registro()
-#: Inventario por producto (para la demanda por defecto, DEM-01: 310.000 L/mes).
+#: Inventario por producto (para la demanda por defecto, DEM-01: 380.000 L/mes).
 INVENTARIO_REAL = inventario_real()
 
 

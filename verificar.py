@@ -58,7 +58,7 @@ Los controles cubren las dos partes del modelo:
        operativo, y con el margen de equilibrio el resultado es 0.
    50. Análisis financiero: VAN, TIR y recupero de una anualidad conocida; el flujo de cada decisión sale de
        la simulación.
-   51. Pedidos del 2/11/2026: playeros 2·3·3, 310.000 L/mes y el encargado cada 6 h que a veces atiende.
+   51. Pedidos del 2/11/2026: playeros 2·3·3, 380.000 L/mes y el encargado cada 6 h que a veces atiende.
    52. Los cinco tipos de vehículo (matriz VEH-00 derivada) y la pestaña Vehículos (Montecarlo).
    49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
@@ -1728,10 +1728,10 @@ def main() -> int:
         abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 2.0) < 1e-9 for h in pico
     ) and all(abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 1.0) < 1e-9 for h in fuera)
     controlar(
-        not p_med.determinista and p_med.litros_mes == 310_000.0 == litros_de_nivel("media")
-        and p_alta.litros_mes == litros_de_nivel("alta") == 400_000.0
+        not p_med.determinista and p_med.litros_mes == 380_000.0 == litros_de_nivel("media")
+        and p_alta.litros_mes == litros_de_nivel("alta") == 500_000.0
         and litros_de_nivel("poca") == 150_000.0 and ok_pico,
-        "Editar: poca/media/alta salen del Registro (150/310/400 mil L), el doble en el pico duplica "
+        "Editar: poca/media/alta salen del Registro (150/380/500 mil L), el doble en el pico duplica "
         "esas horas y deja igual las demás, y la edición usa azar",
         f"clientes por día: media {p_med.autos_por_dia:.0f} · alta {p_alta.autos_por_dia:.0f} · "
         f"alta con doble pico {aplicar_edicion(base_per, eco0, Edicion(nivel_demanda='alta', doble_pico=True))[0].autos_por_dia:.0f}",
@@ -2459,7 +2459,7 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 51
-    separador("51. Pedidos del 2/11/2026: un playero más por turno, el encargado y 310.000 L/mes")
+    separador("51. Pedidos del 2/11/2026: un playero más por turno, el encargado y 380.000 L/mes")
     p51 = replace(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1)), animar_todo=False)
     r51, _ = correr_replica(p51, semilla=1)
     r51_sin, _ = correr_replica(replace(p51, encargado=None), semilla=1)
@@ -2467,10 +2467,10 @@ def main() -> int:
     r51_cola, _ = correr_replica(replace(p51, determinista=False, encargado=(6.0, 8.0, (20.0, 40.0, 60.0), 0, 0.0)),
                                  semilla=3)
     controlar(
-        p51.playeros_por_turno == (2, 3, 3) and p51.litros_mes == 310_000.0
+        p51.playeros_por_turno == (2, 3, 3) and p51.litros_mes == 380_000.0
         and p51.visitas_encargado() == (2.0, 8.0, 14.0, 20.0) and p51.ventana_encargado.media == 40.0
         and ParametrosSimulacion.clasico().encargado is None,
-        "Defaults: playeros 2·3·3 (PER-01), 310.000 L/mes (DEM-01), el encargado a las 02 · 08 · 14 · 20 h con una "
+        "Defaults: playeros 2·3·3 (PER-01), 380.000 L/mes (DEM-01), el encargado a las 02 · 08 · 14 · 20 h con una "
         "ventana de 40 min en promedio (PER-08), y el clásico sin encargado",
         f"playeros {p51.playeros_por_turno} · {p51.litros_mes:,.0f} L/mes · visitas {p51.visitas_encargado()}",
     )
@@ -2530,10 +2530,10 @@ def main() -> int:
         and vh.tipo_de(0.19999, tabla52) == "moto" and vh.tipo_de(0.2, tabla52) == "auto"
         and vh.tipo_de(0.93, tabla52) == "colectivo"
         and all(sum(d.cantidades) == d.n for d in sorteo52) and sorteo52 == vh.sortear(p52m, semilla=5)
-        and abs(vh.media_base(p52) - 257.0) < 1.0
+        and abs(vh.media_base(p52) - 314.0) < 1.0
         and abs(resumen52.media / resumen52.esperado - 1.0) < 0.01 and resumen52.p5 < resumen52.media < resumen52.p95,
         "Pestaña Vehículos: la tabla de rangos de U(0,1) del prompt, cada día suma sus vehículos, misma semilla = mismo "
-        "sorteo, ≈ 257 vehículos por día y el mes sorteado reproduce los litros de la simulación (± 1 %)",
+        "sorteo, ≈ 314 vehículos por día y el mes sorteado reproduce los litros de la simulación (± 1 %)",
         f"media base {vh.media_base(p52):.1f} veh/día · enero {resumen52.media:,.0f} L (P5 {resumen52.p5:,.0f} · "
         f"P95 {resumen52.p95:,.0f}) contra {resumen52.esperado:,.0f} L",
     )

@@ -27,7 +27,8 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   fijo más por turno desde el 2/11/2026); el **encargado** pasa cada 6 h (02 · 08 · 14 · 20), se queda Triangular(20,
   40, 60) min y atiende como un playero más si hay ≥ 3 esperando o con p = 0,30 (PER-08; stream "encargado"); cola finita;
   abandono; caja del minimarket. **El GNC también lo carga un playero** (PER-04) y además usa un compresor.
-- **Demanda:** litros/mes (**310.000, supuesto adoptado por el grupo** desde el 2/11/2026) ⇒ ≈ 257 vehículos/día de
+- **Demanda:** litros/mes (**380.000, valor oficial del grupo** desde el 2/11/2026: 15–20 vehículos/h de 07 a 21 h, como se vio en la
+  estación) ⇒ ≈ 314 vehículos/día de
   líquidos (÷ 39,7 L, DEM-11) más el GNC, con perfil horario, fin de semana ×1,30 normalizado,
   estacionalidad neutra en `ParametrosSimulacion()`; en la app, por defecto, los **índices mensuales de la serie real**
   (PRO-01) y como opción el **calendario de temporadas** (DEM-14/15, supuesto). Cada cliente: producto → tipo de

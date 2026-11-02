@@ -6,7 +6,7 @@ la entrada de San Rafael (VEH-08; la RN 143 es la propia Av. Balloffet) y el par
 sortea, día por día:
 
   1. Total de vehículos del día: N ~ Normal(media del día, DEM-16 × media base), redondeado y ≥ 0. La media del día
-     sale de los litros del día ÷ litros medios por vehículo (DEM-11): ≈ 257 con 310.000 L/mes; la media base es la
+     sale de los litros del día ÷ litros medios por vehículo (DEM-11): ≈ 314 con 380.000 L/mes; la media base es la
      del día promedio del año (sin fin de semana ni estacionalidad).
   2. Tipo de cada vehículo: U(0,1) contra la tabla de probabilidades acumuladas (el método de la cátedra).
   3. Litros de cada carga: Triangular del tipo (VEH-10).
@@ -95,7 +95,7 @@ def tipo_de(u: float, intervalos: tuple[Intervalo, ...]) -> str:
 
 
 def media_base(p) -> float:
-    """Vehículos de líquidos de un día promedio: litros del mes ÷ (365 / 12) días ÷ litros medios (≈ 257)."""
+    """Vehículos de líquidos de un día promedio: litros del mes ÷ (365 / 12) días ÷ litros medios (≈ 314)."""
     return p.litros_mes / (365.0 / 12.0) / p.litros_medios_por_cliente
 
 

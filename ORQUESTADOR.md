@@ -726,3 +726,12 @@ pico al 10 % del día → Wq 1,8 min, Lq 0,79; ambos → 1,8 min. Encargado (con
 ≈ 53 minutos-hombre por día, 1,5 % de los vehículos atendidos. Litros del mes simulados: 311.900 (con azar) y 307.800
 (sin azar) contra 310.000 × el índice de enero. Montecarlo de la pestaña: enero sorteado 1.000 veces, media 310.025 L
 (P5 294.175 · P95 325.739), contra 309.803 (293.784 · 325.141) del prompt. Controles 51 y 52.
+
+### 36.1 Demanda de 380 mil L/mes y perfil parejo (2/11/2026)
+
+Pedido de Nico: en la estación, a las 21 h, había movimiento y una camioneta esperando en la isla de diésel; con
+310.000 L/mes el modelo daba ≈ 9 vehículos/h a esa hora (Lq 0,02). Se adopta como **valor oficial del grupo**:
+**DEM-01 = 380.000 L/mes** (≈ 314 vehículos/día de líquidos; la franja de sensibilidad pasa a 150–500 mil) y un
+**perfil horario DEM-02 parejo de 07 a 21 h** (factores 2,2–3,0; picos 07–09 y 17–19 h; el perfil anterior queda como
+alternativa). Medido (enero, con azar, 2 réplicas): 15–21 vehículos/h de 07 a 21 h; Wq 0,3–1,2 min, Lq 0,1–0,4; a
+las 21 h λ ≈ 18/h, Wq 0,7 min. Se saca del VEH-08 la frase "el PDF no se pudo abrir" (el censo se verificó).

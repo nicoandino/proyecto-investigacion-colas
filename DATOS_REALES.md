@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 151 datos · 🟢 dato 40 · 🟡 estimación 17 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 81
+**Resumen:** 157 datos · 🟢 dato 42 · 🟡 estimación 18 · ⚪ heredado 12 · 🔵 observación 2 · 🟠 supuesto 83
 
 ## La estación
 
@@ -54,14 +54,14 @@
 | PER-05 | Capacidad de cola por grupo | 8 | autos | 🟠 supuesto | la estación | sin_dato | orquestador (relevar) | 4 = 4 · 14 = 14 |
 | PER-07 | Lugares de cola por cara | 3 | autos | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): todas las caras tienen la misma capacidad de cola | 8 por zona = 8 |
 | PER-06 | Disciplina de cola | por_grupo | — | 🟠 supuesto | la estación | sin_dato | CASO §7 | por_cara = por_cara |
-| PER-08 | Encargado: recorrida cada 6 h y ayuda en la playa | (6.0, 8.0, 60.0, 0.5) | h · h · min · prob. | 🟠 supuesto | la estación | sin_dato | pedido del grupo (2/11/2026): el encargado pasa cada 6 horas y a veces se suma a colaborar | — |
+| PER-08 | Encargado: recorrida cada 6 h y ayuda en la playa | (6.0, 8.0, (20.0, 40.0, 60.0), 3, 0.3) | h · h · min (mín, moda, máx) · autos · prob. | 🟠 supuesto | la estación | sin_dato | pedido del grupo (2/11/2026; prompt 'demanda 310 mil, personal y Montecarlo'): pasa cada 6 h, desfasado de los turnos (06 · 14 · 22) | ventana fija de 60 min y p = 0,5 = (6.0, 8.0, (60.0, 60.0, 60.0), 0, 0.5) · p = 0,15 = 0.15 |
 
 ## Demanda
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
 | DEM-00 | Modo de demanda por defecto | esperada | — | 🟠 supuesto | la estación | sin_dato | orquestador (N5: el Monte Carlo se conserva para tipo de cliente y producto; el total diario sale de los litros) | monte_carlo = monte_carlo |
-| DEM-01 | Demanda mensual | 310000.0 | L/mes | 🟠 supuesto | San Rafael | baja | valor oficial del grupo (2/11/2026) sobre ONBOARDING + notas 01/03 + DATOS §1 (sin URL confirmada) | 150.000 = 150000.0 · 270.000 = 270000.0 · 400.000 = 400000.0 |
+| DEM-01 | Demanda mensual (combustibles líquidos) | 310000.0 | L/mes | 🟠 supuesto | San Rafael | media | SUPUESTO ADOPTADO por el grupo (2/11/2026), no un despacho medido de la estación. Referencias: despacho promedio por estación en Argentina ≈ 270 mi… | 150.000 = 150000.0 · 270.000 = 270000.0 · 400.000 = 400000.0 |
 | DEM-02 | Perfil horario (24 factores) | (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0, 1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0) | factor | 🟡 estimación | San Rafael | baja | DATOS §2 (tabla de 24 factores, §14.3) | heredado = (0.3, 0.2, 0.15, 0.15, 0.25, 0.6, 1.1, 1.8, 2.0, 1.5, 1.1, 1.0, 1.2, 1.1, 0.9, 0.9, 1.0, 1.4, 1.9, 2.0, 1.6, 1.1, 0.7, 0.4) |
 | DEM-03 | Factor de fin de semana | 1.3 | × | 🟡 estimación | San Rafael | media | DATOS §2 (tabla ×1,3–1,5) | 1,24 = 1.24 · 1,50 = 1.5 |
 | DEM-04 | Mezcla de producto en litros (líquidos) | (('super', 28.0), ('vpower', 19.5), ('diesel_g2', 29.3), ('diesel_g3', 23.2)) | % | 🟡 estimación | San Rafael | baja | DATOS §7 (Surtidores.com.ar, mercado por volumen) | mix de flota · G2/G3 75/25 = 0.75 · sólo G2 (100/0) = 1.0 |
@@ -72,10 +72,11 @@
 | DEM-08 | Entrada al minimarket | 0.2 | % | 🟡 estimación | San Rafael | baja | ONBOARDING ('dato directo YPF', no confirmado) | 15 % = 0.15 · 30 % = 0.3 · 45 % = 0.45 |
 | DEM-09 | Eventos (opcionales) | Vendimia, Las Leñas, Carnaval, vacaciones de invierno (escenarios, no default) | — | 🟢 dato | San Rafael | baja | DATOS §6 | — |
 | DEM-10 | Cierre de ruta y demanda | la cuantificación es un escenario, no un default | — | 🟠 supuesto | San Rafael | sin_dato | DATOS §6 | — |
-| DEM-11 | Litros medios por cliente líquido | 35.7 | L/cliente | 🟡 estimación | San Rafael | media | cadena de demanda §14.2 (mezcla DEM-04 × cargas medias §5-D) | — |
+| DEM-11 | Litros medios por cliente líquido | 39.73 | L/cliente | 🟡 estimación | San Rafael | media | derivado: Σ (probabilidad del tipo VEH-08/VEH-09 × litros medios del tipo VEH-10) | 35,7 L = 35.7 |
 | DEM-13 | Duplicar la demanda en la hora pico (Editar simulación) | 2.0 | × | 🟠 supuesto | San Rafael | sin_dato | pedido del grupo (6/10/2026) | — |
 | DEM-14 | Calendario de demanda: factor de cada temporada | (('verano', 1.06), ('vacaciones_invierno', 1.08), ('invierno', 0.94)) | × | 🟠 supuesto | San Rafael | baja | grupo (13/10/2026), nota 08: la mitad del desvío del proxy turístico (DATOS §6) respecto de su promedio, porque la ocupación hotelera exagera el ef… | neutro = (('verano', 1.0), ('vacaciones_invierno', 1.0), ('invierno', 1.0)) |
 | DEM-15 | Vacaciones de invierno de Mendoza (receso escolar 2026) | ((7, 6), (7, 17)) | mes, día | 🟢 dato | Mendoza | media | calendario escolar 2026 de la DGE de Mendoza, citado por Los Andes (6-jul-2026), Ámbito y El Sol (nota 08; el sitio de la DGE no se pudo abrir) | 9–20 jul = ((7, 9), (7, 20)) |
+| DEM-16 | Variabilidad del total de vehículos del día (pestaña Vehículos) | 0.15 | × | 🟠 supuesto | San Rafael | baja | prompt del grupo (2/11/2026) | — |
 | DEM-12 | Cambio de quincena (S12): factor y días del mes | (2.0, (16, 17, 18)) | × · día del mes | 🟠 supuesto | San Rafael | sin_dato | DATOS §2 (+100 % 1–3 días/mes; limitación de camiones, fuente débil); los días 16–18 (cambio de quincena) son una elección del grupo | +50 % = (1.5, (16, 17, 18)) · fin de mes = (2.0, (1, 2, 3)) |
 
 ## Vehículos y litros por carga
@@ -89,8 +90,10 @@
 | VEH-05 | Auto GNC: cilindro y carga | (14.0, (2.8, 4.2, 14.0)) | m³ | 🟢 dato | San Rafael | baja | nota 03 §2.10 (sólo resumen de buscador) | — |
 | VEH-06 | Litros por carga del motor (una sola distribución) | (15.0, 30.0, 60.0) | L | ⚪ heredado | San Rafael | sin_dato | proyecto hipotético (el desglose por tipo de vehículo entra en Fase 2) | — |
 | VEH-07 | Presets de litros por carga (C12): media baja y alta | (('bajo', (0.1, 0.3, 0.5)), ('alto', (0.6, 0.8, 1.0))) | × tanque | 🟠 supuesto | San Rafael | sin_dato | orquestador C12 (nota 03: se carga ≈ 30 % del tanque; llenar es raro) | — |
-| VEH-00 | Tipo de vehículo por producto (matriz) | (('super', (0.12, 0.85, 0.03, 0.0)), ('vpower', (0.0, 0.85, 0.15, 0.0)), ('diesel_g2', (0.0, 0.2, 0.55, 0.25)), ('diesel_g3', (0.0, 0.15, 0.45, 0.4… | % | 🟠 supuesto | San Rafael | sin_dato | orquestador (diseño 'producto primero', §7.2) | — |
-| VEH-08 | Colectivos entre los vehículos pesados (pestaña Vehículos) | 0.15 | % | 🟠 supuesto | Mendoza | sin_dato | supuesto del grupo (2/11/2026). Referencias: Vialidad Nacional, accesos de Mendoza (2019): 86,7 % autos y camionetas, 9,9 % camiones sin acoplado, … | — |
+| VEH-00 | Tipo de vehículo por producto (matriz) | derivada (ver nota) | % | 🟡 estimación | San Rafael | baja | derivada (2/11/2026) de VEH-08/VEH-09 (qué vehículos llegan), VEH-10 (cuánto carga cada uno) y DEM-04 (mezcla de litros) | diseño 'producto primero' del orquestador = (('super', (0.12, 0.85, 0.03, 0.0)), ('vpower', (0.0, 0.85, 0.15, 0.0)), ('diesel_g2', (0.0, 0.2, 0.55,… |
+| VEH-08 | Composición del tránsito en la RN 143, entrada a San Rafael | (('auto', 0.705), ('pick_up', 0.198), ('colectivo', 0.016), ('camion', 0.081)) | % | 🟢 dato | San Rafael | alta | DNV 4º Distrito, Estudio de tránsito RN 143, censo de cobertura de 48 h en El Toledano (prog. 528), mar-2018; IF-2021-06581772-APN-DMZA#DNV (ene-20… | accesos de Mendoza (DNV vía MDZ, 2019) = (0.867, 0.099, 0.034) |
+| VEH-09 | Motos: parte de las visitas a la estación | 0.2 | % | 🟠 supuesto | San Rafael | baja | supuesto del grupo; parque de San Rafael: 55.192 motos y 90.065 automotores (Todo Riesgo con datos DNRPA, ago-2021) | — |
+| VEH-10 | Litros por carga según el tipo de vehículo | (('moto', (3.0, 6.0, 12.0)), ('auto', (10.0, 25.0, 50.0)), ('pick_up', (15.0, 40.0, 80.0)), ('colectivo', (80.0, 150.0, 250.0)), ('camion', (60.0, … | L | 🟠 supuesto | San Rafael | baja | prompt del grupo (2/11/2026): moto tanque de 10–15 L; auto ≈ 50 L con carga parcial o fija frecuente; pick-ups (Hilux, Ranger, Amarok) ≈ 80 L; cole… | fracción del tanque = Triangular(0,2·T; 0,3·T; 1,0·T) |
 
 ## Tiempos de servicio
 
@@ -99,6 +102,7 @@
 | TIE-01 | Caudal de la manguera | 40.0 | L/min | 🟢 dato | Argentina / otro | baja | nota 03 D22/D23 (Paraguay 2012) | 90 L/min = 90.0 · 120 L/min = 120.0 |
 | TIE-02 | Carga nafta/diésel (por vehículo en la cara) | (2.0, 5.0, 8.0) | min | 🟠 supuesto | Argentina / otro | media | DATOS §3 (papers UNLP/UTN/UNC, sin medición en San Rafael) | nota 03 = (2.4, 3.7, 5.0) |
 | TIE-03 | Extra de camión/ómnibus | + litros ÷ 90 | min | 🟠 supuesto | San Rafael | baja | orquestador | — |
+| TIE-07 | Tiempo de playero según el tipo de vehículo | (('moto', (2.0, 3.0, 5.0)), ('auto', (3.0, 4.5, 8.0)), ('pick_up', (3.5, 5.0, 9.0)), ('colectivo', (6.0, 9.0, 14.0)), ('camion', (6.0, 10.0, 16.0))) | min | 🟠 supuesto | San Rafael | media | prompt del grupo (2/11/2026). Referencia: Shell Tucumán (UNT, FACE, ago-2026) ocupa la cara ≈ 9,8 min, pero eso es maniobra + carga + pago; acá es … | una sola distribución = (2.0, 5.0, 8.0) |
 | TIE-04 | Carga GNC | (5.0, 7.0, 12.0) | min | 🟠 supuesto | San Rafael | media | DATOS §3 | nota 03 = (10.0, 15.0, 30.0) |
 | TIE-05 | Compra en el minimarket | (2.0, 4.0, 10.0) | min | 🟠 supuesto | San Rafael | baja | DATOS §3 | heredado = (1.5, 3.0, 6.0) |
 | TIE-06 | Paciencia (cola de cara / cola de caja) | (10.0, 8.0) | min | ⚪ heredado | San Rafael | sin_dato | proyecto hipotético | 5 min = 5.0 · 20 min = 20.0 |

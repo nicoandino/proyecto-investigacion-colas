@@ -1,157 +1,163 @@
-"""Vehículos por día — motos, autos, colectivos y camiones — con Monte Carlo (pedido de Nico, 2/11/2026).
+"""Vehículos por día (Montecarlo): motos, autos, camionetas, colectivos y camiones (2/11/2026).
 
-¿Hay un dato publicado de cuántos vehículos de cada tipo cargan por día o por mes en esta estación? **No** (ver
-`research_notes/…/14_vehiculos_por_tipo.md`): ni la estación, ni la Secretaría de Energía, ni Vialidad publican conteos
-por tipo de vehículo en una estación de San Rafael. Lo que sí hay son **proporciones** (Vialidad: 86,7 % autos y
-camionetas en los accesos de Mendoza; AFAC: 3 % de pesados en el parque). Por eso se **sortea**:
+¿Hay un dato publicado de cuántos vehículos de cada tipo cargan por día o por mes en una estación de San Rafael?
+**No** (research_notes/demanda_310k_y_mix_vehicular.md). Sí hay **proporciones**: el censo de Vialidad en la RN 143 a
+la entrada de San Rafael (VEH-08; la RN 143 es la propia Av. Balloffet) y el parque de motos (VEH-09). Por eso se
+sortea, día por día:
 
-  1. La probabilidad de cada tipo sale del propio modelo: mezcla de productos (DEM-04, DEM-05) × tipo de vehículo por
-     producto (VEH-00). El pesado del motor ("camión / ómnibus", VEH-04) se parte en camiones y colectivos (VEH-08).
-  2. Probabilidad acumulada.
-  3. Intervalo de números aleatorios de 4 cifras (0000 a 9999).
-  4. Para cada cliente del día (los clientes por día salen de la simulación) se genera un número aleatorio.
-  5. El número cae en un intervalo ⇒ ese es su tipo de vehículo. Contando, salen los de cada tipo en el día.
+  1. Total de vehículos del día: N ~ Normal(media del día, DEM-16 × media base), redondeado y ≥ 0. La media del día
+     sale de los litros del día ÷ litros medios por vehículo (DEM-11): ≈ 257 con 310.000 L/mes; la media base es la
+     del día promedio del año (sin fin de semana ni estacionalidad).
+  2. Tipo de cada vehículo: U(0,1) contra la tabla de probabilidades acumuladas (el método de la cátedra).
+  3. Litros de cada carga: Triangular del tipo (VEH-10).
 
-Los números aleatorios salen de un generador con semilla propia: no tocan los streams del motor (STREAMS).
-Este módulo no importa Streamlit.
+Es la MISMA tabla que usa el simulador para sus llegadas (`ParametrosSimulacion.mezcla_vehiculos`, matriz VEH-00
+derivada): la pestaña muestra el sorteo y el motor lo usa. Los números aleatorios salen de un generador con semilla
+propia (no tocan los STREAMS del motor). Este módulo no importa Streamlit.
 """
 
 from __future__ import annotations
 
-import random
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, replace
 
+import numpy as np
+
+from sim.config import dias_del_mes
 from sim.datos import valor
 
-#: Las cuatro categorías que se muestran, en orden.
-CATEGORIAS: tuple[str, ...] = ("moto", "auto", "colectivo", "camion")
+#: Los cinco tipos, en el orden de la tabla.
+CATEGORIAS: tuple[str, ...] = ("moto", "auto", "pick_up", "colectivo", "camion")
 NOMBRES: dict[str, str] = {
-    "moto": "Motos",
-    "auto": "Autos y camionetas",
-    "colectivo": "Colectivos",
-    "camion": "Camiones",
+    "moto": "Moto", "auto": "Auto", "pick_up": "Camioneta", "colectivo": "Colectivo", "camion": "Camión",
 }
-#: Tipo del motor (VEH-00 / tipos_vehiculo) → categoría de la pestaña. El pesado se reparte aparte (VEH-08).
-_CATEGORIA_DEL_TIPO = {"moto": "moto", "auto": "auto", "pick_up": "auto", "auto_gnc": "auto"}
-#: Orden de los tipos en la matriz VEH-00.
-_TIPOS_MATRIZ = ("moto", "auto", "pick_up", "camion")
-#: Los números aleatorios van de 0000 a 9999.
-ESCALA = 10_000
 
 
 @dataclass(frozen=True)
 class Intervalo:
-    """Una fila de la tabla de Monte Carlo (pasos 1 a 3)."""
+    """Una fila de la tabla de Montecarlo: probabilidad, acumulada y rango de U(0,1)."""
 
     categoria: str
     probabilidad: float
     acumulada: float
-    desde: int          # primer número aleatorio del intervalo (0000–9999)
-    hasta: int          # último número aleatorio del intervalo
+    desde: float
+    hasta: float
 
     @property
     def texto(self) -> str:
-        return f"{self.desde:04d} a {self.hasta:04d}" if self.hasta >= self.desde else "—"
+        return f"[{self.desde:.4f} – {self.hasta:.4f})".replace(".", ",")
 
 
 @dataclass(frozen=True)
 class DiaVehiculos:
-    """Un día del sorteo: cuántos clientes hubo y cuántos de cada tipo salieron."""
+    """Un día del sorteo."""
 
-    dia: int
-    clientes: int
-    cantidades: tuple[int, ...]                       # en el orden de CATEGORIAS
-    detalle: tuple[tuple[int, str], ...] = ()         # (número aleatorio, categoría) de los primeros clientes
+    dia: int                                        # 1 = primer día del período
+    media: float                                    # vehículos esperados ese día
+    n: int                                          # vehículos sorteados (paso 1)
+    cantidades: tuple[int, ...]                     # por tipo, en el orden de CATEGORIAS
+    litros: tuple[float, ...]                       # por tipo
+    detalle: tuple[tuple[float, str, float], ...] = ()   # (U, tipo, litros) de los primeros vehículos
+
+    @property
+    def litros_total(self) -> float:
+        return float(sum(self.litros))
 
 
 @dataclass(frozen=True)
-class Resumen:
-    """Una categoría en todo el período: lo sorteado contra lo esperado."""
+class ResumenMes:
+    """Litros de un mes repetido muchas veces (Montecarlo): media y percentiles 5 y 95."""
 
-    categoria: str
-    total: int
-    promedio_dia: float
-    esperado_dia: float          # clientes por día promedio × probabilidad
-    minimo: int
-    maximo: int
-
-
-def composicion(p, frac_colectivos: float | None = None) -> tuple[tuple[str, float], ...]:
-    """Probabilidad de cada categoría para un cliente cualquiera (paso 1).
-
-    Σ sobre los productos de (probabilidad de llegada del producto × % del tipo de vehículo en ese producto, VEH-00).
-    El GNC es todo auto. El pesado se parte: `frac_colectivos` (VEH-08) son colectivos y el resto camiones.
-    """
-    frac = float(valor("VEH-08")) if frac_colectivos is None else float(frac_colectivos)
-    if not 0.0 <= frac <= 1.0:
-        raise ValueError("La fracción de colectivos tiene que estar entre 0 y 1.")
-    matriz = dict(p.matriz_tipos)
-    prob = dict.fromkeys(CATEGORIAS, 0.0)
-    for producto, peso in zip(p.productos, p.pesos_llegada()):
-        if producto.es_gnc:
-            prob["auto"] += peso
-            continue
-        for tipo, fraccion in zip(_TIPOS_MATRIZ, matriz[producto.id]):
-            if tipo == "camion":
-                prob["colectivo"] += peso * fraccion * frac
-                prob["camion"] += peso * fraccion * (1.0 - frac)
-            else:
-                prob[_CATEGORIA_DEL_TIPO[tipo]] += peso * fraccion
-    total = sum(prob.values())
-    return tuple((c, prob[c] / total) for c in CATEGORIAS)
+    mes: int
+    repeticiones: int
+    esperado: float          # Σ litros del día del simulador en ese mes
+    media: float
+    p5: float
+    p95: float
+    vehiculos_dia: float     # vehículos por día, promedio
 
 
-def tabla(comp: Sequence[tuple[str, float]]) -> tuple[Intervalo, ...]:
-    """Pasos 1 a 3: probabilidad, acumulada e intervalo de números aleatorios (0000–9999)."""
-    filas, acumulada, desde = [], 0.0, 0
-    for i, (categoria, prob) in enumerate(comp):
-        acumulada += prob
-        hasta = ESCALA - 1 if i == len(comp) - 1 else int(round(acumulada * ESCALA)) - 1
-        filas.append(Intervalo(categoria, prob, min(acumulada, 1.0), desde, hasta))
-        desde = hasta + 1
+def tabla(p) -> tuple[Intervalo, ...]:
+    """Pasos 1 a 3 del Montecarlo: probabilidad, acumulada y rango [desde, hasta) de U(0,1)."""
+    filas, acumulada = [], 0.0
+    for i, (categoria, prob) in enumerate(p.mezcla_vehiculos):
+        desde = acumulada
+        acumulada = 1.0 if i == len(p.mezcla_vehiculos) - 1 else acumulada + prob
+        filas.append(Intervalo(categoria, prob, acumulada, desde, acumulada))
     return tuple(filas)
 
 
-def asignar(numero: int, intervalos: Sequence[Intervalo]) -> str:
-    """Paso 5: el número aleatorio (0000–9999) cae en un intervalo ⇒ la categoría."""
+def tipo_de(u: float, intervalos: tuple[Intervalo, ...]) -> str:
+    """Paso 5: el número U cae en un rango ⇒ el tipo de vehículo."""
     for fila in intervalos:
-        if fila.desde <= numero <= fila.hasta:
+        if fila.desde <= u < fila.hasta:
             return fila.categoria
-    raise ValueError(f"Número aleatorio fuera de rango: {numero}.")
+    return intervalos[-1].categoria
 
 
-def sortear(clientes_por_dia: Sequence[int], comp: Sequence[tuple[str, float]], semilla: int = 1,
-            detalle: int = 20) -> tuple[DiaVehiculos, ...]:
-    """Pasos 4 y 5 para cada día: un número aleatorio por cliente y su tipo de vehículo; se cuentan por día.
+def media_base(p) -> float:
+    """Vehículos de líquidos de un día promedio: litros del mes ÷ (365 / 12) días ÷ litros medios (≈ 257)."""
+    return p.litros_mes / (365.0 / 12.0) / p.litros_medios_por_cliente
 
-    `detalle` = cuántos de los primeros clientes de cada día se guardan con su número (para mostrar el sorteo).
-    """
-    intervalos = tabla(comp)
-    generador = random.Random(semilla)
+
+def media_del_dia(p, dia: int) -> float:
+    """Vehículos de líquidos esperados ese día: litros del día (fin de semana y estacionalidad) ÷ litros medios."""
+    return p.litros_del_dia(dia) / p.litros_medios_por_cliente
+
+
+def _parametros(p):
+    intervalos = tabla(p)
+    acumuladas = np.array([f.acumulada for f in intervalos])
+    tipos = {t.id: t for t in p.tipos_vehiculo}
+    a = np.array([tipos[c].litros.minimo for c in CATEGORIAS])
+    m = np.array([tipos[c].litros.moda for c in CATEGORIAS])
+    b = np.array([tipos[c].litros.maximo for c in CATEGORIAS])
+    return intervalos, acumuladas, a, m, b
+
+
+def _un_dia(rng, media: float, desvio: float, acumuladas, a, m, b):
+    n = max(0, int(round(rng.normal(media, desvio))))
+    u = rng.random(n)
+    idx = np.minimum(np.searchsorted(acumuladas, u, side="right"), len(CATEGORIAS) - 1)
+    litros = rng.triangular(a[idx], m[idx], b[idx]) if n else np.zeros(0)
+    return n, u, idx, litros
+
+
+def sortear(p, semilla: int = 1, cv: float | None = None, detalle: int = 15) -> tuple[DiaVehiculos, ...]:
+    """Los pasos 1 a 3 para cada día del período de `p`."""
+    cv = float(valor("DEM-16")) if cv is None else float(cv)
+    _, acumuladas, a, m, b = _parametros(p)
+    rng = np.random.default_rng(semilla)
+    desvio = cv * media_base(p)
     dias = []
-    for d, n in enumerate(clientes_por_dia, start=1):
-        cuenta = dict.fromkeys(CATEGORIAS, 0)
-        primeros = []
-        for k in range(int(n)):
-            numero = int(generador.random() * ESCALA)
-            categoria = asignar(numero, intervalos)
-            cuenta[categoria] += 1
-            if k < detalle:
-                primeros.append((numero, categoria))
-        dias.append(DiaVehiculos(d, int(n), tuple(cuenta[c] for c in CATEGORIAS), tuple(primeros)))
+    for d in range(1, p.dias + 1):
+        media = media_del_dia(p, d)
+        n, u, idx, litros = _un_dia(rng, media, desvio, acumuladas, a, m, b)
+        cantidades = np.bincount(idx, minlength=len(CATEGORIAS))
+        por_tipo = np.bincount(idx, weights=litros, minlength=len(CATEGORIAS))
+        primeros = tuple((float(u[k]), CATEGORIAS[int(idx[k])], float(litros[k])) for k in range(min(detalle, n)))
+        dias.append(DiaVehiculos(d, media, n, tuple(int(x) for x in cantidades),
+                                 tuple(float(x) for x in por_tipo), primeros))
     return tuple(dias)
 
 
-def resumir(dias: Sequence[DiaVehiculos], comp: Sequence[tuple[str, float]]) -> tuple[Resumen, ...]:
-    """Por categoría: total del período, promedio por día, lo esperado (clientes × probabilidad), mínimo y máximo."""
-    if not dias:
-        return ()
-    n = len(dias)
-    clientes_medios = sum(d.clientes for d in dias) / n
-    salida = []
-    for i, (categoria, prob) in enumerate(comp):
-        valores = [d.cantidades[i] for d in dias]
-        salida.append(Resumen(categoria, sum(valores), sum(valores) / n, clientes_medios * prob,
-                              min(valores), max(valores)))
-    return tuple(salida)
+def resumen_mes(p, mes: int, semilla: int = 1, repeticiones: int = 1000, cv: float | None = None) -> ResumenMes:
+    """El mes `mes` (del año de referencia) sorteado `repeticiones` veces: media, P5 y P95 de los litros."""
+    cv = float(valor("DEM-16")) if cv is None else float(cv)
+    p_mes = replace(p, fecha_inicio=(mes, 1), dias=dias_del_mes(mes), dias_calentamiento=0, dia_animado=1)
+    _, acumuladas, a, m, b = _parametros(p_mes)
+    rng = np.random.default_rng(10_000 + semilla)
+    desvio = cv * media_base(p_mes)
+    medias = [media_del_dia(p_mes, d) for d in range(1, p_mes.dias + 1)]
+    totales, vehiculos = np.zeros(repeticiones), np.zeros(repeticiones)
+    for r in range(repeticiones):
+        for media in medias:
+            n, _, _, litros = _un_dia(rng, media, desvio, acumuladas, a, m, b)
+            totales[r] += litros.sum()
+            vehiculos[r] += n
+    esperado = sum(p_mes.litros_del_dia(d) for d in range(1, p_mes.dias + 1))
+    return ResumenMes(mes, repeticiones, esperado, float(totales.mean()), float(np.percentile(totales, 5)),
+                      float(np.percentile(totales, 95)), float(vehiculos.mean() / p_mes.dias))
+
+
+__all__ = ["CATEGORIAS", "NOMBRES", "DiaVehiculos", "Intervalo", "ResumenMes", "media_base",
+           "media_del_dia", "resumen_mes", "sortear", "tabla", "tipo_de"]

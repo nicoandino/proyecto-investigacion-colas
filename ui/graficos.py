@@ -628,11 +628,11 @@ def grafico_indices(indices) -> go.Figure:
 # =============================================================================
 def grafico_vehiculos_por_dia(dias, nombres: dict[str, str], categorias: tuple[str, ...]) -> go.Figure:
     """Barras apiladas: cuántos vehículos de cada tipo salieron en el sorteo de cada día."""
-    colores = {"moto": TURQUESA, "auto": AMARILLO, "colectivo": VIOLETA, "camion": NARANJA}
+    colores = {"moto": TURQUESA, "auto": AMARILLO, "pick_up": CELESTE, "colectivo": VIOLETA, "camion": NARANJA}
     numeros = [d.dia for d in dias]
     fig = go.Figure()
     # Los más chicos abajo, para que se vean; los autos arriba.
-    for categoria in ("moto", "colectivo", "camion", "auto"):
+    for categoria in ("colectivo", "camion", "pick_up", "moto", "auto"):
         i = categorias.index(categoria)
         fig.add_bar(x=numeros, y=[d.cantidades[i] for d in dias], name=nombres[categoria],
                     marker_color=colores[categoria])

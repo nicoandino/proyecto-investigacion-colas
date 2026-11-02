@@ -24,13 +24,16 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 ## Qué modela hoy
 
 - **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (**2·3·3**, un playero
-  fijo más por turno desde el 2/11/2026); el **encargado** pasa cada 6 h (08 · 14 · 20 · 02) y en la mitad de las
-  visitas atiende 1 h como un playero más (PER-08; sin azar, una visita sí y otra no; stream "encargado"); cola finita;
+  fijo más por turno desde el 2/11/2026); el **encargado** pasa cada 6 h (02 · 08 · 14 · 20), se queda Triangular(20,
+  40, 60) min y atiende como un playero más si hay ≥ 3 esperando o con p = 0,30 (PER-08; stream "encargado"); cola finita;
   abandono; caja del minimarket. **El GNC también lo carga un playero** (PER-04) y además usa un compresor.
-- **Demanda:** litros/mes (**310.000, valor oficial del grupo** desde el 2/11/2026) ⇒ clientes/día (≈ 289) con perfil horario, fin de semana ×1,30 normalizado,
+- **Demanda:** litros/mes (**310.000, supuesto adoptado por el grupo** desde el 2/11/2026) ⇒ ≈ 257 vehículos/día de
+  líquidos (÷ 39,7 L, DEM-11) más el GNC, con perfil horario, fin de semana ×1,30 normalizado,
   estacionalidad neutra en `ParametrosSimulacion()`; en la app, por defecto, los **índices mensuales de la serie real**
   (PRO-01) y como opción el **calendario de temporadas** (DEM-14/15, supuesto). Cada cliente: producto → tipo de
-  vehículo → litros → ¿compra?
+  vehículo → litros → ¿compra? **Cinco tipos líquidos** (moto, auto, camioneta, colectivo, camión): censo de Vialidad en
+  la RN 143 (VEH-08) + 20 % de motos (VEH-09), litros (VEH-10) y **tiempo de playero por tipo** (TIE-07); la matriz VEH-00
+  se **deriva** para cumplir la mezcla de visitas y la de litros (DEM-04).
 - **Inventario:** un tanque por líquido, política (s, Q) por producto (en la app, por defecto la más conveniente:
   s = 2 y Q = 4,5 días de venta, INV-13), camión por producto (plazo 24–36–48 h)
   desde Dock Sud (991 km) por una red de rutas (Dijkstra) con cortes; orígenes alternativos Arroyo Seco y Luján
@@ -40,7 +43,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **148 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **149 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -57,10 +60,11 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   encargado a esa hora) y la Wq que midió la simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y
   qué significa. Sin M/M/s teórico (Nico lo pidió práctico). Por defecto la Wq sale de la **misma estación con llegadas
   al azar** (Poisson): sin azar, con 3 playeros en el pico, los autos llegan espaciados exactos y la cola da cero.
-- **Vehículos** (`sim/vehiculos.py`, pestaña Vehículos, 2/11/2026): no hay un dato publicado de motos, autos, colectivos y
-  camiones por día ⇒ **Monte Carlo de 5 pasos**: la probabilidad de cada tipo sale del modelo (DEM-04/05 × VEH-00; da
-  86,7 % de livianos, igual que Vialidad en los accesos de Mendoza), el pesado se parte con VEH-08 (15 % colectivos,
-  supuesto) y se sortea un número de 0000 a 9999 por cliente del día. Semilla propia (no toca STREAMS). Nota 14.
+- **Vehículos (Montecarlo)** (`sim/vehiculos.py`, 2/11/2026): no hay un dato publicado de vehículos por tipo y por
+  día ⇒ por día, N ~ Normal(media del día; 0,15 × 257) (DEM-16), el tipo por rangos de U(0,1) (la misma tabla que usa el
+  motor) y los litros Triangular por tipo; el mes sorteado 1.000 veces (media, P5, P95 ≈ 310 mil L). Semilla visible y
+  "Re-sortear"; numpy con semilla propia (no toca STREAMS). Nota `research_notes/demanda_310k_y_mix_vehicular.md`,
+  ORQUESTADOR §36. Con 2·3·3 la cola en el pico es chica (Wq ≈ 1 min con azar, ≈ 0 sin azar).
 
 ## Reglas de oro (no romper)
 
@@ -81,7 +85,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      148 controles
+verificar.py      149 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · colas · finanzas · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos · vistas
@@ -94,7 +98,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 148 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 149 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·

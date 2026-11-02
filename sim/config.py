@@ -239,13 +239,14 @@ class Grupo:
 class TipoVehiculo:
     """Un tipo de vehículo con su tanque y su distribución de litros por carga (§5-D)."""
 
-    id: str                    # "moto" | "auto" | "pick_up" | "camion" | "auto_gnc"
+    id: str                    # "moto" | "auto" | "pick_up" | "colectivo" | "camion" | "auto_gnc"
     nombre: str
     tanque: float              # litros (o m³ del cilindro para el GNC)
-    litros: Triangular         # Triangular(0,20·T ; 0,30·T ; 1,00·T) — media 0,50·T
-    es_camion: bool = False    # TIE-03: suma litros ÷ 90 al tiempo de servicio
+    litros: Triangular         # VEH-10 (líquidos) · VEH-05 (GNC, m³)
+    es_camion: bool = False    # pesado (colectivo o camión)
     es_moto: bool = False
     es_gnc: bool = False       # el cilindro se mide en m³, no en litros
+    tiempo: Triangular | None = None   # TIE-07: minutos de playero; None = TIE-02 (+ TIE-03 si es pesado)
 
 
 @dataclass(frozen=True)
@@ -269,48 +270,115 @@ class InventarioProducto:
 
 
 #: Orden de los tipos en la matriz tipo-por-producto (VEH-00 del Registro).
-_TIPOS_MATRIZ = ("moto", "auto", "pick_up", "camion")
+_TIPOS_MATRIZ = ("moto", "auto", "pick_up", "colectivo", "camion")
+#: Tanque de cada tipo (VEH-01..05). El colectivo usa el del pesado (VEH-04).
+_TANQUE = {"moto": "VEH-03", "auto": "VEH-01", "pick_up": "VEH-02", "colectivo": "VEH-04", "camion": "VEH-04"}
+#: Tipos que cargan sólo nafta y sólo diésel (regla de VEH-00); la camioneta completa lo que falte.
+_SOLO_NAFTA = ("moto", "auto")
+_SOLO_DIESEL = ("colectivo", "camion")
 
 
-def _tipo_desde(id_tipo: str, dato_id: str, es_camion: bool = False,
-                es_moto: bool = False, es_gnc: bool = False) -> TipoVehiculo:
-    """TipoVehiculo desde un VEH-0x del Registro: (tanque, (mín, moda, máx))."""
-    tanque, _ = valor(dato_id)
-    if es_gnc:
-        _, carga = valor(dato_id)                       # m³ del cilindro
-        return TipoVehiculo(id_tipo, "", tanque, Triangular(*carga),
-                            es_camion=es_camion, es_moto=es_moto, es_gnc=True)
-    return TipoVehiculo(
-        id_tipo, "", tanque, Triangular(0.20 * tanque, 0.30 * tanque, 1.00 * tanque),
-        es_camion=es_camion, es_moto=es_moto,
-    )
+def tipos_vehiculo_desde_registro(
+    litros: dict[str, tuple[float, float, float]] | None = None,
+    tiempos: dict[str, tuple[float, float, float]] | None = None,
+) -> tuple[TipoVehiculo, ...]:
+    """Los seis tipos de vehículo: cinco líquidos con sus litros (VEH-10) y su tiempo de playero (TIE-07), y el auto GNC.
+
+    `litros` y `tiempos` reemplazan a los del Registro (el menú los edita).
+    """
+    litros = dict(valor("VEH-10")) | (litros or {})
+    tiempos = dict(valor("TIE-07")) | (tiempos or {})
+    salida = [
+        TipoVehiculo(t, "", valor(_TANQUE[t])[0], Triangular(*litros[t]),
+                     es_camion=t in _SOLO_DIESEL, es_moto=t == "moto", tiempo=Triangular(*tiempos[t]))
+        for t in _TIPOS_MATRIZ
+    ]
+    tanque_gnc, carga_gnc = valor("VEH-05")                  # m³ del cilindro
+    salida.append(TipoVehiculo("auto_gnc", "", tanque_gnc, Triangular(*carga_gnc), es_gnc=True))
+    return tuple(salida)
 
 
-def tipos_vehiculo_desde_registro() -> tuple[TipoVehiculo, ...]:
-    """Los cinco tipos de vehículo (§5-D), con la regla de carga 0,20/0,30/1,00 × tanque."""
-    return (
-        _tipo_desde("moto", "VEH-03", es_moto=True),        # moto 110 cc, 3,7 L
-        _tipo_desde("auto", "VEH-01"),                      # auto, 47 L
-        _tipo_desde("pick_up", "VEH-02"),                   # pick-up / utilitario, 80 L
-        _tipo_desde("camion", "VEH-04", es_camion=True),    # camión, 300 L (supuesto)
-        _tipo_desde("auto_gnc", "VEH-05", es_gnc=True),     # auto GNC, cilindro 14 m³
-    )
+def mezcla_de_visitas(motos: float | None = None) -> tuple[tuple[str, float], ...]:
+    """Qué parte de los vehículos que cargan líquidos es de cada tipo: motos (VEH-09) y el resto con VEH-08."""
+    motos = float(valor("VEH-09")) if motos is None else float(motos)
+    if not 0.0 <= motos < 1.0:
+        raise ValueError("La parte de motos tiene que estar entre 0 y 1.")
+    transito = dict(valor("VEH-08"))
+    total = sum(transito.values())
+    return (("moto", motos),) + tuple((t, (1.0 - motos) * transito[t] / total) for t in _TIPOS_MATRIZ[1:])
 
 
-def matriz_tipo_por_producto() -> tuple[tuple[str, tuple[float, ...]], ...]:
-    """Matriz tipo de vehículo por producto (VEH-00), en orden (moto, auto, pick-up, camión)."""
-    return valor("VEH-00")
+def matriz_tipo_por_producto(
+    tipos: tuple[TipoVehiculo, ...] | None = None,
+    visitas: tuple[tuple[str, float], ...] | None = None,
+    mezcla_litros: dict[str, float] | None = None,
+) -> tuple[tuple[str, tuple[float, ...]], ...]:
+    """Matriz tipo de vehículo por producto (VEH-00), DERIVADA para que se cumplan a la vez dos cosas:
+
+    1. la mezcla de vehículos que llegan (VEH-08/VEH-09) y
+    2. la mezcla de litros por producto (DEM-04).
+
+    Regla: litros de cada tipo = su parte de las visitas × sus litros medios (VEH-10). Las motos cargan Súper; los
+    autos, nafta; las camionetas completan la nafta que falta y el resto es diésel; colectivos y camiones, diésel.
+    La nafta de autos y camionetas se reparte entre Súper y V-Power para que la Súper dé lo de DEM-04 (las motos
+    ya cargaron Súper); el diésel de todos, G2/G3 según DEM-04. Los clientes de cada celda = litros ÷ litros medios
+    del tipo; la fila de cada producto se normaliza. El GNC es todo auto (columna aparte del motor).
+    """
+    tipos = {t.id: t for t in (tipos or tipos_vehiculo_desde_registro())}
+    visitas = dict(visitas or mezcla_de_visitas())
+    mezcla = mezcla_litros or {k: v for k, v in valor("DEM-04")}
+    total_mezcla = sum(mezcla.values())
+    pct = {k: v / total_mezcla for k, v in mezcla.items()}
+    media = {t: tipos[t].litros.media for t in _TIPOS_MATRIZ}
+    litros_tipo = {t: visitas[t] * media[t] for t in _TIPOS_MATRIZ}
+    total = sum(litros_tipo.values())
+    litros_tipo = {t: v / total for t, v in litros_tipo.items()}          # parte de los litros de cada tipo
+
+    nafta_total = pct["super"] + pct["vpower"]
+    # Nafta de cada tipo: primero las motos y los autos; la camioneta completa; si sobra nafta, la ponen los pesados.
+    nafta: dict[str, float] = {}
+    falta = nafta_total
+    for t in ("moto", "auto", "pick_up", "colectivo", "camion"):
+        nafta[t] = min(litros_tipo[t], max(0.0, falta))
+        falta -= nafta[t]
+    diesel = {t: litros_tipo[t] - nafta[t] for t in _TIPOS_MATRIZ}
+    # Súper: las motos toda; el resto de la nafta se reparte con una sola fracción f.
+    resto = nafta_total - nafta["moto"]
+    f = 0.0 if resto <= 0 else min(1.0, max(0.0, (pct["super"] - nafta["moto"]) / resto))
+    g = pct["diesel_g2"] / (pct["diesel_g2"] + pct["diesel_g3"])
+    celdas = {
+        "super": {t: (nafta[t] if t == "moto" else f * nafta[t]) for t in _TIPOS_MATRIZ},
+        "vpower": {t: (0.0 if t == "moto" else (1.0 - f) * nafta[t]) for t in _TIPOS_MATRIZ},
+        "diesel_g2": {t: g * diesel[t] for t in _TIPOS_MATRIZ},
+        "diesel_g3": {t: (1.0 - g) * diesel[t] for t in _TIPOS_MATRIZ},
+    }
+    filas = []
+    for producto in ("super", "vpower", "diesel_g2", "diesel_g3"):
+        clientes = [celdas[producto][t] / media[t] for t in _TIPOS_MATRIZ]
+        suma = sum(clientes)
+        filas.append((producto, tuple(c / suma if suma else 0.0 for c in clientes)))
+    filas.append(("gnc", tuple(1.0 if t == "auto" else 0.0 for t in _TIPOS_MATRIZ)))
+    return tuple(filas)
 
 
-def productos_desde_registro() -> tuple[Producto, ...]:
+def litros_medios_de(tipos: tuple[TipoVehiculo, ...] | None = None,
+                     visitas: tuple[tuple[str, float], ...] | None = None) -> float:
+    """Litros medios por cliente líquido = Σ (parte de las visitas × litros medios del tipo) (DEM-11)."""
+    tipos = {t.id: t for t in (tipos or tipos_vehiculo_desde_registro())}
+    return sum(w * tipos[t].litros.media for t, w in (visitas or mezcla_de_visitas()))
+
+
+def productos_desde_registro(
+    tipos: tuple[TipoVehiculo, ...] | None = None,
+    matriz: tuple[tuple[str, tuple[float, ...]], ...] | None = None,
+) -> tuple[Producto, ...]:
     """Los cinco productos: mezcla en litros (DEM-04) + carga media derivada (§14.2).
 
-    La carga media de cada producto sale de la matriz tipo-por-producto × la media
-    de litros de cada tipo: Súper 21,4 · V-Power 26,0 · G2 64,2 · G3 81,5 · GNC 7 m³.
+    La carga media de cada producto sale de la matriz tipo-por-producto × la media de litros de cada tipo.
     """
     mezcla = dict(valor("DEM-04"))
-    tipos = {t.id: t for t in tipos_vehiculo_desde_registro()}
-    matriz = dict(matriz_tipo_por_producto())
+    tipos = {t.id: t for t in (tipos or tipos_vehiculo_desde_registro())}
+    matriz = dict(matriz or matriz_tipo_por_producto())
     salida = []
     for id_, nombre, grupo in (
         ("super", "Súper", "A"),
@@ -730,11 +798,12 @@ class ParametrosSimulacion:
     productos: tuple[Producto, ...] = PRODUCTOS_REALES
     tipos_vehiculo: tuple[TipoVehiculo, ...] = TIPOS_REALES
     matriz_tipos: tuple[tuple[str, tuple[float, ...]], ...] = matriz_tipo_por_producto()
+    mezcla_vehiculos: tuple[tuple[str, float], ...] = mezcla_de_visitas()   # VEH-08/09: qué vehículos llegan
     playeros_por_turno: tuple[int, int, int] = valor("PER-01")  # noche · mañana · tarde
     turnos: tuple[tuple[float, int], ...] = turnos_de(valor("PER-01"))  # (hora, playeros)
-    # PER-08: (cada cuántas horas pasa el encargado, hora de la primera visita, minutos que se queda,
-    # probabilidad de que atienda como un playero más). None = el encargado no baja a la playa.
-    encargado: tuple[float, float, float, float] | None = valor("PER-08")
+    # PER-08: (cada cuántas horas pasa el encargado, hora de la primera visita, ventana Triangular en minutos,
+    # cola que lo hace sumarse, probabilidad de sumarse igual). None = el encargado no baja a la playa.
+    encargado: tuple | None = valor("PER-08")
     pct_gnc: float = valor("DEM-05")
     capacidad_cola: int | None = valor("PER-05")   # por zona; la pisa `cola_por_cara` si está
     cola_por_cara: int | None = valor("PER-07")    # lugares de cola de CADA cara (misma en todas)
@@ -810,10 +879,12 @@ class ParametrosSimulacion:
             if min(self.playeros_por_turno) < 1:
                 raise ValueError("Tiene que haber al menos 1 playero por turno.")
             if self.encargado is not None:
-                cada, primera, minutos, prob = self.encargado
-                if not (cada > 0 and 0 <= primera < 24 and 0 < minutos <= cada * 60 and 0 <= prob <= 1):
-                    raise ValueError("encargado: cada > 0 h, primera visita entre 0 y 24 h, "
-                                     "0 < minutos ≤ el intervalo y probabilidad entre 0 y 1.")
+                cada, primera, ventana, umbral, prob = self.encargado
+                a, m, b = ventana
+                if not (cada > 0 and 0 <= primera < 24 and 0 < a <= m <= b <= cada * 60 and umbral >= 0
+                        and 0 <= prob <= 1):
+                    raise ValueError("encargado: cada > 0 h, primera visita entre 0 y 24 h, ventana 0 < mín ≤ moda "
+                                     "≤ máx ≤ el intervalo, cola ≥ 0 y probabilidad entre 0 y 1.")
             liquidos = {p.id for p in self.productos if not p.es_gnc}
             inventariados = {i.producto for i in self.inventario}
             if liquidos != inventariados:
@@ -1018,18 +1089,10 @@ class ParametrosSimulacion:
         n = max(1, int(round(24.0 / cada)))
         return tuple(sorted((primera + k * cada) % 24.0 for k in range(n)))
 
-    def encargado_ayuda_a_la_hora(self, hora: int) -> float:
-        """Playeros 'extra' que aporta el encargado en promedio en esa hora: probabilidad × fracción de la hora."""
-        if self.encargado is None:
-            return 0.0
-        minutos, prob = self.encargado[2], self.encargado[3]
-        total = 0.0
-        for h in self.visitas_encargado():
-            desde, hasta = h * 60.0, h * 60.0 + minutos
-            for corrimiento in (0.0, 1440.0):          # la visita de las 23 h puede pasar a la madrugada
-                a, b = max(desde, hora * 60.0 + corrimiento), min(hasta, (hora + 1) * 60.0 + corrimiento)
-                total += max(0.0, b - a) / 60.0
-        return prob * total
+    @property
+    def ventana_encargado(self) -> Triangular | None:
+        """Cuánto se queda el encargado en cada visita (PER-08), en minutos."""
+        return None if self.encargado is None else Triangular(*self.encargado[2])
 
     @property
     def playeros_maximos(self) -> int:
@@ -1062,22 +1125,23 @@ class ParametrosSimulacion:
     def media_servicio_liquidos(self) -> float:
         """Tiempo medio de servicio de un cliente de nafta/diésel.
 
-        TIE-02 (media 5 min) más el extra de camión (litros ÷ 90, TIE-03) ponderado
-        por la fracción de camiones de cada producto.
+        Σ productos × tipos de vehículo (VEH-00) del tiempo medio de playero de cada tipo (TIE-07).
         """
         tipos = {t.id: t for t in self.tipos_vehiculo}
         matriz = dict(self.matriz_tipos)
-        base = Triangular(*valor("TIE-02")).media
-        litros_camion = tipos["camion"].litros.media
         pesos = self.pesos_llegada()[:-1]          # sin el GNC
         total = sum(pesos)
-        extra = 0.0
-        for prod, w in zip(
-            (p for p in self.productos if not p.es_gnc), pesos
-        ):
-            extra += (w / total) * matriz[prod.id][_TIPOS_MATRIZ.index("camion")] \
-                * litros_camion / 90.0
-        return base + extra
+        media = 0.0
+        for prod, w in zip((p for p in self.productos if not p.es_gnc), pesos):
+            for t, fraccion in zip(_TIPOS_MATRIZ, matriz[prod.id]):
+                media += (w / total) * fraccion * self.tiempo_medio_de(tipos[t])
+        return media
+
+    def tiempo_medio_de(self, tipo: TipoVehiculo) -> float:
+        """Minutos de playero de un vehículo líquido: TIE-07 por tipo, o TIE-02 (+ litros ÷ 90 si es pesado)."""
+        if tipo.tiempo is not None:
+            return tipo.tiempo.media
+        return self.carga.media + (tipo.litros.media / 90.0 if tipo.es_camion else 0.0)
 
     @property
     def gnc_con_playero(self) -> bool:
@@ -1087,7 +1151,7 @@ class ParametrosSimulacion:
     def media_servicio_playero(self) -> float:
         """Minutos de playero por cliente que llega (promedio sobre todos los productos).
 
-        Nafta y diésel: TIE-02 (+ extra de camión); GNC: TIE-04, sólo si lo carga un playero (PER-04).
+        Nafta y diésel: TIE-07 según el tipo de vehículo; GNC: TIE-04, sólo si lo carga un playero (PER-04).
         """
         gnc = self.carga_gnc.media if self.gnc_con_playero else 0.0
         return (1.0 - self.pct_gnc) * self.media_servicio_liquidos() + self.pct_gnc * gnc
@@ -1229,3 +1293,25 @@ class ParametrosEconomicos:
     def __post_init__(self) -> None:
         if self.margen_por_litro < 0 or self.margen_compra < 0:
             raise ValueError("Los márgenes no pueden ser negativos.")
+
+
+def con_vehiculos(
+    p: ParametrosSimulacion,
+    motos: float | None = None,
+    litros: dict[str, tuple[float, float, float]] | None = None,
+    tiempos: dict[str, tuple[float, float, float]] | None = None,
+) -> ParametrosSimulacion:
+    """Los mismos parámetros con otra mezcla de vehículos o con otros litros/tiempos por tipo (menú).
+
+    Rehace todo lo que depende de eso: tipos, matriz VEH-00, carga media por producto y litros medios por cliente
+    (así los clientes por día siguen saliendo de los litros del mes: regla 4).
+    """
+    tipos = tipos_vehiculo_desde_registro(litros, tiempos)
+    visitas = mezcla_de_visitas(motos)
+    matriz = matriz_tipo_por_producto(tipos, visitas)
+    productos = tuple(
+        replace(pr, carga_media=nuevo.carga_media) if not pr.es_gnc else pr
+        for pr, nuevo in zip(p.productos, productos_desde_registro(tipos, matriz))
+    )
+    return replace(p, tipos_vehiculo=tipos, matriz_tipos=matriz, mezcla_vehiculos=visitas, productos=productos,
+                   litros_medios_por_cliente=litros_medios_de(tipos, visitas))

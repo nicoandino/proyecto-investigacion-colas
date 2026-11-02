@@ -336,10 +336,10 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
 
     st.markdown("##### Monte Carlo 2: ¿qué vehículo es, dado el producto?")
     st.caption(
-        "Segunda tabla, condicionada al producto (supuesto VEH-00). El tipo fija el "
-        "tanque T, y los litros salen de `Triangular(0,2·T ; 0,3·T ; 1,0·T)`."
+        "Segunda tabla, condicionada al producto (VEH-00, derivada para que lleguen los vehículos del censo de la "
+        "RN 143 y se vendan los litros de DEM-04). El tipo fija los litros (VEH-10) y el tiempo del playero (TIE-07)."
     )
-    nombres_tipo = ("moto", "auto", "pick-up", "camión")
+    nombres_tipo = ("moto", "auto", "camioneta", "colectivo", "camión")
     filas = []
     for producto, pesos_tipo in p.matriz_tipos:
         nombre = next(pr.nombre for pr in p.productos if pr.id == producto)
@@ -366,6 +366,11 @@ def pestania_sorteos(p: ParametrosSimulacion) -> None:
                 ],
                 "Carga media": [
                     f"{t.litros.media:.1f} {'m³' if t.es_gnc else 'L'}" for t in p.tipos_vehiculo
+                ],
+                "Playero (mín · moda · máx)": [
+                    (f"{t.tiempo.minimo:g} · {t.tiempo.moda:g} · {t.tiempo.maximo:g} min" if t.tiempo
+                     else f"GNC: {p.carga_gnc.minimo:g} · {p.carga_gnc.moda:g} · {p.carga_gnc.maximo:g} min")
+                    for t in p.tipos_vehiculo
                 ],
             }
         ),
@@ -1924,6 +1929,8 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
                  f"estación). El básico sin adicionales es ${sueldos.alternativas[0][1][0]:,.0f}.".replace(",", "."),
         ))
 
+    encargado, motos, litros_tipo, tiempos_tipo = menu_personal_y_vehiculos(previo)
+
     with st.expander("GNC: cortes de invierno y clientes", icon=":material/propane_tank:"):
         opciones = {
             "habituales": "Sólo los cortes habituales (2 cortes de 6 días entre junio y agosto)",
@@ -2025,7 +2032,71 @@ def menu_de_ajustes(periodo: Periodo | None) -> Ajustes:
         factores=tuple(factores), eventos_abastecimiento=bool(eventos),
         origenes_no_disponibles=tuple(no_disponibles),
         eventos=elegidos, semilla_eventos=semilla_ev, frecuencia_eventos=frecuencia_ev,
+        encargado=encargado, motos=motos, litros_tipo=litros_tipo, tiempos_tipo=tiempos_tipo,
     )
+
+
+NOMBRES_TIPO = {"moto": "Moto", "auto": "Auto", "pick_up": "Camioneta", "colectivo": "Colectivo", "camion": "Camión"}
+
+
+def menu_personal_y_vehiculos(previo: Ajustes) -> tuple:
+    """El encargado (PER-08) y los vehículos (VEH-09, VEH-10, TIE-07): supuestos editables que cambian la simulación."""
+    with st.expander("Personal y vehículos: el encargado, las motos, los litros y los tiempos", icon=":material/badge:"):
+        pl = valor("PER-01")
+        st.caption(
+            f"Playeros por turno (PER-01): {pl[0]} de noche, {pl[1]} de mañana y {pl[2]} de tarde. El **encargado** pasa "
+            "cada 6 h (08 · 14 · 20 · 02) y, durante su visita, atiende como un playero más si hay cola o, a veces, "
+            "aunque no haga falta. Todo esto es **supuesto** (PER-08)."
+        )
+        reg = valor("PER-08")
+        actual = previo.encargado or reg
+        atiende = st.toggle("El encargado ayuda en la playa", value=previo.encargado is not None, key="aj_enc_on")
+        c1, c2, c3, c4, c5 = st.columns(5)
+        v_min = c1.number_input("Visita: mínimo (min)", 5, 120, int(actual[2][0]), 5, key="aj_enc_a", disabled=not atiende)
+        v_moda = c2.number_input("Visita: moda (min)", 5, 120, int(actual[2][1]), 5, key="aj_enc_m", disabled=not atiende)
+        v_max = c3.number_input("Visita: máximo (min)", 5, 180, int(actual[2][2]), 5, key="aj_enc_b", disabled=not atiende)
+        umbral = c4.number_input("Se suma con cola de (vehículos)", 0, 20, int(actual[3]), 1, key="aj_enc_cola",
+                                 disabled=not atiende, help=f"Registro: {reg[3]} vehículos esperando.")
+        prob = c5.number_input("Y si no, se suma con probabilidad", 0.0, 1.0, float(actual[4]), 0.05, key="aj_enc_p",
+                               disabled=not atiende, format="%.2f",
+                               help=f"Registro: {reg[4]:.2f}. El prompt del grupo propone 0,15 si la cola desaparece.")
+        encargado = None
+        if atiende:
+            if not v_min <= v_moda <= v_max or v_min == v_max:
+                st.error("La visita tiene que cumplir mínimo ≤ moda ≤ máximo (con mínimo < máximo): queda la del Registro.",
+                         icon=":material/error:")
+                v_min, v_moda, v_max = reg[2]
+            encargado = (reg[0], reg[1], (float(v_min), float(v_moda), float(v_max)), int(umbral), float(prob))
+            if encargado == reg:
+                encargado = reg
+
+        st.divider()
+        motos = st.slider(
+            "Motos: parte de los vehículos que cargan", 0, 50, int(round(100 * previo.motos)), 1, key="aj_motos",
+            format="%d %%", help="VEH-09 (supuesto): 20 %. El resto se reparte con el censo de Vialidad en la RN 143 "
+                                 "(VEH-08: autos 70,5 · camionetas 19,8 · ómnibus 1,6 · camiones 8,1 %).",
+        ) / 100.0
+        st.caption("Litros por carga (VEH-10) y minutos de playero (TIE-07) de cada tipo: Triangular(mín, moda, máx).")
+        litros_prev, tiempos_prev = dict(previo.litros_tipo), dict(previo.tiempos_tipo)
+        tabla = pd.DataFrame([
+            {"Tipo": NOMBRES_TIPO[t], "Litros mín": litros_prev[t][0], "Litros moda": litros_prev[t][1],
+             "Litros máx": litros_prev[t][2], "Minutos mín": tiempos_prev[t][0], "Minutos moda": tiempos_prev[t][1],
+             "Minutos máx": tiempos_prev[t][2]}
+            for t in NOMBRES_TIPO
+        ])
+        editada = st.data_editor(tabla, hide_index=True, disabled=["Tipo"], key="aj_tabla_tipos")
+        litros_tipo, tiempos_tipo, ok = [], [], True
+        for t, (_, fila) in zip(NOMBRES_TIPO, editada.iterrows()):
+            lt = (float(fila["Litros mín"]), float(fila["Litros moda"]), float(fila["Litros máx"]))
+            ti = (float(fila["Minutos mín"]), float(fila["Minutos moda"]), float(fila["Minutos máx"]))
+            ok = ok and all(0 < x[0] <= x[1] <= x[2] and x[0] < x[2] for x in (lt, ti))
+            litros_tipo.append((t, lt))
+            tiempos_tipo.append((t, ti))
+        if not ok:
+            st.error("Cada Triangular tiene que cumplir 0 < mínimo ≤ moda ≤ máximo (con mínimo < máximo): quedan las "
+                     "del Registro.", icon=":material/error:")
+            litros_tipo, tiempos_tipo = list(valor("VEH-10")), list(valor("TIE-07"))
+    return encargado, float(motos), tuple(litros_tipo), tuple(tiempos_tipo)
 
 
 #: Multiplicadores de la frecuencia de los eventos que ofrece el menú.
@@ -2524,7 +2595,7 @@ def main() -> None:
     with pestanias["Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
     with pestanias["Vehículos"]:
-        vistas.pestania_vehiculos(p_corrida, st.session_state.traza)
+        vistas.pestania_vehiculos(p_corrida)
     with pestanias["Pronóstico"]:
         vistas.pestania_pronostico(p_corrida, resultado_del_anio(p_corrida, resultado), st.session_state.parametros_eco)
     if "Qué se sorteó" in pestanias:

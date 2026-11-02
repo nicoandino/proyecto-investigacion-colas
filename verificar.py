@@ -58,8 +58,8 @@ Los controles cubren las dos partes del modelo:
        operativo, y con el margen de equilibrio el resultado es 0.
    50. Análisis financiero: VAN, TIR y recupero de una anualidad conocida; el flujo de cada decisión sale de
        la simulación.
-   51. Pedidos del 2/11/2026: playeros 2·3·3, 310.000 L/mes, el encargado cada 6 h que a veces atiende y el
-       Monte Carlo de motos, autos, colectivos y camiones por día.
+   51. Pedidos del 2/11/2026: playeros 2·3·3, 310.000 L/mes y el encargado cada 6 h que a veces atiende.
+   52. Los cinco tipos de vehículo (matriz VEH-00 derivada) y la pestaña Vehículos (Montecarlo).
    49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
@@ -792,7 +792,7 @@ def main() -> int:
     # ------------------------------------------------------------------ 16
     separador("16. N10: litros por carga según el tipo de vehículo")
     esperados_tipo = {t.id: t.litros.media for t in p_mix.tipos_vehiculo}
-    tolerancia_tipo = {"auto": 0.02, "pick_up": 0.02, "moto": 0.04, "camion": 0.04, "auto_gnc": 0.04}
+    tolerancia_tipo = {"auto": 0.02, "pick_up": 0.02, "moto": 0.04, "colectivo": 0.06, "camion": 0.04, "auto_gnc": 0.04}
     peor_tipo = 0.0
     detalle_tipo = []
     for tipo, muestras in ind_mix.litros_por_tipo.items():
@@ -809,8 +809,8 @@ def main() -> int:
     auto_media = ind_mix.litros_por_tipo["auto"].promedio
     pick_media = ind_mix.litros_por_tipo["pick_up"].promedio
     controlar(
-        abs(auto_media - 23.5) / 23.5 < 0.02 and abs(pick_media - 40.0) / 40.0 < 0.02,
-        "N10: auto ≈ 23,5 L (± 2 %) y pick-up ≈ 40 L (± 2 %)",
+        abs(auto_media - 85.0 / 3.0) / (85.0 / 3.0) < 0.02 and abs(pick_media - 45.0) / 45.0 < 0.02,
+        "N10: auto ≈ 28,3 L (± 2 %) y camioneta ≈ 45 L (± 2 %) (VEH-10)",
         f"auto {auto_media:.2f} L | pick-up {pick_media:.2f} L",
     )
 
@@ -1582,7 +1582,7 @@ def main() -> int:
     )
     controlar(
         abs(_armonica(p.productos) / p.litros_medios_por_cliente - 1.0) < 0.001,
-        "Los litros medios por cliente (DEM-11 = 35,7 L) salen de la mezcla y las cargas de cada producto",
+        "Los litros medios por cliente (DEM-11 = 39,7 L) salen de la mezcla y las cargas de cada producto",
         f"1 ÷ Σ(% de litros ÷ carga media) = {_armonica(p.productos):.3f} L contra "
         f"{p.litros_medios_por_cliente} L del Registro",
     )
@@ -2459,25 +2459,30 @@ def main() -> int:
     )
 
     # ------------------------------------------------------------------ 51
-    separador("51. Pedidos del 2/11/2026: un playero más por turno, el encargado y los vehículos por día")
+    separador("51. Pedidos del 2/11/2026: un playero más por turno, el encargado y 310.000 L/mes")
     p51 = replace(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1)), animar_todo=False)
     r51, _ = correr_replica(p51, semilla=1)
     r51_sin, _ = correr_replica(replace(p51, encargado=None), semilla=1)
     r51_azar, _ = correr_replica(replace(p51, determinista=False), semilla=3)
+    r51_cola, _ = correr_replica(replace(p51, determinista=False, encargado=(6.0, 8.0, (20.0, 40.0, 60.0), 0, 0.0)),
+                                 semilla=3)
     controlar(
         p51.playeros_por_turno == (2, 3, 3) and p51.litros_mes == 310_000.0
-        and p51.visitas_encargado() == (2.0, 8.0, 14.0, 20.0),
-        "Defaults: playeros 2·3·3 (PER-01), 310.000 L/mes (DEM-01) y el encargado a las 02 · 08 · 14 · 20 h (PER-08)",
+        and p51.visitas_encargado() == (2.0, 8.0, 14.0, 20.0) and p51.ventana_encargado.media == 40.0
+        and ParametrosSimulacion.clasico().encargado is None,
+        "Defaults: playeros 2·3·3 (PER-01), 310.000 L/mes (DEM-01), el encargado a las 02 · 08 · 14 · 20 h con una "
+        "ventana de 40 min en promedio (PER-08), y el clásico sin encargado",
         f"playeros {p51.playeros_por_turno} · {p51.litros_mes:,.0f} L/mes · visitas {p51.visitas_encargado()}",
     )
     controlar(
-        abs(r51.visitas_encargado_dia - 4.0) < 1e-9 and abs(r51.ayudas_encargado_dia - 2.0) < 1e-9
-        and r51_sin.visitas_encargado_dia == 0.0 and 0.0 < r51_azar.ayudas_encargado_dia < 4.0
-        and abs(p51.encargado_ayuda_a_la_hora(8) - 0.5) < 1e-9 and p51.encargado_ayuda_a_la_hora(9) == 0.0,
-        "El encargado pasa 4 veces por día; sin azar atiende en 2 (cuotas exactas), con azar a veces; "
-        "en la hora de la visita suma 0,5 playero en promedio",
-        f"sin azar {r51.ayudas_encargado_dia:.2f} ayudas/día · con azar {r51_azar.ayudas_encargado_dia:.2f} · "
-        f"sin encargado {r51_sin.visitas_encargado_dia:.0f} visitas",
+        abs(r51.visitas_encargado_dia - 4.0) < 1e-9 and 1.0 <= r51.ayudas_encargado_dia <= 1.5
+        and r51_sin.visitas_encargado_dia == 0.0 and r51_sin.minutos_encargado_dia == 0.0
+        and abs(r51_cola.ayudas_encargado_dia - 4.0) < 1e-9 and r51_cola.minutos_encargado_dia > 4 * 20.0
+        and 0.0 < r51_azar.ayudas_encargado_dia < 4.0 and r51_azar.atendidos_encargado_pct > 0.0,
+        "El encargado pasa 4 veces por día; sin azar se suma en ≈ 0,3 de las visitas (cuotas exactas); con 'cola ≥ 0' "
+        "se suma siempre; con azar, a veces, y atiende algunos vehículos",
+        f"sin azar {r51.ayudas_encargado_dia:.2f} ayudas/día · con azar {r51_azar.ayudas_encargado_dia:.2f} "
+        f"({r51_azar.minutos_encargado_dia:.0f} min-hombre, {r51_azar.atendidos_encargado_pct:.2f} % de los vehículos)",
     )
     controlar(
         r51.espera_surtidor <= r51_sin.espera_surtidor + 1e-9 and r51_azar.espera_surtidor > 0.1,
@@ -2485,24 +2490,52 @@ def main() -> int:
         f"Wq sin azar {r51.espera_surtidor:.3f} min (sin encargado {r51_sin.espera_surtidor:.3f}) · "
         f"con azar {r51_azar.espera_surtidor:.2f} min",
     )
-    from sim import vehiculos as vh
 
-    comp51 = vh.composicion(p51)
-    tabla51 = vh.tabla(comp51)
-    clientes51 = [280, 300, 320] * 10
-    sorteo51 = vh.sortear(clientes51, comp51, semilla=7)
-    resumen51 = vh.resumir(sorteo51, comp51)
-    livianos51 = dict(comp51)["auto"]
-    contiguos = tabla51[0].desde == 0 and tabla51[-1].hasta == vh.ESCALA - 1 and all(
-        b.desde == a.hasta + 1 for a, b in zip(tabla51, tabla51[1:]))
+    # ------------------------------------------------------------------ 52
+    separador("52. Prompt '310 mil, personal y Montecarlo': los tipos de vehículo y la pestaña Vehículos")
+    from sim import vehiculos as vh
+    from sim.config import litros_medios_de
+
+    p52 = ParametrosSimulacion()
+    visitas52 = dict(p52.mezcla_vehiculos)
+    esperada52 = {"moto": 0.2, "auto": 0.564, "pick_up": 0.1584, "colectivo": 0.0128, "camion": 0.0648}
+    pesos52 = p52.pesos_llegada()
+    matriz52 = dict(p52.matriz_tipos)
+    liquidos52 = [pr for pr in p52.productos if not pr.es_gnc]
+    total52 = sum(pesos52[:-1])
+    por_tipo52 = {t: sum(w / total52 * matriz52[pr.id][k] for pr, w in zip(liquidos52, pesos52))
+                  for k, t in enumerate(vh.CATEGORIAS)}
+    tipos52 = {t.id: t for t in p52.tipos_vehiculo}
+    litros_prod52 = {pr.id: w * sum(matriz52[pr.id][k] * tipos52[t].litros.media for k, t in enumerate(vh.CATEGORIAS))
+                     for pr, w in zip(liquidos52, pesos52)}
+    suma_l52 = sum(litros_prod52.values())
     controlar(
-        abs(sum(x for _, x in comp51) - 1.0) < 1e-12 and abs(livianos51 - 0.867) < 0.005 and contiguos
-        and all(sum(d.cantidades) == d.clientes for d in sorteo51)
-        and sorteo51 == vh.sortear(clientes51, comp51, semilla=7)
-        and all(abs(r.promedio_dia - r.esperado_dia) <= max(1.0, 0.1 * r.esperado_dia) for r in resumen51),
-        "Vehículos por día (Monte Carlo): probabilidades que suman 1 (≈ 86,7 % livianos, como Vialidad), intervalos "
-        "0000–9999 sin huecos, cada día suma sus clientes, misma semilla = mismo sorteo y el promedio ≈ el esperado",
-        " · ".join(f"{vh.NOMBRES[r.categoria]} {r.promedio_dia:.1f}/día (esp. {r.esperado_dia:.1f})" for r in resumen51),
+        all(abs(visitas52[t] - v) < 1e-9 for t, v in esperada52.items())
+        and all(abs(por_tipo52[t] - v) < 1e-9 for t, v in esperada52.items())
+        and all(abs(litros_prod52[pr.id] / suma_l52 - pr.pct_litros) < 1e-9 for pr in liquidos52)
+        and abs(litros_medios_de() - p52.litros_medios_por_cliente) / p52.litros_medios_por_cliente < 0.001
+        and abs(p52.media_servicio_liquidos() - 5.3) < 0.1,
+        "La matriz VEH-00 derivada cumple a la vez la mezcla de visitas (moto 20 · auto 56,4 · camioneta 15,84 · "
+        "colectivo 1,28 · camión 6,48 %) y la de litros (DEM-04); 39,7 L por vehículo y ≈ 5,3 min de playero",
+        f"litros medios {litros_medios_de():.2f} L · playero {p52.media_servicio_liquidos():.2f} min · "
+        + " · ".join(f"{t} {100 * por_tipo52[t]:.2f} %" for t in vh.CATEGORIAS),
+    )
+    tabla52 = vh.tabla(p52)
+    p52m = replace(p52, fecha_inicio=(1, 1), dias=31)
+    sorteo52 = vh.sortear(p52m, semilla=5)
+    resumen52 = vh.resumen_mes(p52, 1, semilla=5, repeticiones=400)
+    controlar(
+        [round(f.acumulada, 4) for f in tabla52] == [0.2, 0.764, 0.9224, 0.9352, 1.0]
+        and tabla52[0].desde == 0.0 and all(b.desde == a.hasta for a, b in zip(tabla52, tabla52[1:]))
+        and vh.tipo_de(0.19999, tabla52) == "moto" and vh.tipo_de(0.2, tabla52) == "auto"
+        and vh.tipo_de(0.93, tabla52) == "colectivo"
+        and all(sum(d.cantidades) == d.n for d in sorteo52) and sorteo52 == vh.sortear(p52m, semilla=5)
+        and abs(vh.media_base(p52) - 257.0) < 1.0
+        and abs(resumen52.media / resumen52.esperado - 1.0) < 0.01 and resumen52.p5 < resumen52.media < resumen52.p95,
+        "Pestaña Vehículos: la tabla de rangos de U(0,1) del prompt, cada día suma sus vehículos, misma semilla = mismo "
+        "sorteo, ≈ 257 vehículos por día y el mes sorteado reproduce los litros de la simulación (± 1 %)",
+        f"media base {vh.media_base(p52):.1f} veh/día · enero {resumen52.media:,.0f} L (P5 {resumen52.p5:,.0f} · "
+        f"P95 {resumen52.p95:,.0f}) contra {resumen52.esperado:,.0f} L",
     )
 
     # ------------------------------------------------------------------

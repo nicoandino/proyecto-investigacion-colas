@@ -273,12 +273,15 @@ class EstacionDeServicio:
                 self._ajustar_playeros(siguiente[1])
 
     def controlar_encargado(self):
-        """El encargado pasa cada `cada` horas (PER-08); en cada visita, a veces atiende como un playero más.
+        """El encargado pasa cada `cada` horas (PER-08) y se queda una ventana Triangular(20, 40, 60) min.
 
-        Si colabora (Bernoulli con el stream "encargado"; sin azar, cuotas exactas: una visita sí y otra no),
-        durante los minutos de la visita la capacidad de playeros sube en 1. Entre visitas no atiende.
+        Durante la ventana atiende como un playero más (la capacidad sube en 1) si hay ≥ `umbral` vehículos
+        esperando (se mira minuto a minuto) o si sale el sorteo con probabilidad `prob` ("a veces se suma aunque no
+        haga falta"). Ventana y sorteo usan el stream "encargado"; sin azar, la ventana es la media y el sorteo va
+        por cuotas exactas. Fuera de la ventana no atiende.
         """
-        _, _, minutos, prob = self.p.encargado
+        _, _, ventana, umbral, prob = self.p.encargado
+        tri = Triangular(*ventana)
         horas = self.p.visitas_encargado()
         dia = 0
         while True:
@@ -288,16 +291,38 @@ class EstacionDeServicio:
                     return
                 if inicio > self.env.now:
                     yield self.env.timeout(inicio - self.env.now)
+                fin = self.env.now + self.az.triangular(tri, "encargado")
                 ayuda = self.az.bernoulli(prob, "encargado")
-                self.ind.visitas_encargado.append((self.env.now, ayuda))
-                if not ayuda:
-                    continue
-                self.encargado_ayuda = 1
-                self._ajustar_playeros(self.turno_actual)
-                yield self.env.timeout(minutos)
-                self.encargado_ayuda = 0
-                self._ajustar_playeros(self.turno_actual)
+                while not ayuda and self.env.now < fin:
+                    if self._esperando() >= umbral:
+                        ayuda = True
+                        break
+                    yield self.env.timeout(min(1.0, fin - self.env.now))
+                if ayuda and fin > self.env.now:
+                    desde = self.env.now
+                    self.encargado_ayuda = 1
+                    self._ajustar_playeros(self.turno_actual)
+                    yield self.env.timeout(fin - self.env.now)
+                    self.encargado_ayuda = 0
+                    self._ajustar_playeros(self.turno_actual)
+                    self.ind.minutos_encargado.append((desde, fin))
+                    if self.traza is not None:
+                        self.traza.ayudas_encargado.append((desde, fin))
+                self.ind.visitas_encargado.append((inicio, ayuda))
             dia += 1
+
+    def _esperando(self) -> int:
+        """Vehículos esperando: los de la cola de cada zona más los que tienen la cara y esperan al playero."""
+        en_cola = sum(len(c) for c in self.cola_lista.values())
+        sin_playero = sum(1 for carriles in self.carriles.values() for a in carriles
+                          if getattr(a, "espera_playero", False))
+        return en_cola + sin_playero
+
+    def _tomar_playero(self) -> None:
+        """Un playero empieza a atender. Si ya se pasó la dotación del turno, al cliente lo atiende el encargado."""
+        self.ind.playeros_ocupados.sumar(self.env.now, +1)
+        if self.encargado_ayuda and self.ind.playeros_ocupados.valor > self.turno_actual - self.playeros_fuera:
+            self.ind.contar("atendidos_encargado")
 
     def _ajustar_playeros(self, playeros_del_turno: int) -> None:
         """Toma (prioridad -1) o libera reservas hasta `capacidad - reservas = turno (+ el encargado si atiende)`."""
@@ -495,7 +520,7 @@ class EstacionDeServicio:
         if self.az.bernoulli(g.migracion_a_nafta, "migracion"):
             tipo = self.info_tipo["auto"]
             auto.litros = self.az.triangular(tipo.litros, "migracion")
-            auto.t_carga = self.az.triangular(self.p.carga, "migracion")
+            auto.t_carga = self.az.triangular(tipo.tiempo or self.p.carga, "migracion")
             grupo_viejo = auto.grupo
             auto.producto = "super"
             auto.grupo = next(pr.grupo for pr in self.p.productos if pr.id == "super")
@@ -744,10 +769,12 @@ class EstacionDeServicio:
         litros = self.az.triangular(info_tipo.litros, "litros")
         if producto.id == "gnc":
             t_carga = self.az.triangular(self.p.carga_gnc, "carga")   # TIE-04
+        elif info_tipo.tiempo is not None:
+            t_carga = self.az.triangular(info_tipo.tiempo, "carga")   # TIE-07: según el tipo de vehículo
         else:
             t_carga = self.az.triangular(self.p.carga, "carga")       # TIE-02
-        if info_tipo.es_camion:
-            t_carga += litros / 90.0                      # TIE-03: alto caudal
+            if info_tipo.es_camion:
+                t_carga += litros / 90.0                  # TIE-03: alto caudal
         compra = self.az.bernoulli(self.p.prob_compra, "decision")
         t_compra = (
             self.az.exponencial(self.p.compra.media, "compra")
@@ -1303,7 +1330,7 @@ class EstacionDeServicio:
                 if auto.producto == "gnc":
                     # El GNC lo carga un playero (PER-04) y además usa un COMPRESOR: el playero
                     # queda con el auto mientras espera el compresor y mientras carga.
-                    self.ind.playeros_ocupados.sumar(self.env.now, +1)
+                    self._tomar_playero()
                     auto.espera_playero = False
                     try:
                         return (yield from self._cargar_gnc(
@@ -1315,7 +1342,7 @@ class EstacionDeServicio:
                 if not self.hay_combustible(auto):
                     self.registrar_perdida(auto, motivo="sin_combustible")
                     return False
-                self.ind.playeros_ocupados.sumar(self.env.now, +1)
+                self._tomar_playero()
                 auto.espera_playero = False
 
                 espera_real = self.env.now - auto.t_llegada

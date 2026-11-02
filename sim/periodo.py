@@ -239,6 +239,11 @@ class Ajustes:
     eventos: tuple[str, ...] = ()                     # eventos aleatorios prendidos (EVT-01…14; parte 4)
     semilla_eventos: int = int(valor("EVT-00")[1])
     frecuencia_eventos: float = float(valor("EVT-00")[2])
+    # Personal y vehículos (2/11/2026): sí cambian la simulación.
+    encargado: tuple | None = valor("PER-08")         # None = el encargado no baja a la playa
+    motos: float = float(valor("VEH-09"))
+    litros_tipo: tuple = tuple(valor("VEH-10"))       # ((tipo, (mín, moda, máx)), …)
+    tiempos_tipo: tuple = tuple(valor("TIE-07"))
 
     def cambios(self) -> list[str]:
         """Lo que difiere del Registro, en palabras (para el encabezado de los resultados)."""
@@ -265,6 +270,14 @@ class Ajustes:
                 f"{len(self.eventos)} eventos aleatorios (semilla {self.semilla_eventos}"
                 + (f", frecuencia × {self.frecuencia_eventos:g}" if self.frecuencia_eventos != 1 else "") + ")"
             )
+        if self.encargado != base.encargado:
+            salida.append("el encargado no atiende" if self.encargado is None else "otra regla para el encargado")
+        if abs(self.motos - base.motos) > 1e-9:
+            salida.append(f"{self.motos:.0%} de motos")
+        if self.litros_tipo != base.litros_tipo:
+            salida.append("litros por tipo de vehículo")
+        if self.tiempos_tipo != base.tiempos_tipo:
+            salida.append("tiempos de playero por tipo de vehículo")
         if self.politica != base.politica:
             salida.append({"pronostico": "política de reposición por pronóstico (stock de seguridad)",
                            "cargada": "política de reposición INV-07 (1,5 días de venta)"}.get(self.politica, self.politica))
@@ -295,6 +308,14 @@ def aplicar_ajustes(
         costo_almacenamiento_litro_mes=a.almacenamiento, sueldo_playero_mensual=a.sueldo_playero,
     )
     p = replace(p, gnc=gnc_con_ajustes(p.gnc, a), calendario_demanda=a.factores if a.calendario else ())
+    base = Ajustes()
+    if a.encargado != base.encargado:
+        p = replace(p, encargado=a.encargado)
+    if (abs(a.motos - base.motos) > 1e-12 or a.litros_tipo != base.litros_tipo
+            or a.tiempos_tipo != base.tiempos_tipo):
+        from sim.config import con_vehiculos
+
+        p = con_vehiculos(p, motos=a.motos, litros=dict(a.litros_tipo), tiempos=dict(a.tiempos_tipo))
     if p.red is not None and (a.eventos_abastecimiento or a.origenes_no_disponibles):
         p = replace(p, red=replace(
             p.red, origenes_alternativos=tuple(valor("RED-19")),

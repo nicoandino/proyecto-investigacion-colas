@@ -313,18 +313,19 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "", (("por_cara", "por_cara", "CASO §7"),),
                     "cola FIFO única por grupo", None, None),
           "por_grupo"),
-        ("PER-08", ("Encargado: recorrida cada 6 h y ayuda en la playa", "h · h · min · prob.", "A",
-                    "supuesto", "sin_dato",
-                    "pedido del grupo (2/11/2026): el encargado pasa cada 6 horas y a veces se suma a "
-                    "colaborar", "grupo",
-                    "C5", (),
-                    "(cada cuántas horas pasa, hora de la primera visita, minutos que se queda, probabilidad "
-                    "de que atienda como un playero más): pasa a las 08 · 14 · 20 · 02 h, se queda 60 min y "
-                    "colabora en la mitad de las visitas. Sin azar, cuotas exactas: una visita sí y otra no "
-                    "(08 y 20 h sí; 14 y 02 h no). Su sueldo sigue entrando por ECO-11", None, None),
-          (6.0, 8.0, 60.0, 0.5)),
-
-        # ---------------------------------------------------- C. Demanda ★
+        ("PER-08", ("Encargado: recorrida cada 6 h y ayuda en la playa",
+                    "h · h · min (mín, moda, máx) · autos · prob.", "A", "supuesto", "sin_dato",
+                    "pedido del grupo (2/11/2026; prompt 'demanda 310 mil, personal y Montecarlo'): pasa cada 6 h, "
+                    "desfasado de los turnos (06 · 14 · 22)", "grupo",
+                    "C5", (("ventana fija de 60 min y p = 0,5", (6.0, 8.0, (60.0, 60.0, 60.0), 0, 0.5),
+                            "primera versión (2/11/2026)"),
+                           ("p = 0,15", 0.15, "prompt §3.3: si la cola desaparece, bajar la colaboración")),
+                    "(cada cuántas horas pasa, hora de la primera visita, ventana Triangular(20, 40, 60) min, "
+                    "cola que lo hace sumarse, probabilidad de sumarse aunque no haga falta): pasa a las "
+                    "08 · 14 · 20 · 02 h; durante la ventana atiende como un playero más si hay ≥ 3 vehículos "
+                    "esperando o si sale el sorteo con p = 0,30. Sin azar: ventana de 40 min y el sorteo por "
+                    "cuotas exactas. Su sueldo sigue entrando por ECO-11", None, None),
+          (6.0, 8.0, (20.0, 40.0, 60.0), 3, 0.30)),
         ("DEM-00", ("Modo de demanda por defecto", "—", "A", "supuesto", "sin_dato",
                     "orquestador (N5: el Monte Carlo se conserva para tipo de cliente y "
                     "producto; el total diario sale de los litros)", "orquestador",
@@ -332,15 +333,18 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "'esperada' = total diario fijo desde litros/mes (las llegadas siguen "
                     "siendo Poisson); 'monte_carlo' = sorteo de la tabla DEM-07", None, None),
           "esperada"),
-        ("DEM-01", ("Demanda mensual", "L/mes", "B", "supuesto", "baja",
-                    "valor oficial del grupo (2/11/2026) sobre ONBOARDING + notas 01/03 + DATOS §1 "
-                    "(sin URL confirmada)", "grupo",
+        ("DEM-01", ("Demanda mensual (combustibles líquidos)", "L/mes", "B", "supuesto", "media",
+                    "SUPUESTO ADOPTADO por el grupo (2/11/2026), no un despacho medido de la estación. Referencias: "
+                    "despacho promedio por estación en Argentina ≈ 270 mil L/mes (Surtidores.com.ar, informe "
+                    "UNVENU/CLAEC); CECHA: el 51 % de las estaciones vende hasta 250 mil L/mes y el 37 % entre 250 y "
+                    "600 mil (vía Télam / Sitio Andino; fecha original vieja); en Mendoza el gasoil vende más que la "
+                    "nafta (Secretaría de Energía vía Politikon Chaco)", "grupo",
                     "C2",
                     (("150.000", 150_000.0, "DATOS §1 (base)"),
-                     ("270.000", 270_000.0, "estimación anterior (ONBOARDING + notas 01/03)"),
+                     ("270.000", 270_000.0, "estimación anterior; promedio nacional (Surtidores, UNVENU/CLAEC)"),
                      ("400.000", 400_000.0, "punto de equilibrio 2021")),
-                    "≈ 10.300 L/día; dentro del promedio nacional (270–380k) y del punto de "
-                    "equilibrio (315–400k); con 2·3·3 playeros deja algo de cola en la hora pico",
+                    "≈ 10.200 L/día ⇒ ≈ 257 vehículos/día de líquidos (÷ 39,7 L, DEM-11). No incluye el GNC "
+                    "(m³, DEM-05). Queda en la franja media de CECHA (250–600 mil)",
                     150_000.0, 400_000.0),
           310_000.0),
         ("DEM-02", ("Perfil horario (24 factores)", "factor", "B", "estimacion", "baja",
@@ -417,11 +421,13 @@ REGISTRO: tuple[Dato, ...] = tuple(
           "la cuantificación es un escenario, no un default"),
         ("DEM-11", ("Litros medios por cliente líquido", "L/cliente", "B", "estimacion",
                     "media",
-                    "cadena de demanda §14.2 (mezcla DEM-04 × cargas medias §5-D)",
-                    "orquestador",
-                    "", (), "35,7 L = Σ (mezcla en litros ÷ carga media por producto)",
+                    "derivado: Σ (probabilidad del tipo VEH-08/VEH-09 × litros medios del tipo VEH-10)",
+                    "grupo",
+                    "", (("35,7 L", 35.7, "cadena anterior: cargas = fracción del tanque (VEH-01..04)"),),
+                    "0,20 × 7,0 + 0,564 × 28,3 + 0,1584 × 45,0 + 0,0128 × 160,0 + 0,0648 × 203,3 = 39,7 L "
+                    "(control 24 de verificar.py: coincide con la cadena por producto)",
                     None, None),
-          35.7),
+          39.73),
         ("DEM-13", ("Duplicar la demanda en la hora pico (Editar simulación)", "×", "B",
                     "supuesto", "sin_dato",
                     "pedido del grupo (6/10/2026)", "grupo",
@@ -447,6 +453,11 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "", (("9–20 jul", ((7, 9), (7, 20)), "DEM-09 anterior, sin fuente"),),
                     "lunes 6 a viernes 17 de julio; distintas de las de Buenos Aires", None, None),
           ((7, 6), (7, 17))),
+        ("DEM-16", ("Variabilidad del total de vehículos del día (pestaña Vehículos)", "×", "B", "supuesto", "baja",
+                    "prompt del grupo (2/11/2026)", "grupo",
+                    "", (), "N del día ~ Normal(media del día, 0,15 × media base), redondeado y ≥ 0. La media del "
+                            "día sale de los litros del día ÷ DEM-11 (≈ 257 vehículos con el día medio)", 0.05, 0.30),
+          0.15),
         ("DEM-12", ("Cambio de quincena (S12): factor y días del mes", "× · día del mes",
                     "B", "supuesto", "sin_dato",
                     "DATOS §2 (+100 % 1–3 días/mes; limitación de camiones, fuente débil); los días "
@@ -498,30 +509,47 @@ REGISTRO: tuple[Dato, ...] = tuple(
                                "0,3 · alto (0,6 · 0,8 · 1,0), media 0,8; el default tiene media 0,5",
                     None, None),
           (("bajo", (0.1, 0.3, 0.5)), ("alto", (0.6, 0.8, 1.0)))),
-        ("VEH-00", ("Tipo de vehículo por producto (matriz)", "%", "B", "supuesto",
-                    "sin_dato",
-                    "orquestador (diseño 'producto primero', §7.2)", "orquestador",
-                    "", (), "Súper 12/85/3/0 · V-Power 0/85/15/0 · G2 0/20/55/25 · "
-                           "G3 0/15/45/40 · GNC 0/100/0/0 (moto/auto/pick-up/camión)",
+        ("VEH-00", ("Tipo de vehículo por producto (matriz)", "%", "B", "estimacion",
+                    "baja",
+                    "derivada (2/11/2026) de VEH-08/VEH-09 (qué vehículos llegan), VEH-10 (cuánto carga cada uno) "
+                    "y DEM-04 (mezcla de litros)", "grupo",
+                    "", (("diseño 'producto primero' del orquestador",
+                          (("super", (0.12, 0.85, 0.03, 0.0)), ("vpower", (0.0, 0.85, 0.15, 0.0)),
+                           ("diesel_g2", (0.0, 0.20, 0.55, 0.25)), ("diesel_g3", (0.0, 0.15, 0.45, 0.40)),
+                           ("gnc", (0.0, 1.0, 0.0, 0.0))), "orquestador §7.2 (moto/auto/pick-up/camión)"),),
+                    "regla: las motos cargan Súper; los autos cargan nafta; las camionetas completan la nafta que "
+                    "falta y el resto es diésel; colectivos y camiones, diésel. La nafta de autos y camionetas se "
+                    "reparte Súper/V-Power y todo el diésel G2/G3 según DEM-04. Así la mezcla de tipos es la de "
+                    "VEH-08/09 y la de litros la de DEM-04 (sim/config.py, matriz_tipo_por_producto)",
                     None, None),
-          (("super", (0.12, 0.85, 0.03, 0.0)),
-           ("vpower", (0.0, 0.85, 0.15, 0.0)),
-           ("diesel_g2", (0.0, 0.20, 0.55, 0.25)),
-           ("diesel_g3", (0.0, 0.15, 0.45, 0.40)),
-           ("gnc", (0.0, 1.0, 0.0, 0.0)))),
-        ("VEH-08", ("Colectivos entre los vehículos pesados (pestaña Vehículos)", "%", "C", "supuesto",
-                    "sin_dato",
-                    "supuesto del grupo (2/11/2026). Referencias: Vialidad Nacional, accesos de Mendoza "
-                    "(2019): 86,7 % autos y camionetas, 9,9 % camiones sin acoplado, ómnibus de corta "
-                    "distancia y combis, 3,4 % ómnibus de larga distancia y camiones con acoplado; AFAC "
-                    "(2023): el 3 % del parque son pesados (camiones y ómnibus)", "grupo",
-                    "", (), "el motor tiene un solo tipo pesado ('camión / ómnibus', VEH-04): la pestaña lo "
-                            "parte en camiones y colectivos con esta fracción. Los colectivos urbanos cargan en "
-                            "su depósito; acá entran los de media y larga distancia, chárter y turismo",
-                    0.05, 0.30),
-          0.15),
-
-        # --------------------------------------------------- E. Tiempos
+          "derivada (ver nota)"),
+        ("VEH-08", ("Composición del tránsito en la RN 143, entrada a San Rafael", "%", "B", "dato", "alta",
+                    "DNV 4º Distrito, Estudio de tránsito RN 143, censo de cobertura de 48 h en El Toledano "
+                    "(prog. 528), mar-2018; IF-2021-06581772-APN-DMZA#DNV (ene-2021). Datos del prompt del grupo: "
+                    "el PDF no se pudo abrir desde el entorno de trabajo", "grupo",
+                    "", (("accesos de Mendoza (DNV vía MDZ, 2019)", (0.867, 0.099, 0.034),
+                          "livianos · camiones s/acoplado, ómnibus cortos y combis · largos y con acoplado"),),
+                    "4.740 autos (70,5 %), 1.330 camionetas (19,8 %, columna 'Cta.+r'), ómnibus 1,6 % y camiones "
+                    "8,1 % (sin acoplado 5,3 + con acoplado 0,9 + semi 1,9) de 6.720 veh/día censados; no "
+                    "clasifica motos. TMDA del tramo San Rafael – Emp. RP 150: 5.615 veh/día (2018), +3 %/año. "
+                    "La RN 143 es la propia Av. Balloffet", None, None),
+          (("auto", 0.705), ("pick_up", 0.198), ("colectivo", 0.016), ("camion", 0.081))),
+        ("VEH-09", ("Motos: parte de las visitas a la estación", "%", "B", "supuesto", "baja",
+                    "supuesto del grupo; parque de San Rafael: 55.192 motos y 90.065 automotores (Todo Riesgo con "
+                    "datos DNRPA, ago-2021)", "grupo",
+                    "", (), "las motos son ≈ 38 % del parque pero cargan poco y menos seguido: 20 % de las visitas. "
+                            "El 80 % restante se reparte con VEH-08: 56,40 % autos · 15,84 % camionetas · 1,28 % "
+                            "colectivos · 6,48 % camiones", 0.10, 0.30),
+          0.20),
+        ("VEH-10", ("Litros por carga según el tipo de vehículo", "L", "B", "supuesto", "baja",
+                    "prompt del grupo (2/11/2026): moto tanque de 10–15 L; auto ≈ 50 L con carga parcial o fija "
+                    "frecuente; pick-ups (Hilux, Ranger, Amarok) ≈ 80 L; colectivo ≈ 35 L/100 km y tanque de 275+ L; "
+                    "camión 30–40 L/100 km, mezcla de livianos y semis", "grupo",
+                    "C12", (("fracción del tanque", "Triangular(0,2·T; 0,3·T; 1,0·T)", "VEH-01..04 (antes)"),),
+                    "Triangular(mín, moda, máx): moto (3, 6, 12) media 7,0 · auto (10, 25, 50) 28,3 · camioneta "
+                    "(15, 40, 80) 45,0 · colectivo (80, 150, 250) 160,0 · camión (60, 150, 400) 203,3", None, None),
+          (("moto", (3.0, 6.0, 12.0)), ("auto", (10.0, 25.0, 50.0)), ("pick_up", (15.0, 40.0, 80.0)),
+           ("colectivo", (80.0, 150.0, 250.0)), ("camion", (60.0, 150.0, 400.0)))),
         ("TIE-01", ("Caudal de la manguera", "L/min", "E", "dato", "baja",
                     "nota 03 D22/D23 (Paraguay 2012)", "investigacion",
                     "", (("90 L/min", 90.0, "nota 03 (alto caudal)"),
@@ -539,6 +567,15 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "orquestador", "orquestador",
                     "", (), "+ litros ÷ 90 por la manguera de alto caudal", None, None),
           "+ litros ÷ 90"),
+        ("TIE-07", ("Tiempo de playero según el tipo de vehículo", "min", "B", "supuesto", "media",
+                    "prompt del grupo (2/11/2026). Referencia: Shell Tucumán (UNT, FACE, ago-2026) ocupa la cara "
+                    "≈ 9,8 min, pero eso es maniobra + carga + pago; acá es el tiempo del playero", "grupo",
+                    "C11", (("una sola distribución", (2.0, 5.0, 8.0), "TIE-02 + TIE-03 (antes)"),),
+                    "Triangular(mín, moda, máx): moto (2, 3, 5) · auto (3, 4,5, 8) · camioneta (3,5, 5, 9) · "
+                    "colectivo (6, 9, 14) · camión (6, 10, 16); media ponderada ≈ 5,3 min. Reemplaza a TIE-02 + "
+                    "TIE-03 en la estación real; el GNC sigue con TIE-04", None, None),
+          (("moto", (2.0, 3.0, 5.0)), ("auto", (3.0, 4.5, 8.0)), ("pick_up", (3.5, 5.0, 9.0)),
+           ("colectivo", (6.0, 9.0, 14.0)), ("camion", (6.0, 10.0, 16.0)))),
         ("TIE-04", ("Carga GNC", "min", "B", "supuesto", "media",
                     "DATOS §3", "datos_operacionales",
                     "C11", (("nota 03", (10.0, 15.0, 30.0), "probablemente incluye espera"),),
@@ -907,6 +944,14 @@ REGISTRO: tuple[Dato, ...] = tuple(
                               "del cajero", None, None),
           (2.0, 2.0)),
 
+        ("REF-01", ("Cola de referencia: Shell Tucumán, hora pico 18–19 h", "—", "D", "dato", "media",
+                    "UNT, FACE, 'Herramientas para análisis de demanda en La Estación SRL', ago-2026", "grupo",
+                    "", (), "8 surtidores; λ = 40 veh/h; μ = 6,12 veh/h por surtidor (≈ 9,8 min de ocupación de la "
+                            "cara); utilización 82 %; Wq 3,32 min; Lq 2,21. Otra ciudad: sólo para comparar", None, None),
+          "λ 40/h · μ 6,12/h · ρ 82 % · Wq 3,32 min · Lq 2,21"),
+        ("REF-02", ("Tendencia a cargas fijas o menores por el precio", "—", "E", "observacion", "media",
+                    "Tiempo de San Juan (2026)", "grupo", "", (), "cualitativo", None, None),
+          "cargas de monto fijo y más chicas"),
         # --------------------- Filas que cubren los campos del motor (N14) ----
         ("REC-01", ("Surtidores del motor (configuración clásica)", "surtidores", "B",
                     "heredado", "sin_dato",
@@ -1193,6 +1238,7 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosSimulacion.cola_por_cara": "PER-07",
     "ParametrosSimulacion.disciplina_cola": "PER-06",
     "ParametrosSimulacion.encargado": "PER-08",
+    "ParametrosSimulacion.mezcla_vehiculos": "VEH-08",
     "ParametrosSimulacion.sorteo_producto_primero": "MOD-01",
     "ParametrosSimulacion.tabla_demanda_relativa": "DEM-07",
     "ParametrosSimulacion.demanda_relativa": "DEM-07",

@@ -130,6 +130,7 @@ class Contadores:
     compras_atendidas: int = 0
     perdidos_caja: int = 0              # abandono_caja
     abandonos_playero: int = 0          # de perdidos_surtidor: se fue esperando al playero
+    atendidos_encargado: int = 0        # clientes que atendió el encargado (PER-08)
 
     # Combustible
     litros_vendidos: float = 0.0
@@ -287,6 +288,7 @@ class Indicadores:
         self.compresores_ocupados = SerieTemporal()
         self.playeros_en_turno = SerieTemporal(valor_inicial=float(p.playeros_por_turno[0]))
         self.visitas_encargado: list[tuple[float, bool]] = []   # (minuto, ¿atendió?) de cada visita (PER-08)
+        self.minutos_encargado: list[tuple[float, float]] = []  # (desde, hasta) de cada vez que atendió
         self.colas_grupo = {g: SerieTemporal() for g in ids_grupos}
         self.ocupados_grupo = {g: SerieTemporal() for g in ids_grupos}
 

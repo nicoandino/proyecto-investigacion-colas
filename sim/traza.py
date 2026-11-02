@@ -124,6 +124,8 @@ class Traza:
         #   ("descarga", minuto, producto, litros recibidos)
         #   ("corte_gnc", minuto en que empieza, en que termina dentro de la corrida, inicio y fin del episodio entero)
         self.eventos: list[tuple] = []
+        # Cuándo atendió el encargado como un playero más (PER-08): [(desde, hasta)] en minutos de la corrida.
+        self.ayudas_encargado: list[tuple[float, float]] = []
         # Lo mismo pero día por día (parte 2, tanda 5): para filtrar el perfil del día por fechas.
         self.llegadas_dia_hora: list[list[int]] = []          # [día][hora]
         self.espera_dia_hora: list[list[list[float]]] = []    # [día][hora] = [suma de esperas, cantidad]

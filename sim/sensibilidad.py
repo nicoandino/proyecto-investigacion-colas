@@ -30,6 +30,7 @@ from sim.config import (
     ParametrosSimulacion,
     PerfilHorario,
     Triangular,
+    con_vehiculos,
     turnos_de,
 )
 from sim.datos import CONTRADICCIONES, REGISTRO, por_id, valor
@@ -100,14 +101,31 @@ def _recalcular(
     )
 
 
-def _preset_carga(preset: str) -> Aplicar:
+def _escalar(t: Triangular, k: float) -> Triangular:
+    return Triangular(k * t.minimo, k * t.moda, k * t.maximo)
+
+
+def _factor_preset(preset: str) -> float:
+    """VEH-07 da la carga como fracción del tanque (media 0,3 o 0,8) contra la de antes (0,5): ×0,6 o ×1,6."""
     a, m, b = dict(valor("VEH-07"))[preset]
+    return ((a + m + b) / 3.0) / 0.5
+
+
+def _preset_carga(preset: str) -> Aplicar:
+    k = _factor_preset(preset)
 
     def aplicar(p, eco):
+        tipos = tuple(t if t.es_gnc else replace(t, litros=_escalar(t.litros, k)) for t in p.tipos_vehiculo)
+        return _recalcular(p, tipos=tipos), eco
+
+    return aplicar
+
+
+def _tanque_de(id_tipo: str, litros: float) -> Aplicar:
+    """Otro tanque para un tipo: sus cargas (VEH-10) crecen en la misma proporción que el tanque."""
+    def aplicar(p, eco):
         tipos = tuple(
-            t if t.es_gnc else replace(
-                t, litros=Triangular(a * t.tanque, m * t.tanque, b * t.tanque)
-            )
+            replace(t, tanque=litros, litros=_escalar(t.litros, litros / t.tanque)) if t.id == id_tipo else t
             for t in p.tipos_vehiculo
         )
         return _recalcular(p, tipos=tipos), eco
@@ -115,15 +133,22 @@ def _preset_carga(preset: str) -> Aplicar:
     return aplicar
 
 
-def _tanque_de(id_tipo: str, litros: float) -> Aplicar:
+def _motos(parte: float) -> Aplicar:
+    """Otra parte de motos entre las visitas (VEH-09): rehace la matriz y los litros por cliente."""
     def aplicar(p, eco):
-        tipos = tuple(
-            replace(t, tanque=litros,
-                    litros=Triangular(0.20 * litros, 0.30 * litros, 1.00 * litros))
-            if t.id == id_tipo else t
-            for t in p.tipos_vehiculo
-        )
-        return _recalcular(p, tipos=tipos), eco
+        tipos = {t.id: t for t in p.tipos_vehiculo}
+        litros = {t: (x.litros.minimo, x.litros.moda, x.litros.maximo) for t, x in tipos.items() if x.tiempo}
+        tiempos = {t: (x.tiempo.minimo, x.tiempo.moda, x.tiempo.maximo) for t, x in tipos.items() if x.tiempo}
+        return con_vehiculos(p, motos=parte, litros=litros, tiempos=tiempos), eco
+
+    return aplicar
+
+
+def _tiempos_playero(k: float) -> Aplicar:
+    """Todos los tiempos de playero de los líquidos (TIE-07) multiplicados por k."""
+    def aplicar(p, eco):
+        tipos = tuple(t if t.tiempo is None else replace(t, tiempo=_escalar(t.tiempo, k)) for t in p.tipos_vehiculo)
+        return replace(p, tipos_vehiculo=tipos), eco
 
     return aplicar
 
@@ -239,14 +264,20 @@ def _construir_ejes() -> tuple[_Eje, ...]:
         _Eje("C10", "Estacionalidad", "C10", ("DEM-06",),
              (("leve ±6 %", _p(estacionalidad=ESTACIONALIDAD_LEVE)),
               ("proxy turístico", _p(estacionalidad=ESTACIONALIDAD_PROXY)))),
-        _Eje("C11", "Tiempo de servicio", "C11", ("TIE-02", "TIE-04", "TIE-05"),
-             (("nafta (2,4 · 3,7 · 5,0) min", _p(carga=Triangular(*_alt("TIE-02", "nota")))),
+        _Eje("C11", "Tiempo de servicio", "C11", ("TIE-02", "TIE-04", "TIE-05", "TIE-07"),
+             ((f"playero × {_num(Triangular(*_alt('TIE-02', 'nota')).media / Triangular(*valor('TIE-02')).media)} "
+               "(nota 03: 3,7 en vez de 5 min)",
+               _tiempos_playero(Triangular(*_alt("TIE-02", "nota")).media / Triangular(*valor("TIE-02")).media)),
               ("GNC (10 · 15 · 30) min", _p(carga_gnc=Triangular(*_alt("TIE-04", "nota")))),
               ("caja (1,5 · 3 · 6) min", _p(compra=Triangular(*_alt("TIE-05", "heredado")))))),
         _Eje("C12", "Litros por carga", "C12", ("VEH-07",),
-             (("media 0,3 × tanque", _preset_carga("bajo")),
-              ("media 0,8 × tanque", _preset_carga("alto"))),
+             ((f"litros × {_num(_factor_preset('bajo'))} (media 0,3 × tanque)", _preset_carga("bajo")),
+              (f"litros × {_num(_factor_preset('alto'))} (media 0,8 × tanque)", _preset_carga("alto"))),
              nota="los litros del mes no cambian: cambia cuántos clientes hacen falta"),
+        _Eje("VEH-09", "Motos entre las visitas", "", ("VEH-09",),
+             ((f"{_bajo('VEH-09'):.0%} de motos", _motos(_bajo("VEH-09"))),
+              (f"{_alto('VEH-09'):.0%} de motos", _motos(_alto("VEH-09")))),
+             nota="los litros del mes no cambian: con más motos hacen falta más clientes (cada uno carga menos)"),
         _Eje("C13", "Tanques de vehículos", "C13", ("VEH-01", "VEH-03", "VEH-04"),
              ((f"auto {_num(_bajo('VEH-01'))} L", _tanque_de("auto", _bajo("VEH-01"))),
               (f"auto {_num(_alto('VEH-01'))} L", _tanque_de("auto", _alto("VEH-01"))),
@@ -436,6 +467,11 @@ def correr_sensibilidad(
 # =============================================================================
 #: Datos con rango o alternativas que NO son eje, y por qué (cada motivo es verificable).
 NO_ES_EJE: dict[str, str] = {
+    "PER-08": "el encargado se prende o se apaga y su regla se edita en el menú (Personal y vehículos)",
+    "DEM-11": "es derivado (Σ visitas × litros de cada tipo): se mueve con los ejes C12, C13 y el de las motos",
+    "DEM-16": "sólo la variabilidad del total diario en la pestaña Vehículos; no entra al motor",
+    "VEH-00": "es derivada de VEH-08/09/10 y DEM-04: se mueve con los ejes de esos datos",
+    "VEH-10": "los litros por tipo se escalan en los ejes C12 (presets) y C13 (tanques), y se editan en el menú",
     "VEH-08": "sólo parte el pesado en camiones y colectivos en la pestaña Vehículos; no entra al motor",
     "MOD-01": "es el caso clásico (otro modelo), no un valor incierto: se elige en la barra lateral",
     "PER-07": "reemplaza a PER-05: la cola es de 3 lugares por cara (el eje PER-05 sigue variando la capacidad por zona)",

@@ -689,3 +689,40 @@ En Economía hay un desplegable **"Análisis financiero: VAN, TIR y recupero de 
 simulación con la decisión contra la de hoy (`sim/finanzas.py`); salen el VAN, la TIR anual, el recupero simple y el
 descontado, el flujo de fondos por año y un veredicto. Con los datos de hoy: el surtidor y el playero no convienen
 (no hay clientes perdidos que recuperar) y la estación completa da VAN > 0 y TIR ≈ 16 % real. Control 50.
+
+## 36. Demanda de 310 mil L/mes, personal y Montecarlo de vehículos (2/11/2026)
+
+Pedidos de Nico y el prompt del grupo *"demanda 310 mil litros, personal por turno y pestaña Montecarlo de
+vehículos"*. Investigación en `research_notes/demanda_310k_y_mix_vehicular.md`. Ordenado por valor/esfuerzo:
+
+| # | Cambio | Valor | Esfuerzo | Estado |
+|---|---|---|---|---|
+| 1 | DEM-01 = 310.000 L/mes (supuesto adoptado, confianza media, con las referencias de mercado) | alto | bajo | hecho |
+| 2 | PER-01 = 2·3·3 (un playero fijo más por turno) | alto | bajo | hecho |
+| 3 | Pestaña **Vehículos (Montecarlo)**: N ~ Normal(media del día; 0,15 × 257), tipo por rangos de U(0,1), litros Triangular; tabla del día, barras apiladas, el mes sorteado 1.000 veces (media, P5, P95), semilla visible y "Re-sortear" (`sim/vehiculos.py`) | alto | medio | hecho |
+| 4 | **Encargado** (PER-08): cada 6 h (02 · 08 · 14 · 20), ventana Triangular(20, 40, 60) min, colabora si hay ≥ 3 esperando o con p = 0,30; minutos-hombre por día y % de vehículos que atendió (Indicadores y Colas); stream "encargado" | medio | medio | hecho |
+| 5 | Los mismos tipos alimentan al motor: 5 tipos líquidos (se suma **colectivo**), litros por tipo (VEH-10) y **tiempo de playero por tipo** (TIE-07, reemplaza a TIE-02 + TIE-03); matriz VEH-00 **derivada** para cumplir a la vez la mezcla de visitas (VEH-08/09) y la de litros (DEM-04); DEM-11 = 39,73 L | alto | alto | hecho |
+| 6 | Menú: desplegable "Personal y vehículos" (encargado, % de motos, litros y minutos por tipo) | medio | bajo | hecho |
+| 7 | Colas: la Wq se mide por defecto con llegadas al azar; s suma lo que atendió el encargado a esa hora (medido); referencia de Shell Tucumán (REF-01) | medio | bajo | hecho |
+
+Lecturas que hubo que tomar:
+
+- **El motor ya tenía tipos de vehículo** (producto primero → tipo). En vez de invertir el orden, la matriz
+  tipo-por-producto se deriva: motos → Súper; autos → nafta; camionetas completan la nafta y el resto es diésel;
+  colectivos y camiones → diésel; nafta Súper/V-Power y diésel G2/G3 según DEM-04. Sale 56 % de los litros en
+  vehículos diésel (camionetas, colectivos y camiones), coherente con "en Mendoza el gasoil supera a la nafta".
+- **Clientes por día:** el prompt da 257 con 30,42 días; el motor usa los días reales de cada mes (enero: 251 de
+  líquidos + 3 % GNC = 259 llegadas). La pestaña usa 257 como media base y los litros de cada día para la media.
+- **Tiempo de servicio:** los tiempos de TIE-07 son del playero (el recurso del modelo); los 9,8 min de Tucumán son
+  ocupación de la cara y sólo se muestran para comparar.
+- **Encargado y clasico():** `clasico()` no tiene encargado (`encargado=None`) ni usa tipos: los dorados no se mueven.
+
+**Cola en la hora pico (medida, enero, 5 réplicas con azar):** pico 07 h, λ ≈ 21,1 veh/h (8,2 % del día), Wq ≈ 1,1
+min, Lq ≈ 0,38; utilización de los playeros 36 % en promedio. Sin azar (la corrida por defecto) la cola es ≈ 0. **No
+llega a la "cola chica" de 2–6 min** que buscaba el prompt: con 3 playeros en el pico y tiempos triangulares (menos
+variables que la exponencial del M/M/c) la estación queda holgada. Alternativas medidas, **sin cambiar los valores por
+defecto** (§3.3 del prompt): encargado con p = 0,15 → Wq 1,1 min (no cambia: su visita es a las 08 y el pico a las 07);
+pico al 10 % del día → Wq 1,8 min, Lq 0,79; ambos → 1,8 min. Encargado (con azar): 1,4 visitas con ayuda por día,
+≈ 53 minutos-hombre por día, 1,5 % de los vehículos atendidos. Litros del mes simulados: 311.900 (con azar) y 307.800
+(sin azar) contra 310.000 × el índice de enero. Montecarlo de la pestaña: enero sorteado 1.000 veces, media 310.025 L
+(P5 294.175 · P95 325.739), contra 309.803 (293.784 · 325.141) del prompt. Controles 51 y 52.

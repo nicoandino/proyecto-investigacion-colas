@@ -112,6 +112,7 @@ class EstacionDeServicio:
         self.eventos_vigentes: set[int] = set()     # índices de los eventos que están pasando ahora
         self.perdidos_evento: list[int] = []
         self.turno_actual = 0                       # playeros del turno (sin descontar eventos)
+        self.encargado_ayuda = 0                    # 1 mientras el encargado atiende como un playero más (PER-08)
         self.playeros_fuera = 0                     # playeros que faltan por un evento
         self.estacion_parada = 0                    # > 0 = corte de luz o asalto en curso
         self.cobro_lento = 0                        # > 0 = se cayó el sistema de cobro
@@ -183,11 +184,14 @@ class EstacionDeServicio:
                 )
         self.caras_fuera = {g.id: 0 for g in self.p.grupos}
 
-        # Playeros por turno: reservas ficticias con prioridad -1 ajustan la capacidad.
-        self.max_playeros = self.p.playeros_maximos
+        # Playeros por turno: reservas ficticias con prioridad -1 ajustan la capacidad. El encargado (PER-08)
+        # suma un lugar más al recurso, que queda reservado salvo cuando él atiende.
+        self.max_playeros = self.p.playeros_maximos + (1 if self.p.encargado is not None else 0)
         self.playeros = simpy.PriorityResource(self.env, capacity=self.max_playeros)
         self.reservas_playeros: list[simpy.events.Event] = []
         self.env.process(self.controlar_turnos())
+        if self.p.encargado is not None:
+            self.env.process(self.controlar_encargado())
 
         # Cajas del minimarket: 1 caja constante (PER-02 = 1·1·1).
         self.cajas = simpy.Resource(self.env, capacity=self.p.cajas)
@@ -268,9 +272,36 @@ class EstacionDeServicio:
                 yield self.env.timeout(borde)
                 self._ajustar_playeros(siguiente[1])
 
+    def controlar_encargado(self):
+        """El encargado pasa cada `cada` horas (PER-08); en cada visita, a veces atiende como un playero más.
+
+        Si colabora (Bernoulli con el stream "encargado"; sin azar, cuotas exactas: una visita sí y otra no),
+        durante los minutos de la visita la capacidad de playeros sube en 1. Entre visitas no atiende.
+        """
+        _, _, minutos, prob = self.p.encargado
+        horas = self.p.visitas_encargado()
+        dia = 0
+        while True:
+            for h in horas:
+                inicio = dia * MINUTOS_POR_DIA + h * 60.0
+                if inicio >= self.p.duracion:
+                    return
+                if inicio > self.env.now:
+                    yield self.env.timeout(inicio - self.env.now)
+                ayuda = self.az.bernoulli(prob, "encargado")
+                self.ind.visitas_encargado.append((self.env.now, ayuda))
+                if not ayuda:
+                    continue
+                self.encargado_ayuda = 1
+                self._ajustar_playeros(self.turno_actual)
+                yield self.env.timeout(minutos)
+                self.encargado_ayuda = 0
+                self._ajustar_playeros(self.turno_actual)
+            dia += 1
+
     def _ajustar_playeros(self, playeros_del_turno: int) -> None:
-        """Toma (prioridad -1) o libera reservas hasta `capacidad - reservas = turno`."""
-        objetivo = self.max_playeros - playeros_del_turno
+        """Toma (prioridad -1) o libera reservas hasta `capacidad - reservas = turno (+ el encargado si atiende)`."""
+        objetivo = self.max_playeros - playeros_del_turno - self.encargado_ayuda
         actual = len(self.reservas_playeros)
         if objetivo > actual:
             for _ in range(objetivo - actual):
@@ -287,7 +318,7 @@ class EstacionDeServicio:
 
     def _actualizar_en_turno(self) -> None:
         """Playeros trabajando = los del turno menos los que faltan por un evento (0 si la estación está parada)."""
-        n = 0 if self.estacion_parada else max(0, self.turno_actual - self.playeros_fuera)
+        n = 0 if self.estacion_parada else max(0, self.turno_actual + self.encargado_ayuda - self.playeros_fuera)
         self.ind.playeros_en_turno.cambiar(self.env.now, float(n))
 
     # =========================================================================

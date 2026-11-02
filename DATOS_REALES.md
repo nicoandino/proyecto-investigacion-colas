@@ -14,7 +14,7 @@
 - **Alternativas:** los valores que perdieron frente al adoptado; no se descartan, se usan como escenarios.
 - El GNC se mide en **m³**, nunca en litros. Los clientes por día **se derivan** de litros/mes ÷ litros medios por cliente.
 
-**Resumen:** 149 datos · 🟢 dato 40 · 🟡 estimación 19 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 77
+**Resumen:** 151 datos · 🟢 dato 40 · 🟡 estimación 17 · ⚪ heredado 12 · 🔵 observación 1 · 🟠 supuesto 81
 
 ## La estación
 
@@ -47,20 +47,21 @@
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
-| PER-01 | Playeros por turno (noche·mañana·tarde) | (1, 2, 2) | personas | 🟡 estimación | la estación | baja | DATOS §4 (único desglose por rol) | 2·3·3 = (2, 3, 3) |
+| PER-01 | Playeros por turno (noche·mañana·tarde) | (2, 3, 3) | personas | 🟠 supuesto | la estación | baja | decisión del grupo (2/11/2026): un playero fijo más en cada turno sobre DATOS §4 (1·2·2); coincide con ONBOARDING (2·3·3) | 1·2·2 = (1, 2, 2) |
 | PER-02 | Cajeros (cajas) por turno | (1, 1, 1) | cajas | 🟡 estimación | la estación | baja | DATOS §4 | — |
 | PER-03 | Encargado / personal de tienda | encargado 1 (M, T); tienda 1 (M, T) — sólo costo | personas | 🟡 estimación | la estación | baja | DATOS §4 | — |
 | PER-04 | El GNC lo carga un playero | True | — | 🟢 dato | la estación | media | EST-07 (Shell: servicio atendido) + observación del grupo (14/10/2026) + nota 10 | no (autoservicio) = False |
 | PER-05 | Capacidad de cola por grupo | 8 | autos | 🟠 supuesto | la estación | sin_dato | orquestador (relevar) | 4 = 4 · 14 = 14 |
 | PER-07 | Lugares de cola por cara | 3 | autos | 🟠 supuesto | la estación | sin_dato | pedido del grupo (6/10/2026): todas las caras tienen la misma capacidad de cola | 8 por zona = 8 |
 | PER-06 | Disciplina de cola | por_grupo | — | 🟠 supuesto | la estación | sin_dato | CASO §7 | por_cara = por_cara |
+| PER-08 | Encargado: recorrida cada 6 h y ayuda en la playa | (6.0, 8.0, 60.0, 0.5) | h · h · min · prob. | 🟠 supuesto | la estación | sin_dato | pedido del grupo (2/11/2026): el encargado pasa cada 6 horas y a veces se suma a colaborar | — |
 
 ## Demanda
 
 | ID | Dato | Valor adoptado | Unidad | Tipo | Nivel | Confianza | Fuente | Alternativas |
 |---|---|---|---|---|---|---|---|---|
 | DEM-00 | Modo de demanda por defecto | esperada | — | 🟠 supuesto | la estación | sin_dato | orquestador (N5: el Monte Carlo se conserva para tipo de cliente y producto; el total diario sale de los litros) | monte_carlo = monte_carlo |
-| DEM-01 | Demanda mensual | 270000.0 | L/mes | 🟡 estimación | San Rafael | baja | ONBOARDING + notas 01/03 + DATOS §1 (sin URL confirmada) | 150.000 = 150000.0 · 400.000 = 400000.0 |
+| DEM-01 | Demanda mensual | 310000.0 | L/mes | 🟠 supuesto | San Rafael | baja | valor oficial del grupo (2/11/2026) sobre ONBOARDING + notas 01/03 + DATOS §1 (sin URL confirmada) | 150.000 = 150000.0 · 270.000 = 270000.0 · 400.000 = 400000.0 |
 | DEM-02 | Perfil horario (24 factores) | (1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.5, 3.5, 3.5, 3.5, 2.0, 2.0, 1.5, 1.5, 1.5, 1.5, 3.0, 3.0, 2.0, 2.0, 1.5, 1.5, 1.0, 1.0) | factor | 🟡 estimación | San Rafael | baja | DATOS §2 (tabla de 24 factores, §14.3) | heredado = (0.3, 0.2, 0.15, 0.15, 0.25, 0.6, 1.1, 1.8, 2.0, 1.5, 1.1, 1.0, 1.2, 1.1, 0.9, 0.9, 1.0, 1.4, 1.9, 2.0, 1.6, 1.1, 0.7, 0.4) |
 | DEM-03 | Factor de fin de semana | 1.3 | × | 🟡 estimación | San Rafael | media | DATOS §2 (tabla ×1,3–1,5) | 1,24 = 1.24 · 1,50 = 1.5 |
 | DEM-04 | Mezcla de producto en litros (líquidos) | (('super', 28.0), ('vpower', 19.5), ('diesel_g2', 29.3), ('diesel_g3', 23.2)) | % | 🟡 estimación | San Rafael | baja | DATOS §7 (Surtidores.com.ar, mercado por volumen) | mix de flota · G2/G3 75/25 = 0.75 · sólo G2 (100/0) = 1.0 |
@@ -89,6 +90,7 @@
 | VEH-06 | Litros por carga del motor (una sola distribución) | (15.0, 30.0, 60.0) | L | ⚪ heredado | San Rafael | sin_dato | proyecto hipotético (el desglose por tipo de vehículo entra en Fase 2) | — |
 | VEH-07 | Presets de litros por carga (C12): media baja y alta | (('bajo', (0.1, 0.3, 0.5)), ('alto', (0.6, 0.8, 1.0))) | × tanque | 🟠 supuesto | San Rafael | sin_dato | orquestador C12 (nota 03: se carga ≈ 30 % del tanque; llenar es raro) | — |
 | VEH-00 | Tipo de vehículo por producto (matriz) | (('super', (0.12, 0.85, 0.03, 0.0)), ('vpower', (0.0, 0.85, 0.15, 0.0)), ('diesel_g2', (0.0, 0.2, 0.55, 0.25)), ('diesel_g3', (0.0, 0.15, 0.45, 0.4… | % | 🟠 supuesto | San Rafael | sin_dato | orquestador (diseño 'producto primero', §7.2) | — |
+| VEH-08 | Colectivos entre los vehículos pesados (pestaña Vehículos) | 0.15 | % | 🟠 supuesto | Mendoza | sin_dato | supuesto del grupo (2/11/2026). Referencias: Vialidad Nacional, accesos de Mendoza (2019): 86,7 % autos y camionetas, 9,9 % camiones sin acoplado, … | — |
 
 ## Tiempos de servicio
 
@@ -252,10 +254,10 @@ Criterio único (nota 07): que mida lo mismo; oficial o primaria y vigente; más
 | ID | Tema | Impacto | Valor elegido | Por qué | Descartadas (sensibilidad) |
 |---|---|---|---|---|---|
 | C1 | Horario de la playa | Medio | 24 h, todos los días. | Oficial: API de Shell (twenty_four_hour, 5/10/2026). | S10: cierre nocturno 22–06 (DATOS §5, sin fuente). |
-| C2 | Demanda mensual | Alto | 270.000 L/mes (estimación). | Más específica: estimación regional, dentro del promedio nacional (270–380 mil) y del punto de equilibrio (315–400 mil). No hay fuente oficial de e… | 150.000 y 400.000 L/mes como ejes de sensibilidad. |
+| C2 | Demanda mensual | Alto | 310.000 L/mes (valor oficial del grupo, 2/11/2026). | Decisión del grupo: dentro del promedio nacional (270–380 mil) y del punto de equilibrio (315–400 mil), con algo de cola en la hora pico. No hay fu… | 270.000 L/mes (estimación anterior); 150.000 y 400.000 L/mes como ejes de sensibilidad. |
 | C3 | Litros vs. autos | Crítico | Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente). | Misma cosa: no es una disputa de datos sino de unidades. | — (los documentos confundían litros/día con autos/día, error ×35–50). |
 | C4 | Entrada al minimarket | Bajo-medio | 20 % de los clientes atendidos. | Primaria: es la única cifra con fuente declarada. | 15 % · 30 % · 45 %. |
-| C5 | Personal | Alto | Playeros (noche · mañana · tarde) = 1 · 2 · 2; 1 caja; encargado y tienda sólo como costo. | Más específica: DATOS §4 es el único desglose por rol y turno. | Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno). |
+| C5 | Personal | Alto | Playeros (noche · mañana · tarde) = 2 · 3 · 3; 1 caja; el encargado pasa cada 6 h y a veces atiende como un playero más; tienda sólo como costo. | Decisión del grupo (2/11/2026): un playero fijo más por turno, que coincide con ONBOARDING. | Playeros 1·2·2 (DATOS §4, el valor anterior); autoservicio S9 (−1 por turno). |
 | C6 | Mix diésel G2/G3 | Medio | 55 % G2 / 45 % G3 del diésel; se venden los dos. | Más reciente y con fuente: Surtidores.com.ar (ago-2026); la Secretaría de Energía confirma ambos productos. | 75/25 (ONBOARDING) y 100/0 (sólo G2). |
 | C7 | Mezcla de producto | Medio | En litros: Súper 28,0 · V-Power 19,5 · G2 29,3 · G3 23,2 %; GNC = 3 % de los clientes. | Misma cosa: el 11 % de ENARGAS es el parque de autos a GNC, no los clientes de esta estación. | GNC 11 % (parque GNC ENARGAS); mezcla por flota. |
 | C8 | GNC: 6 caras vs. ≈ 3 % de los clientes | Medio | La estación se modela como está (6 caras, 3 % de clientes GNC). | Misma cosa: las caras se observaron y el 3 % es la demanda; que los compresores queden poco usados es un resultado del modelo. | GNC 3 % / 11 % / 20 %. |

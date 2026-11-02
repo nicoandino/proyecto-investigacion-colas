@@ -70,10 +70,10 @@ CONTRADICCIONES: tuple[Contradiccion, ...] = (
                   "S10: cierre nocturno 22–06 (DATOS §5, sin fuente).",
                   "Oficial: API de Shell (twenty_four_hour, 5/10/2026)."),
     Contradiccion("C2", "Demanda mensual", "Alto",
-                  "270.000 L/mes (estimación).",
-                  "150.000 y 400.000 L/mes como ejes de sensibilidad.",
-                  "Más específica: estimación regional, dentro del promedio nacional (270–380 mil) y del punto de "
-                  "equilibrio (315–400 mil). No hay fuente oficial de esta estación."),
+                  "310.000 L/mes (valor oficial del grupo, 2/11/2026).",
+                  "270.000 L/mes (estimación anterior); 150.000 y 400.000 L/mes como ejes de sensibilidad.",
+                  "Decisión del grupo: dentro del promedio nacional (270–380 mil) y del punto de equilibrio "
+                  "(315–400 mil), con algo de cola en la hora pico. No hay fuente oficial de esta estación."),
     Contradiccion("C3", "Litros vs. autos", "Crítico",
                   "Litros/mes es la variable de entrada; los clientes se derivan (÷ litros medios por cliente).",
                   "— (los documentos confundían litros/día con autos/día, error ×35–50).",
@@ -83,9 +83,10 @@ CONTRADICCIONES: tuple[Contradiccion, ...] = (
                   "15 % · 30 % · 45 %.",
                   "Primaria: es la única cifra con fuente declarada."),
     Contradiccion("C5", "Personal", "Alto",
-                  "Playeros (noche · mañana · tarde) = 1 · 2 · 2; 1 caja; encargado y tienda sólo como costo.",
-                  "Playeros 2·3·3 (ONBOARDING); autoservicio S9 (−1 por turno).",
-                  "Más específica: DATOS §4 es el único desglose por rol y turno."),
+                  "Playeros (noche · mañana · tarde) = 2 · 3 · 3; 1 caja; el encargado pasa cada 6 h y a veces "
+                  "atiende como un playero más; tienda sólo como costo.",
+                  "Playeros 1·2·2 (DATOS §4, el valor anterior); autoservicio S9 (−1 por turno).",
+                  "Decisión del grupo (2/11/2026): un playero fijo más por turno, que coincide con ONBOARDING."),
     Contradiccion("C6", "Mix diésel G2/G3", "Medio",
                   "55 % G2 / 45 % G3 del diésel; se venden los dos.",
                   "75/25 (ONBOARDING) y 100/0 (sólo G2).",
@@ -274,11 +275,12 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "derivado de 20–25 autos/h × 7 min ÷ 60 ≈ 2,6", None, None),
           3),
         ("PER-01", ("Playeros por turno (noche·mañana·tarde)", "personas", "A",
-                    "estimacion", "baja",
-                    "DATOS §4 (único desglose por rol)", "datos_operacionales",
-                    "C5", (("2·3·3", (2, 3, 3), "ONBOARDING"),),
+                    "supuesto", "baja",
+                    "decisión del grupo (2/11/2026): un playero fijo más en cada turno sobre DATOS §4 "
+                    "(1·2·2); coincide con ONBOARDING (2·3·3)", "grupo",
+                    "C5", (("1·2·2", (1, 2, 2), "DATOS §4 (antes)"),),
                     "", None, None),
-          (1, 2, 2)),
+          (2, 3, 3)),
         ("PER-02", ("Cajeros (cajas) por turno", "cajas", "A", "estimacion", "baja",
                     "DATOS §4", "datos_operacionales",
                     "C5", (), "", None, None),
@@ -311,6 +313,16 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "", (("por_cara", "por_cara", "CASO §7"),),
                     "cola FIFO única por grupo", None, None),
           "por_grupo"),
+        ("PER-08", ("Encargado: recorrida cada 6 h y ayuda en la playa", "h · h · min · prob.", "A",
+                    "supuesto", "sin_dato",
+                    "pedido del grupo (2/11/2026): el encargado pasa cada 6 horas y a veces se suma a "
+                    "colaborar", "grupo",
+                    "C5", (),
+                    "(cada cuántas horas pasa, hora de la primera visita, minutos que se queda, probabilidad "
+                    "de que atienda como un playero más): pasa a las 08 · 14 · 20 · 02 h, se queda 60 min y "
+                    "colabora en la mitad de las visitas. Sin azar, cuotas exactas: una visita sí y otra no "
+                    "(08 y 20 h sí; 14 y 02 h no). Su sueldo sigue entrando por ECO-11", None, None),
+          (6.0, 8.0, 60.0, 0.5)),
 
         # ---------------------------------------------------- C. Demanda ★
         ("DEM-00", ("Modo de demanda por defecto", "—", "A", "supuesto", "sin_dato",
@@ -320,15 +332,17 @@ REGISTRO: tuple[Dato, ...] = tuple(
                     "'esperada' = total diario fijo desde litros/mes (las llegadas siguen "
                     "siendo Poisson); 'monte_carlo' = sorteo de la tabla DEM-07", None, None),
           "esperada"),
-        ("DEM-01", ("Demanda mensual", "L/mes", "B", "estimacion", "baja",
-                    "ONBOARDING + notas 01/03 + DATOS §1 (sin URL confirmada)", "investigacion",
+        ("DEM-01", ("Demanda mensual", "L/mes", "B", "supuesto", "baja",
+                    "valor oficial del grupo (2/11/2026) sobre ONBOARDING + notas 01/03 + DATOS §1 "
+                    "(sin URL confirmada)", "grupo",
                     "C2",
                     (("150.000", 150_000.0, "DATOS §1 (base)"),
+                     ("270.000", 270_000.0, "estimación anterior (ONBOARDING + notas 01/03)"),
                      ("400.000", 400_000.0, "punto de equilibrio 2021")),
-                    "≈ 9.000 L/día; converge el informe regional, el promedio nacional "
-                    "(270–380k) y el punto de equilibrio (315–400k)",
+                    "≈ 10.300 L/día; dentro del promedio nacional (270–380k) y del punto de "
+                    "equilibrio (315–400k); con 2·3·3 playeros deja algo de cola en la hora pico",
                     150_000.0, 400_000.0),
-          270_000.0),
+          310_000.0),
         ("DEM-02", ("Perfil horario (24 factores)", "factor", "B", "estimacion", "baja",
                     "DATOS §2 (tabla de 24 factores, §14.3)", "datos_operacionales",
                     "C16",
@@ -495,6 +509,17 @@ REGISTRO: tuple[Dato, ...] = tuple(
            ("diesel_g2", (0.0, 0.20, 0.55, 0.25)),
            ("diesel_g3", (0.0, 0.15, 0.45, 0.40)),
            ("gnc", (0.0, 1.0, 0.0, 0.0)))),
+        ("VEH-08", ("Colectivos entre los vehículos pesados (pestaña Vehículos)", "%", "C", "supuesto",
+                    "sin_dato",
+                    "supuesto del grupo (2/11/2026). Referencias: Vialidad Nacional, accesos de Mendoza "
+                    "(2019): 86,7 % autos y camionetas, 9,9 % camiones sin acoplado, ómnibus de corta "
+                    "distancia y combis, 3,4 % ómnibus de larga distancia y camiones con acoplado; AFAC "
+                    "(2023): el 3 % del parque son pesados (camiones y ómnibus)", "grupo",
+                    "", (), "el motor tiene un solo tipo pesado ('camión / ómnibus', VEH-04): la pestaña lo "
+                            "parte en camiones y colectivos con esta fracción. Los colectivos urbanos cargan en "
+                            "su depósito; acá entran los de media y larga distancia, chárter y turismo",
+                    0.05, 0.30),
+          0.15),
 
         # --------------------------------------------------- E. Tiempos
         ("TIE-01", ("Caudal de la manguera", "L/min", "E", "dato", "baja",
@@ -1167,6 +1192,7 @@ MAPA_PARAMETROS: dict[str, str] = {
     "ParametrosSimulacion.capacidad_cola": "PER-05",
     "ParametrosSimulacion.cola_por_cara": "PER-07",
     "ParametrosSimulacion.disciplina_cola": "PER-06",
+    "ParametrosSimulacion.encargado": "PER-08",
     "ParametrosSimulacion.sorteo_producto_primero": "MOD-01",
     "ParametrosSimulacion.tabla_demanda_relativa": "DEM-07",
     "ParametrosSimulacion.demanda_relativa": "DEM-07",

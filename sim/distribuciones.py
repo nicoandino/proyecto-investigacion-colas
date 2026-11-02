@@ -60,6 +60,8 @@ STREAMS = (
     "evento_08", "evento_09", "evento_10", "evento_11", "evento_12", "evento_13", "evento_14",
     "evento_11_viaje",
     "evento_12_llegadas",
+    # 2/11/2026: si el encargado (PER-08) se suma a atender en cada visita a la playa.
+    "encargado",
 )
 
 # Números primos grandes para separar las semillas de cada stream y que no queden

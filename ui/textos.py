@@ -378,7 +378,8 @@ SUPUESTOS_REAL = [
     "Playa de 24 horas con servicio atendido: también el GNC lo carga un playero (PER-04).",
     "Un vehículo por cara y una cola FIFO única por zona (PER-06); capacidad de cola finita "
     "(PER-05, sin dato: hay que relevarla).",
-    "Playeros por turno 1 · 2 · 2 (noche · mañana · tarde) y una sola caja (PER-01/PER-02).",
+    "Playeros por turno 2 · 3 · 3 (noche · mañana · tarde) y una sola caja (PER-01/PER-02); el encargado pasa "
+    "cada 6 h (08 · 14 · 20 · 02) y en la mitad de las visitas atiende 1 hora como un playero más (PER-08).",
     "El tipo de vehículo por producto es un supuesto del orquestador (VEH-00).",
     "Las cargas siguen `Triangular(0,2·T ; 0,3·T ; 1,0·T)`: carga media = 0,5 × tanque (C12).",
     "Un tanque por producto líquido de 20.000 L con política (s, Q) derivada de la demanda "

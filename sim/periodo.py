@@ -349,7 +349,7 @@ DIAS_ESCENARIO: int = int(valor("CAL-09")[1])
 class EscenarioUnico:
     """Lo que se elige para el escenario único: cuántos playeros, en qué franja, temporada y clientela."""
 
-    playeros: int = 2
+    playeros: int = int(valor("PER-01")[1])          # los de la mañana hoy (PER-01)
     franja: str = "Pico de la mañana (07–10 h)"
     temporada: str = "Verano"
     clientela: str = "media"

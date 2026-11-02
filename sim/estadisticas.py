@@ -286,6 +286,7 @@ class Indicadores:
         self.playeros_ocupados = SerieTemporal()
         self.compresores_ocupados = SerieTemporal()
         self.playeros_en_turno = SerieTemporal(valor_inicial=float(p.playeros_por_turno[0]))
+        self.visitas_encargado: list[tuple[float, bool]] = []   # (minuto, ¿atendió?) de cada visita (PER-08)
         self.colas_grupo = {g: SerieTemporal() for g in ids_grupos}
         self.ocupados_grupo = {g: SerieTemporal() for g in ids_grupos}
 

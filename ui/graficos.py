@@ -24,8 +24,10 @@ from ui.tema import (
     NARANJA,
     ROJO,
     REFERENCIA,
+    TURQUESA,
     VERDE_INGRESO,
     VERDE_OK,
+    VIOLETA,
     plantilla_plotly,
     rgba,
 )
@@ -618,4 +620,27 @@ def grafico_indices(indices) -> go.Figure:
                       yaxis_title="índice",
                       showlegend=False, **_layout(height=340, hovermode="closest"))
     fig.update_yaxes(range=[min(indices) - 0.08, max(indices) + 0.06])
+    return fig
+
+
+# =============================================================================
+# Vehículos por día (Monte Carlo, pestaña Vehículos)
+# =============================================================================
+def grafico_vehiculos_por_dia(dias, nombres: dict[str, str], categorias: tuple[str, ...]) -> go.Figure:
+    """Barras apiladas: cuántos vehículos de cada tipo salieron en el sorteo de cada día."""
+    colores = {"moto": TURQUESA, "auto": AMARILLO, "colectivo": VIOLETA, "camion": NARANJA}
+    numeros = [d.dia for d in dias]
+    fig = go.Figure()
+    # Los más chicos abajo, para que se vean; los autos arriba.
+    for categoria in ("moto", "colectivo", "camion", "auto"):
+        i = categorias.index(categoria)
+        fig.add_bar(x=numeros, y=[d.cantidades[i] for d in dias], name=nombres[categoria],
+                    marker_color=colores[categoria])
+    fig.update_layout(
+        title="Cada día: cuántos vehículos de cada tipo salieron en el sorteo",
+        xaxis_title="Día del período",
+        yaxis_title="Vehículos",
+        barmode="stack",
+        **_layout(hovermode="x"),
+    )
     return fig

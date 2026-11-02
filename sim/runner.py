@@ -92,6 +92,8 @@ class ResultadoReplica:
     # --- Estación real (Fase 2): por motivo, grupo y producto -----------------
     perdidos_cola_llena_dia: float = 0.0
     util_playeros: float = 0.0            # playeros ocupados ÷ playeros en turno (promedio temporal)
+    visitas_encargado_dia: float = 0.0    # veces por día que pasa el encargado (PER-08)
+    ayudas_encargado_dia: float = 0.0     # ... y en cuántas atendió como un playero más
     viajes_demorados_pct: float = 0.0     # % de los camiones que encontraron un corte (Fase 5)
     gnc_afectados_dia: float = 0.0        # clientes GNC que se toparon con el corte (Fase 6)
     migrados_gnc_dia: float = 0.0         # ... y pasaron a Súper
@@ -299,6 +301,8 @@ def correr_replica(
         hora_pico=hora_pico,
         # --- Estación real: por motivo, grupo y producto ---
         perdidos_cola_llena_dia=c.perdidos_cola_llena / dias,
+        visitas_encargado_dia=sum(1 for t, _ in ind.visitas_encargado if t >= p.calentamiento) / dias,
+        ayudas_encargado_dia=sum(1 for t, a in ind.visitas_encargado if a and t >= p.calentamiento) / dias,
         util_playeros=(
             ind.playeros_ocupados.promedio / ind.playeros_en_turno.promedio
             if ind.playeros_en_turno.promedio > 0

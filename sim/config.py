@@ -369,7 +369,7 @@ def grupos_desde_registro() -> tuple[Grupo, ...]:
 
 
 def inventario_real(
-    litros_mes: float = 270_000.0,
+    litros_mes: float = valor("DEM-01"),
     capacidad: float | None = None,
     plazo: Triangular | None = None,
     nivel_inicial_pct: float | None = None,
@@ -564,7 +564,7 @@ PRODUCTOS_REALES = productos_desde_registro()
 GRUPOS_REALES = grupos_desde_registro()
 #: Los cinco tipos de vehículo.
 TIPOS_REALES = tipos_vehiculo_desde_registro()
-#: Inventario por producto (para la demanda por defecto de 270.000 L/mes).
+#: Inventario por producto (para la demanda por defecto, DEM-01: 310.000 L/mes).
 INVENTARIO_REAL = inventario_real()
 
 
@@ -732,6 +732,9 @@ class ParametrosSimulacion:
     matriz_tipos: tuple[tuple[str, tuple[float, ...]], ...] = matriz_tipo_por_producto()
     playeros_por_turno: tuple[int, int, int] = valor("PER-01")  # noche · mañana · tarde
     turnos: tuple[tuple[float, int], ...] = turnos_de(valor("PER-01"))  # (hora, playeros)
+    # PER-08: (cada cuántas horas pasa el encargado, hora de la primera visita, minutos que se queda,
+    # probabilidad de que atienda como un playero más). None = el encargado no baja a la playa.
+    encargado: tuple[float, float, float, float] | None = valor("PER-08")
     pct_gnc: float = valor("DEM-05")
     capacidad_cola: int | None = valor("PER-05")   # por zona; la pisa `cola_por_cara` si está
     cola_por_cara: int | None = valor("PER-07")    # lugares de cola de CADA cara (misma en todas)
@@ -806,6 +809,11 @@ class ParametrosSimulacion:
                 raise ValueError("disciplina_cola tiene que ser 'por_grupo' o 'por_cara'.")
             if min(self.playeros_por_turno) < 1:
                 raise ValueError("Tiene que haber al menos 1 playero por turno.")
+            if self.encargado is not None:
+                cada, primera, minutos, prob = self.encargado
+                if not (cada > 0 and 0 <= primera < 24 and 0 < minutos <= cada * 60 and 0 <= prob <= 1):
+                    raise ValueError("encargado: cada > 0 h, primera visita entre 0 y 24 h, "
+                                     "0 < minutos ≤ el intervalo y probabilidad entre 0 y 1.")
             liquidos = {p.id for p in self.productos if not p.es_gnc}
             inventariados = {i.producto for i in self.inventario}
             if liquidos != inventariados:
@@ -896,6 +904,7 @@ class ParametrosSimulacion:
             cola_por_cara=None,
             red=None,
             gnc=None,
+            encargado=None,
             tanque=ParametrosTanque(
                 capacidad=40_000.0,
                 nivel_inicial=30_000.0,
@@ -1000,6 +1009,27 @@ class ParametrosSimulacion:
         if self.calendario_demanda:
             litros *= self.factor_calendario(date(ANO_REFERENCIA, *self.fecha_inicio) + timedelta(days=dia - 1))
         return litros
+
+    def visitas_encargado(self) -> tuple[float, ...]:
+        """Horas del día en que pasa el encargado (PER-08), en orden: 08 · 14 · 20 · 02 → (2, 8, 14, 20)."""
+        if self.encargado is None:
+            return ()
+        cada, primera = self.encargado[0], self.encargado[1]
+        n = max(1, int(round(24.0 / cada)))
+        return tuple(sorted((primera + k * cada) % 24.0 for k in range(n)))
+
+    def encargado_ayuda_a_la_hora(self, hora: int) -> float:
+        """Playeros 'extra' que aporta el encargado en promedio en esa hora: probabilidad × fracción de la hora."""
+        if self.encargado is None:
+            return 0.0
+        minutos, prob = self.encargado[2], self.encargado[3]
+        total = 0.0
+        for h in self.visitas_encargado():
+            desde, hasta = h * 60.0, h * 60.0 + minutos
+            for corrimiento in (0.0, 1440.0):          # la visita de las 23 h puede pasar a la madrugada
+                a, b = max(desde, hora * 60.0 + corrimiento), min(hasta, (hora + 1) * 60.0 + corrimiento)
+                total += max(0.0, b - a) / 60.0
+        return prob * total
 
     @property
     def playeros_maximos(self) -> int:

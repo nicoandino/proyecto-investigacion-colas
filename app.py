@@ -182,6 +182,14 @@ def economia_con_decision(p: ParametrosSimulacion, eco: ParametrosEconomicos, op
     return economia_de(correr_estacion_real(con_decision(p, opcion), replicas=replicas, semilla_base=semilla), eco)
 
 
+def traza_con_azar(p: ParametrosSimulacion):
+    """La traza de la misma estación con llegadas al azar (pestaña Colas): la de la corrida si ya tenía azar."""
+    if not p.determinista:
+        return st.session_state.traza
+    with st.spinner("Simulando las llegadas al azar para la pestaña Colas…"):
+        return correr_traza_cacheada(replace(p, determinista=False), st.session_state.get("semilla_usada", 1))
+
+
 def resultado_del_anio(p: ParametrosSimulacion, resultado: ResultadoEscenario) -> ResultadoReplica:
     """La réplica del año: la de esta corrida si ya era el año completo; si no, se simula aparte (con caché)."""
     if st.session_state.periodo.tipo == "anio":
@@ -2089,14 +2097,17 @@ def menu_escenario_unico() -> EscenarioUnico:
     previo: EscenarioUnico = st.session_state.get("eu_previo") or EscenarioUnico()
     c1, c2, c3, c4 = st.columns(4)
     playeros = int(c1.number_input("Playeros en la franja", 1, 6, previo.playeros, 1, key="eu_playeros",
-                                   help="Hoy (PER-01): 1 de noche, 2 de mañana y 2 de tarde."))
+                                   help="Hoy (PER-01): {} de noche, {} de mañana y {} de tarde; el encargado pasa "
+                                        "cada 6 h y a veces atiende (PER-08).".format(*valor("PER-01"))))
     franja = c2.selectbox("Franja horaria", list(FRANJAS), index=list(FRANJAS).index(previo.franja), key="eu_franja")
     temporada = c3.selectbox("Temporada", list(SEMANAS), index=list(SEMANAS).index(previo.temporada), key="eu_temporada",
                              help="Se simula una semana representativa (CAL-09), de lunes a domingo.")
     clientela = c4.selectbox(
         "Clientela", CLIENTELAS, index=CLIENTELAS.index(previo.clientela), key="eu_clientela",
-        format_func=lambda n: {"poca": "Poca (150.000 L/mes)", "media": "Media (270.000 L/mes)",
-                               "alta": "Alta (400.000 L/mes)", "máxima": "Máxima (alta y el doble en el pico)"}[n],
+        format_func=lambda n: {"poca": f"Poca ({litros_de_nivel('poca'):,.0f} L/mes)".replace(",", "."),
+                               "media": f"Media ({litros_de_nivel('media'):,.0f} L/mes)".replace(",", "."),
+                               "alta": f"Alta ({litros_de_nivel('alta'):,.0f} L/mes)".replace(",", "."),
+                               "máxima": "Máxima (alta y el doble en el pico)"}[n],
     )
     return EscenarioUnico(playeros=playeros, franja=franja, temporada=temporada, clientela=clientela)
 
@@ -2429,7 +2440,7 @@ def pie_de_resultados() -> None:
 ICONOS_PESTANIAS = {
     "La estación": "local_gas_station", "Animación": "play_circle", "Indicadores": "monitoring", "Colas": "hourglass_top",
     "Eventos": "bolt", "Demanda": "directions_car", "Pronóstico": "trending_up", "Qué se sorteó": "casino",
-    "Inventario": "oil_barrel", "Red y rutas": "route", "GNC": "propane_tank", "Economía": "payments",
+    "Vehículos": "two_wheeler", "Inventario": "oil_barrel", "Red y rutas": "route", "GNC": "propane_tank", "Economía": "payments",
     "Conclusión": "summarize", "Modelo y método": "account_tree", "Datos y fuentes": "database",
 }
 
@@ -2484,7 +2495,7 @@ def main() -> None:
 
     editada = st.session_state.get("modo") == "editada"
     nombres_tabs = [
-        "La estación", "Animación", "Indicadores", "Colas", "Demanda", "Pronóstico", "Inventario",
+        "La estación", "Animación", "Indicadores", "Colas", "Demanda", "Vehículos", "Pronóstico", "Inventario",
         "Red y rutas", "GNC", "Economía", "Conclusión",
         "Datos y fuentes",
     ]
@@ -2506,12 +2517,14 @@ def main() -> None:
             st.session_state.modo,
         )
     with pestanias["Colas"]:
-        vistas.pestania_colas(p_corrida, st.session_state.traza)
+        vistas.pestania_colas(p_corrida, st.session_state.traza, traza_con_azar(p_corrida))
     if con_eventos:
         with pestanias["Eventos"]:
             vistas.pestania_eventos(p_corrida, resultado.replicas[0], st.session_state.parametros_eco)
     with pestanias["Demanda"]:
         vistas.pestania_demanda(p_corrida, resultado, st.session_state.traza, st.session_state.periodo)
+    with pestanias["Vehículos"]:
+        vistas.pestania_vehiculos(p_corrida, st.session_state.traza)
     with pestanias["Pronóstico"]:
         vistas.pestania_pronostico(p_corrida, resultado_del_anio(p_corrida, resultado), st.session_state.parametros_eco)
     if "Qué se sorteó" in pestanias:

@@ -176,8 +176,8 @@ def _menos_uno(p, eco):
     return replace(p, playeros_por_turno=n, turnos=turnos_de(n)), eco
 
 
-def _mas_playeros(p, eco):
-    n = tuple(_alt("PER-01", "2"))
+def _mas_uno(p, eco):
+    n = tuple(x + 1 for x in p.playeros_por_turno)
     return replace(p, playeros_por_turno=n, turnos=turnos_de(n)), eco
 
 
@@ -218,8 +218,8 @@ def _construir_ejes() -> tuple[_Eje, ...]:
              ((f"{_bajo('DEM-08'):.0%}", _p(prob_compra=_bajo("DEM-08"))),
               (f"{_alto('DEM-08'):.0%}", _p(prob_compra=_alto("DEM-08"))))),
         _Eje("C5", "Personal (playeros por turno)", "C5", ("PER-01", "PER-02", "PER-03"),
-             (("−1 por turno (autoservicio, C15)", _menos_uno),
-              ("2 · 3 · 3 (ONBOARDING)", _mas_playeros))),
+             (("−1 por turno (1 · 2 · 2 como antes, DATOS §4; o autoservicio, C15)", _menos_uno),
+              ("+1 por turno", _mas_uno))),
         _Eje("C6", "Mix diésel G2/G3", "C6", ("SUR-03", "DEM-04"),
              (("G2/G3 = 75/25", _mezcla_diesel(_alt("DEM-04", "G2/G3"))),
               ("sólo G2 (100/0)", _mezcla_diesel(_alt("DEM-04", "sólo G2"))))),
@@ -436,6 +436,7 @@ def correr_sensibilidad(
 # =============================================================================
 #: Datos con rango o alternativas que NO son eje, y por qué (cada motivo es verificable).
 NO_ES_EJE: dict[str, str] = {
+    "VEH-08": "sólo parte el pesado en camiones y colectivos en la pestaña Vehículos; no entra al motor",
     "MOD-01": "es el caso clásico (otro modelo), no un valor incierto: se elige en la barra lateral",
     "PER-07": "reemplaza a PER-05: la cola es de 3 lugares por cara (el eje PER-05 sigue variando la capacidad por zona)",
     "MOD-02": "elige entre la simulación con datos reales (sin azar) y la que tiene azar: no es un valor",

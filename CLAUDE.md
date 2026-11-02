@@ -23,9 +23,11 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ## Qué modela hoy
 
-- **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (1·2·2); cola finita;
+- **Playón:** 12 caras en 3 zonas: A nafta (4), B diésel (2), C GNC (6); playeros por turno (**2·3·3**, un playero
+  fijo más por turno desde el 2/11/2026); el **encargado** pasa cada 6 h (08 · 14 · 20 · 02) y en la mitad de las
+  visitas atiende 1 h como un playero más (PER-08; sin azar, una visita sí y otra no; stream "encargado"); cola finita;
   abandono; caja del minimarket. **El GNC también lo carga un playero** (PER-04) y además usa un compresor.
-- **Demanda:** litros/mes (270.000) ⇒ clientes/día (≈ 252) con perfil horario, fin de semana ×1,30 normalizado,
+- **Demanda:** litros/mes (**310.000, valor oficial del grupo** desde el 2/11/2026) ⇒ clientes/día (≈ 289) con perfil horario, fin de semana ×1,30 normalizado,
   estacionalidad neutra en `ParametrosSimulacion()`; en la app, por defecto, los **índices mensuales de la serie real**
   (PRO-01) y como opción el **calendario de temporadas** (DEM-14/15, supuesto). Cada cliente: producto → tipo de
   vehículo → litros → ¿compra?
@@ -38,7 +40,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   frío); el cliente pasa a Súper (30 %) o se pierde.
 - **Salidas:** menú con ajustes (economía, GNC, calendario, abastecimiento) → resultados del período (sin azar) con
   avisos con pausa en la animación; **escenario único** (una semana); **Caso de informe** aparte (mejor política,
-  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **144 controles**.
+  S0–S12 con diferencias pareadas, tornado). `verificar.py`: **148 controles**.
 - **Eventos aleatorios** (parte 4, `sim/eventos.py`): apagados por defecto; se sortean con semilla propia aunque el
   resto no tenga azar (personal, equipos, precio, abastecimiento, demanda).
 - **Pronóstico** (parte 3, `sim/pronostico.py`): serie REAL de ventas al público de Shell en Mendoza (Secretaría de
@@ -51,9 +53,14 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
   recupero (simple y descontado) de un surtidor más, un playero más en el pico o la estación completa; el flujo
   mensual es la diferencia de resultado que da la simulación; tasa real FIN-01, horizonte FIN-02, inversión
   ECO-05 / FIN-03 (supuestos).
-- **Colas** (`sim/colas.py`, pestaña Colas): como el ejercicio 2 del parcial — λ, μ, s (playeros) y la Wq que midió la
-  simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y qué significa. Sin M/M/s teórico
-  (Nico lo pidió práctico, para alguien que nunca vio colas).
+- **Colas** (`sim/colas.py`, pestaña Colas): como el ejercicio 2 del parcial — λ, μ, s (playeros + lo que aporta el
+  encargado a esa hora) y la Wq que midió la simulación ⇒ ρ, W, Lq y L con las leyes de Little, cada uno con su cuenta y
+  qué significa. Sin M/M/s teórico (Nico lo pidió práctico). Por defecto la Wq sale de la **misma estación con llegadas
+  al azar** (Poisson): sin azar, con 3 playeros en el pico, los autos llegan espaciados exactos y la cola da cero.
+- **Vehículos** (`sim/vehiculos.py`, pestaña Vehículos, 2/11/2026): no hay un dato publicado de motos, autos, colectivos y
+  camiones por día ⇒ **Monte Carlo de 5 pasos**: la probabilidad de cada tipo sale del modelo (DEM-04/05 × VEH-00; da
+  86,7 % de livianos, igual que Vialidad en los accesos de Mendoza), el pesado se parte con VEH-08 (15 % colectivos,
+  supuesto) y se sortea un número de 0000 a 9999 por cliente del día. Semilla propia (no toca STREAMS). Nota 14.
 
 ## Reglas de oro (no romper)
 
@@ -74,7 +81,7 @@ aspectos económicos. Colas, transporte, Montecarlo, etc."*
 
 ```
 app.py            Streamlit (única entrada; sin barra lateral ni modo clásico: `clasico()` vive sólo en `sim/` para N1)
-verificar.py      144 controles
+verificar.py      148 controles
 sim/              MOTOR (sin Streamlit): datos · config · distribuciones · modelo · estadisticas · traza · runner
                   red · colas · finanzas · gnc · eventos · pronostico · escenarios · economia · economia_real · sensibilidad
 ui/               PRESENTACIÓN: tema · animacion (SVG en JS) · graficos* · datos_ui · textos · vistas
@@ -87,7 +94,7 @@ research_notes/   notas de investigación verificadas
 
 ```bash
 .venv/Scripts/streamlit run app.py        # http://localhost:8501
-.venv/Scripts/python verificar.py         # 144 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
+.venv/Scripts/python verificar.py         # 148 controles; en Windows: PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 ```
 
 Rendimiento medido: réplica de un mes ≈ 0,4 s · un año ≈ 5 s · catálogo de 19 escenarios × 4 réplicas ≈ 34 s ·

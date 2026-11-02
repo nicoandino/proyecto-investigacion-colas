@@ -58,6 +58,8 @@ Los controles cubren las dos partes del modelo:
        operativo, y con el margen de equilibrio el resultado es 0.
    50. Análisis financiero: VAN, TIR y recupero de una anualidad conocida; el flujo de cada decisión sale de
        la simulación.
+   51. Pedidos del 2/11/2026: playeros 2·3·3, 310.000 L/mes, el encargado cada 6 h que a veces atiende y el
+       Monte Carlo de motos, autos, colectivos y camiones por día.
    49. Colas como el ejercicio 2 del parcial (Little) y la tabla de errores del pronóstico contra la cátedra;
        la inflación de PRO-05 y los clientes por mes de la corrida.
    48. EVT-05: la falla de un surtidor tacha sus dos caras (pedido de Nico, 14/10/2026).
@@ -300,9 +302,10 @@ def main() -> int:
         if lejos_de_un_borde(c.minuto_del_dia) and c.playeros_ocupados > c.playeros_en_turno
     ]
     maximo_playeros = max(c.playeros_ocupados for c in traza.cuadros)
+    con_encargado = 1 if p.encargado is not None else 0
     controlar(
-        not sobrepasa and maximo_playeros <= max(p.playeros_por_turno),
-        "N5: los playeros en servicio nunca superan los del turno (ni la dotación máxima)",
+        not sobrepasa and maximo_playeros <= max(p.playeros_por_turno) + con_encargado,
+        "N5: los playeros en servicio nunca superan los del turno (ni la dotación máxima, + el encargado)",
         f"{len(traza.cuadros):,} cuadros muestreados | máximo simultáneo {maximo_playeros} | "
         f"cuadros en falta: {len(sobrepasa)}",
     )
@@ -319,8 +322,9 @@ def main() -> int:
     )
     en_turno = [c.playeros_en_turno for c in traza.cuadros]
     controlar(
-        min(en_turno) == min(p.playeros_por_turno) and max(en_turno) == max(p.playeros_por_turno),
-        "Los turnos se repiten todos los días (la dotación sube y baja con el reloj)",
+        min(en_turno) == min(p.playeros_por_turno)
+        and max(p.playeros_por_turno) <= max(en_turno) <= max(p.playeros_por_turno) + con_encargado,
+        "Los turnos se repiten todos los días (la dotación sube y baja con el reloj; + 1 si atiende el encargado)",
         f"playeros en turno observados en el día graficado: {sorted(set(en_turno))}",
     )
 
@@ -1275,9 +1279,10 @@ def main() -> int:
     )
     p_s2 = por_nombre["S2 · Playeros en el pico +2"].aplicar(p_n)
     ind_s2, _ = simular(p_s2, semilla=83)
+    extra_enc = 1 if p_s2.encargado is not None else 0       # el encargado (PER-08) puede sumar uno más
     controlar(
-        ind_s2.playeros_en_turno.maximo == max(p.playeros_por_turno) + 2
-        and ind_s2.playeros_ocupados.maximo <= p_s2.playeros_maximos
+        max(p.playeros_por_turno) + 2 <= ind_s2.playeros_en_turno.maximo <= max(p.playeros_por_turno) + 2 + extra_enc
+        and ind_s2.playeros_ocupados.maximo <= p_s2.playeros_maximos + extra_enc
         and p_s2.playeros_maximos == max(p.playeros_por_turno) + 2,
         "N5 con refuerzo: la capacidad sube con el pico y nadie atiende por encima de la dotación",
         f"dotación máxima {ind_s2.playeros_en_turno.maximo:.0f} | ocupados máximo "
@@ -1394,14 +1399,16 @@ def main() -> int:
         f"margen igual ({e0.margen_operativo:,.0f} $)",
     )
 
-    # Personal desde la dotación: 1·2·2 = 5 personas-turno; S2 +1 suma 5 h de 1 playero; S9 resta
+    # Personal desde la dotación: 2·3·3 = 8 personas-turno; S2 +1 suma 5 h de 1 playero; S9 resta uno por turno
     cat_eco = {e.nombre: e for e in catalogo(p_eco)}
     pe_base = personas_turno_playeros(p_eco)
     pe_s2 = personas_turno_playeros(cat_eco["S2 · Playeros en el pico +1"].aplicar(p_eco))
     pe_s9 = personas_turno_playeros(cat_eco["S9 · Autoservicio (−1 playero por turno)"].aplicar(p_eco))
     controlar(
-        abs(pe_base - 5.0) < 1e-9 and abs(pe_s2 - (5.0 + 5.0 / 8.0)) < 1e-9 and abs(pe_s9 - 3.0) < 1e-9,
-        "El costo de personal sale de la dotación: base 5 personas-turno, S2 +1 suma 5/8, S9 baja a 3",
+        abs(pe_base - sum(p_eco.playeros_por_turno)) < 1e-9 and abs(pe_s2 - (pe_base + 5.0 / 8.0)) < 1e-9
+        and abs(pe_s9 - (pe_base - 3.0)) < 1e-9,
+        f"El costo de personal sale de la dotación: base {sum(p_eco.playeros_por_turno)} personas-turno, S2 +1 suma "
+        f"5/8, S9 resta uno por turno",
         f"base {pe_base:g} · S2 +1 {pe_s2:g} · S9 {pe_s9:g}",
     )
     # S9 ahorra personal y la diferencia sale en la conclusión
@@ -1721,10 +1728,10 @@ def main() -> int:
         abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 2.0) < 1e-9 for h in pico
     ) and all(abs(clientes_hora(p_pico, h) / clientes_hora(p_med, h) - 1.0) < 1e-9 for h in fuera)
     controlar(
-        not p_med.determinista and p_med.litros_mes == 270_000.0
+        not p_med.determinista and p_med.litros_mes == 310_000.0 == litros_de_nivel("media")
         and p_alta.litros_mes == litros_de_nivel("alta") == 400_000.0
         and litros_de_nivel("poca") == 150_000.0 and ok_pico,
-        "Editar: poca/media/alta salen del Registro (150/270/400 mil L), el doble en el pico duplica "
+        "Editar: poca/media/alta salen del Registro (150/310/400 mil L), el doble en el pico duplica "
         "esas horas y deja igual las demás, y la edición usa azar",
         f"clientes por día: media {p_med.autos_por_dia:.0f} · alta {p_alta.autos_por_dia:.0f} · "
         f"alta con doble pico {aplicar_edicion(base_per, eco0, Edicion(nivel_demanda='alta', doble_pico=True))[0].autos_por_dia:.0f}",
@@ -1936,14 +1943,14 @@ def main() -> int:
     separador("32. Parte 2, tanda 6: el escenario único (micro simulación de una semana)")
     from sim.periodo import FRANJAS, EscenarioUnico
 
-    eu_hoy = EscenarioUnico(playeros=2, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media")
+    eu_hoy = EscenarioUnico(playeros=3, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media")
     p32 = dataclasses.replace(con_periodo(ParametrosSimulacion().datos_reales(), eu_hoy.periodo()), animar_todo=False)
     p32_hoy = eu_hoy.escenario(p32).aplicar(p32)
-    p32_mas = EscenarioUnico(playeros=3, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media").escenario(p32).aplicar(p32)
+    p32_mas = EscenarioUnico(playeros=4, franja=list(FRANJAS)[0], temporada="Otoño", clientela="media").escenario(p32).aplicar(p32)
     p32_max = EscenarioUnico(playeros=2, franja="Todo el día", temporada="Otoño", clientela="máxima").escenario(p32).aplicar(p32)
     controlar(
         correr_replica(p32_hoy, 1)[0] == correr_replica(p32, 1)[0]
-        and dict(p32_mas.turnos)[7.0] == 3 and dict(p32_mas.turnos)[10.0] == 2
+        and dict(p32_mas.turnos)[7.0] == 4 and dict(p32_mas.turnos)[10.0] == 3
         and p32_max.playeros_por_turno == (2, 2, 2) and p32_max.litros_mes > 400_000
         and eu_hoy.periodo().dias == 7 and eu_hoy.horas() == (7, 8, 9),
         "El escenario único 'como hoy' da lo mismo que la corrida base; los playeros y la clientela cambian lo pedido",
@@ -2070,7 +2077,8 @@ def main() -> int:
     import bisect
 
     def correr36(activos, frecuencia=5.0):
-        p_ = dataclasses.replace(con_ev(activos, frecuencia=frecuencia), animar_todo=True)
+        # Sin el encargado (PER-08): este control mira sólo los mecanismos de los eventos contra los turnos.
+        p_ = dataclasses.replace(con_ev(activos, frecuencia=frecuencia), animar_todo=True, encargado=None)
         r_, tr_ = correr_replica(p_, semilla=1, con_traza=True)
         return p_, r_, tr_.cuadros, [c.t for c in tr_.cuadros]
 
@@ -2448,6 +2456,53 @@ def main() -> int:
         "mensual con VAN = 0) y el flujo de cada decisión sale de la simulación",
         f"TIR {100 * r_tir:.3f} % mensual = {100 * anualidad.tir_anual:.1f} % anual · flujo de la estación "
         f"${f_est:,.0f}/mes · playero extra ${f_pla:,.0f}/mes",
+    )
+
+    # ------------------------------------------------------------------ 51
+    separador("51. Pedidos del 2/11/2026: un playero más por turno, el encargado y los vehículos por día")
+    p51 = replace(con_periodo(ParametrosSimulacion().datos_reales(), por_meses(1, 1)), animar_todo=False)
+    r51, _ = correr_replica(p51, semilla=1)
+    r51_sin, _ = correr_replica(replace(p51, encargado=None), semilla=1)
+    r51_azar, _ = correr_replica(replace(p51, determinista=False), semilla=3)
+    controlar(
+        p51.playeros_por_turno == (2, 3, 3) and p51.litros_mes == 310_000.0
+        and p51.visitas_encargado() == (2.0, 8.0, 14.0, 20.0),
+        "Defaults: playeros 2·3·3 (PER-01), 310.000 L/mes (DEM-01) y el encargado a las 02 · 08 · 14 · 20 h (PER-08)",
+        f"playeros {p51.playeros_por_turno} · {p51.litros_mes:,.0f} L/mes · visitas {p51.visitas_encargado()}",
+    )
+    controlar(
+        abs(r51.visitas_encargado_dia - 4.0) < 1e-9 and abs(r51.ayudas_encargado_dia - 2.0) < 1e-9
+        and r51_sin.visitas_encargado_dia == 0.0 and 0.0 < r51_azar.ayudas_encargado_dia < 4.0
+        and abs(p51.encargado_ayuda_a_la_hora(8) - 0.5) < 1e-9 and p51.encargado_ayuda_a_la_hora(9) == 0.0,
+        "El encargado pasa 4 veces por día; sin azar atiende en 2 (cuotas exactas), con azar a veces; "
+        "en la hora de la visita suma 0,5 playero en promedio",
+        f"sin azar {r51.ayudas_encargado_dia:.2f} ayudas/día · con azar {r51_azar.ayudas_encargado_dia:.2f} · "
+        f"sin encargado {r51_sin.visitas_encargado_dia:.0f} visitas",
+    )
+    controlar(
+        r51.espera_surtidor <= r51_sin.espera_surtidor + 1e-9 and r51_azar.espera_surtidor > 0.1,
+        "Con el encargado no se espera más, y con llegadas al azar hay algo de cola (pestaña Colas)",
+        f"Wq sin azar {r51.espera_surtidor:.3f} min (sin encargado {r51_sin.espera_surtidor:.3f}) · "
+        f"con azar {r51_azar.espera_surtidor:.2f} min",
+    )
+    from sim import vehiculos as vh
+
+    comp51 = vh.composicion(p51)
+    tabla51 = vh.tabla(comp51)
+    clientes51 = [280, 300, 320] * 10
+    sorteo51 = vh.sortear(clientes51, comp51, semilla=7)
+    resumen51 = vh.resumir(sorteo51, comp51)
+    livianos51 = dict(comp51)["auto"]
+    contiguos = tabla51[0].desde == 0 and tabla51[-1].hasta == vh.ESCALA - 1 and all(
+        b.desde == a.hasta + 1 for a, b in zip(tabla51, tabla51[1:]))
+    controlar(
+        abs(sum(x for _, x in comp51) - 1.0) < 1e-12 and abs(livianos51 - 0.867) < 0.005 and contiguos
+        and all(sum(d.cantidades) == d.clientes for d in sorteo51)
+        and sorteo51 == vh.sortear(clientes51, comp51, semilla=7)
+        and all(abs(r.promedio_dia - r.esperado_dia) <= max(1.0, 0.1 * r.esperado_dia) for r in resumen51),
+        "Vehículos por día (Monte Carlo): probabilidades que suman 1 (≈ 86,7 % livianos, como Vialidad), intervalos "
+        "0000–9999 sin huecos, cada día suma sus clientes, misma semilla = mismo sorteo y el promedio ≈ el esperado",
+        " · ".join(f"{vh.NOMBRES[r.categoria]} {r.promedio_dia:.1f}/día (esp. {r.esperado_dia:.1f})" for r in resumen51),
     )
 
     # ------------------------------------------------------------------
